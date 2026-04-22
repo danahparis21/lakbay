@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAKBAY Guide — Trail Map</title>
+  <link rel="stylesheet" href="guide-shared.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* map page is full-height */
+    .guide-content { padding: 0; flex: 1; display: flex; flex-direction: column; }
+
+    .map-layout {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 60px);
+      overflow: hidden;
+    }
+
+    /* ── MAP CANVAS ── */
+    .map-canvas {
+      flex: 1;
+      background: #2D4A3E;
+      position: relative;
+      overflow: hidden;
+    }
+    .map-bg {
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse at 30% 40%, rgba(46,96,73,0.6) 0%, transparent 55%),
+        radial-gradient(ellipse at 70% 60%, rgba(27,58,45,0.8) 0%, transparent 50%),
+        linear-gradient(160deg, #2D4A3E 0%, #1B3A2D 50%, #122B20 100%);
+    }
+    /* Decorative trail path */
+    .map-trail-svg {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+    }
+    /* Map controls */
+    .map-controls {
+      position: absolute;
+      right: 16px; top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 10;
+    }
+    .map-ctrl-btn {
+      width: 38px; height: 38px;
+      background: white;
+      border: none;
+      border-radius: var(--r-md);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--ink-2);
+      font-size: 0.9rem;
+      cursor: pointer;
+      box-shadow: var(--shadow-md);
+      transition: all 0.15s;
+    }
+    .map-ctrl-btn:hover { background: var(--forest); color: white; }
+
+    /* Status bar on map */
+    .map-status-bar {
+      position: absolute;
+      top: 16px; left: 16px;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(8px);
+      border-radius: var(--r-lg);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: var(--shadow-md);
+      z-index: 10;
+    }
+    .live-dot {
+      width: 8px; height: 8px;
+      background: #E74C3C;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.5); }
+      50% { box-shadow: 0 0 0 6px rgba(231,76,60,0); }
+    }
+    .map-status-text {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .map-status-sub {
+      font-size: 0.65rem;
+      color: var(--ink-4);
+    }
+
+    /* Hiker markers */
+    .hiker-marker {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      transition: transform 0.2s;
+      z-index: 20;
+    }
+    .hiker-marker:hover { transform: scale(1.15); z-index: 30; }
+    .hiker-marker-avatar {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      border: 3px solid white;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      background: var(--forest-lt);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--forest);
+    }
+    .hiker-marker-name {
+      font-size: 0.6rem;
+      font-weight: 600;
+      color: white;
+      background: rgba(0,0,0,0.55);
+      padding: 2px 7px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+    .hiker-marker-avatar.safe-border { border-color: #2ECC71; }
+    .hiker-marker-avatar.warn-border { border-color: #F39C12; }
+
+    /* Guide marker */
+    .guide-marker {
+      position: absolute;
+      z-index: 25;
+      cursor: pointer;
+    }
+    .guide-marker-dot {
+      width: 18px; height: 18px;
+      background: var(--red);
+      border-radius: 50%;
+      border: 3px solid white;
+      box-shadow: 0 0 0 4px rgba(192,57,43,0.3), 0 2px 8px rgba(0,0,0,0.3);
+      animation: guidePulse 2s infinite;
+    }
+    @keyframes guidePulse {
+      0%, 100% { box-shadow: 0 0 0 4px rgba(192,57,43,0.3), 0 2px 8px rgba(0,0,0,0.3); }
+      50% { box-shadow: 0 0 0 10px rgba(192,57,43,0), 0 2px 8px rgba(0,0,0,0.3); }
+    }
+    .guide-marker-label {
+      position: absolute;
+      top: -22px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: white;
+      background: var(--red);
+      padding: 2px 8px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+
+    /* Trail checkpoint labels */
+    .checkpoint {
+      position: absolute;
+      display: flex; align-items: center; gap: 5px;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 20px;
+      padding: 4px 10px;
+    }
+    .checkpoint-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.7);
+    }
+    .checkpoint-label {
+      font-size: 0.6rem;
+      color: rgba(255,255,255,0.8);
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* ── SIDE PANEL ── */
+    .map-side-panel {
+      width: 300px;
+      background: white;
+      border-left: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .side-panel-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--stone);
+    }
+    .side-panel-header h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    .side-panel-header p {
+      font-size: 0.7rem;
+      color: var(--ink-4);
+      margin-top: 2px;
+    }
+    .hiker-track-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .track-item {
+      background: var(--stone);
+      border-radius: var(--r-md);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+      border: 1.5px solid transparent;
+    }
+    .track-item:hover { background: var(--forest-lt); border-color: rgba(27,58,45,0.15); }
+    .track-item.selected { background: var(--forest-lt); border-color: var(--forest); }
+    .track-avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--forest-lt);
+      color: var(--forest);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 0.85rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .track-info { flex: 1; min-width: 0; }
+    .track-name { font-size: 0.82rem; font-weight: 600; color: var(--ink); }
+    .track-location { font-size: 0.68rem; color: var(--ink-4); margin-top: 2px; }
+    .track-status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .ts-safe { background: var(--green); }
+    .ts-moving { background: var(--amber); }
+    .ts-behind { background: var(--red); }
+
+    .legend {
+      padding: 14px 16px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .legend-title {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--ink-4);
+      margin-bottom: 2px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      color: var(--ink-3);
+    }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* mobile map: hide side panel, show bottom sheet */
+    @media (max-width: 768px) {
+      .map-layout { height: calc(100vh - 60px - 64px); flex-direction: column; }
+      .map-side-panel { width: 100%; height: 200px; border-left: none; border-top: 1px solid var(--line); }
+      .hiker-track-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 8px 12px; }
+      .track-item { min-width: 160px; }
+    }
+  </style>
+</head>
+<body>
+<div class="guide-app">
+
+  <aside class="guide-sidebar">
+    <div class="sidebar-logo">
+      <svg viewBox="0 0 28 28" fill="none"><path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="white" opacity="0.9"/><path d="M14 16L18 8L24 22H14V16Z" fill="white" opacity="0.3"/></svg>
+      <div><div class="sidebar-logo-text">LAKBAY</div><div class="sidebar-logo-sub">Guide Portal</div></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="sidebar-section-label">Main</div>
+      <ul>
+        <li><a href="guide-dashboard.html"><i class="fas fa-house"></i> Dashboard</a></li>
+        <li><a href="guide-map.html" class="active"><i class="fas fa-map-location-dot"></i> Trail Map</a></li>
+        <li><a href="guide-communication.html"><i class="fas fa-comments"></i> Communication</a></li>
+        <li><a href="guide-safety.html"><i class="fas fa-shield-halved"></i> Safety</a></li>
+      </ul>
+      <div class="sidebar-divider"></div>
+      <ul><li><a href="guide-profile.html"><i class="fas fa-circle-user"></i> My Profile</a></li></ul>
+    </nav>
+    <div class="sidebar-profile">
+      <div class="sidebar-avatar">JD</div>
+      <div class="sidebar-profile-info"><div class="sidebar-profile-name">John Dela Cruz</div><div class="sidebar-profile-role">Senior Trail Guide</div></div>
+    </div>
+  </aside>
+
+  <div class="guide-main">
+    <div class="guide-topbar">
+      <div class="topbar-title">Live Trail Map</div>
+      <div class="topbar-right">
+        <span class="badge badge-green"><span class="live-dot" style="width:6px;height:6px;display:inline-block;margin-right:2px;"></span> Tracking Active</span>
+        <button class="topbar-icon-btn" title="Refresh"><i class="fas fa-rotate"></i></button>
+      </div>
+    </div>
+
+    <div class="guide-content">
+      <div class="map-layout">
+
+        <!-- MAP -->
+        <div class="map-canvas" id="mapCanvas">
+          <div class="map-bg"></div>
+
+          <!-- Trail SVG path -->
+          <svg class="map-trail-svg" viewBox="0 0 800 600" preserveAspectRatio="none">
+            <!-- Main trail path -->
+            <path d="M 80 520 Q 150 480 200 420 Q 260 350 300 300 Q 360 240 420 200 Q 480 160 540 130 Q 600 110 660 90 Q 720 75 760 60"
+              stroke="rgba(255,255,255,0.18)" stroke-width="4" fill="none" stroke-dasharray="12,8" stroke-linecap="round"/>
+            <!-- Secondary path -->
+            <path d="M 200 420 Q 240 400 280 410 Q 320 420 360 390"
+              stroke="rgba(255,255,255,0.1)" stroke-width="2.5" fill="none" stroke-dasharray="8,6"/>
+            <!-- Contour lines (decorative) -->
+            <ellipse cx="420" cy="300" rx="200" ry="120" stroke="rgba(255,255,255,0.05)" stroke-width="1.5" fill="none"/>
+            <ellipse cx="420" cy="300" rx="150" ry="85" stroke="rgba(255,255,255,0.04)" stroke-width="1.5" fill="none"/>
+            <ellipse cx="420" cy="300" rx="90" ry="50" stroke="rgba(255,255,255,0.04)" stroke-width="1" fill="none"/>
+            <!-- Summit indicator -->
+            <circle cx="760" cy="60" r="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
+            <circle cx="80" cy="520" r="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
+          </svg>
+
+          <!-- Status bar -->
+          <div class="map-status-bar">
+            <div>
+              <div class="live-dot"></div>
+            </div>
+            <div>
+              <div class="map-status-text">Mt. Batulao — Active</div>
+              <div class="map-status-sub">5 hikers tracked · <span id="mapTime"></span></div>
+            </div>
+          </div>
+
+          <!-- Checkpoints -->
+          <div class="checkpoint" style="left:10%;bottom:18%;">
+            <div class="checkpoint-dot"></div>
+            <span class="checkpoint-label">Jump-off</span>
+          </div>
+          <div class="checkpoint" style="left:40%;top:45%;">
+            <div class="checkpoint-dot" style="background:#F39C12;"></div>
+            <span class="checkpoint-label">Ridge Point</span>
+          </div>
+          <div class="checkpoint" style="right:8%;top:7%;">
+            <div class="checkpoint-dot" style="background:#2ECC71;"></div>
+            <span class="checkpoint-label">Summit</span>
+          </div>
+
+          <!-- Hiker markers (positioned by %s) -->
+          <div class="hiker-marker" style="left:18%;bottom:28%;" onclick="selectHiker(0)">
+            <div class="hiker-marker-avatar safe-border">LS</div>
+            <div class="hiker-marker-name">Lea S.</div>
+          </div>
+          <div class="hiker-marker" style="left:26%;bottom:38%;" onclick="selectHiker(1)">
+            <div class="hiker-marker-avatar safe-border">BT</div>
+            <div class="hiker-marker-name">Ben T.</div>
+          </div>
+          <div class="hiker-marker" style="left:35%;top:52%;" onclick="selectHiker(2)">
+            <div class="hiker-marker-avatar warn-border">NC</div>
+            <div class="hiker-marker-name">Nina C.</div>
+          </div>
+          <div class="hiker-marker" style="left:48%;top:44%;" onclick="selectHiker(3)">
+            <div class="hiker-marker-avatar safe-border">CV</div>
+            <div class="hiker-marker-name">Carlos V.</div>
+          </div>
+          <div class="hiker-marker" style="left:58%;top:36%;" onclick="selectHiker(4)">
+            <div class="hiker-marker-avatar safe-border">MR</div>
+            <div class="hiker-marker-name">Marco R.</div>
+          </div>
+
+          <!-- Guide marker (red dot) -->
+          <div class="guide-marker" style="left:32%;top:51%;">
+            <div class="guide-marker-label">YOU</div>
+            <div class="guide-marker-dot"></div>
+          </div>
+
+          <!-- Map controls -->
+          <div class="map-controls">
+            <button class="map-ctrl-btn" onclick="showToast('Zoom in')"><i class="fas fa-plus"></i></button>
+            <button class="map-ctrl-btn" onclick="showToast('Zoom out')"><i class="fas fa-minus"></i></button>
+            <button class="map-ctrl-btn" onclick="showToast('Centering on your location…')"><i class="fas fa-location-crosshairs"></i></button>
+            <button class="map-ctrl-btn" onclick="showToast('Full screen map')"><i class="fas fa-expand"></i></button>
+          </div>
+        </div>
+
+        <!-- SIDE PANEL -->
+        <div class="map-side-panel">
+          <div class="side-panel-header">
+            <h3>Hiker Positions</h3>
+            <p id="panelTime">Updated just now</p>
+          </div>
+          <div class="hiker-track-list" id="trackList"></div>
+          <div class="legend">
+            <div class="legend-title">Legend</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--green);"></div> Safe / On schedule</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--amber);"></div> Moving / Behind</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--red);"></div> Needs attention</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--red); border: 2px solid white; box-sizing:border-box;"></div> Guide (you)</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <nav class="guide-bottom-nav">
+    <div class="bottom-nav-inner">
+      <a href="guide-dashboard.html" class="bnav-item"><i class="fas fa-house"></i><span>Home</span></a>
+      <a href="guide-map.html" class="bnav-item active"><i class="fas fa-map-location-dot"></i><span>Map</span></a>
+      <a href="guide-communication.html" class="bnav-item"><i class="fas fa-comments"></i><span>Chats</span></a>
+      <a href="guide-safety.html" class="bnav-item"><i class="fas fa-shield-halved"></i><span>Safety</span></a>
+      <a href="guide-profile.html" class="bnav-item"><i class="fas fa-circle-user"></i><span>Profile</span></a>
+    </div>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const hikers = [
+  { name:'Lea Santiago', initials:'LS', location:'Lower Trail · km 1.2', status:'safe', lastSeen:'2 min ago' },
+  { name:'Ben Torres',   initials:'BT', location:'Lower Trail · km 1.5', status:'safe', lastSeen:'1 min ago' },
+  { name:'Nina Cruz',    initials:'NC', location:'Junction · km 2.1',    status:'moving', lastSeen:'Just now' },
+  { name:'Carlos Vidal', initials:'CV', location:'Ridge Path · km 2.8',  status:'safe', lastSeen:'4 min ago' },
+  { name:'Marco Reyes',  initials:'MR', location:'Ridge Path · km 3.1',  status:'safe', lastSeen:'3 min ago' },
+];
+const statusClass = { safe:'ts-safe', moving:'ts-moving', behind:'ts-behind' };
+
+function renderTrackList(selectedIdx = -1) {
+  const el = document.getElementById('trackList');
+  el.innerHTML = '';
+  hikers.forEach((h, i) => {
+    const div = document.createElement('div');
+    div.className = 'track-item' + (i === selectedIdx ? ' selected' : '');
+    div.innerHTML = `
+      <div class="track-avatar">${h.initials}</div>
+      <div class="track-info">
+        <div class="track-name">${h.name}</div>
+        <div class="track-location"><i class="fas fa-location-dot" style="font-size:0.55rem;margin-right:3px;"></i>${h.location}</div>
+        <div class="track-location" style="margin-top:2px;"><i class="fas fa-clock" style="font-size:0.55rem;margin-right:3px;"></i>${h.lastSeen}</div>
+      </div>
+      <div class="track-status-dot ${statusClass[h.status]}"></div>`;
+    div.addEventListener('click', () => selectHiker(i));
+    el.appendChild(div);
+  });
+}
+
+function selectHiker(i) {
+  renderTrackList(i);
+  showToast(`Focused on ${hikers[i].name} — ${hikers[i].location}`);
+}
+
+function updateMapTime() {
+  const d = new Date();
+  const t = d.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  document.getElementById('mapTime').textContent = t;
+  document.getElementById('panelTime').textContent = 'Updated ' + d.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'});
+}
+updateMapTime(); setInterval(updateMapTime, 1000);
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+renderTrackList();
+</script>
+</body>
+</html>
