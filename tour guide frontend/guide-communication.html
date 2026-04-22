@@ -75,7 +75,7 @@
       border-bottom: 2px solid transparent;
       transition: all 0.15s;
     }
-    .thread-tab.active { color: var(--forest); border-bottom-color: var(--forest); }
+    .thread-tab.active { color: #100600; border-bottom-color: #100600; }
 
     .thread-items {
       flex: 1;
@@ -92,20 +92,20 @@
       position: relative;
     }
     .thread-item:hover { background: var(--stone); }
-    .thread-item.active { background: var(--forest-lt); }
+    .thread-item.active { background: rgba(16,6,0,0.06); }
     .thread-item.active::before {
       content: '';
       position: absolute;
       left: 0; top: 0; bottom: 0;
       width: 3px;
-      background: var(--forest);
+      background: #100600;
       border-radius: 0 2px 2px 0;
     }
     .thread-avatar {
       width: 42px; height: 42px;
       border-radius: 50%;
-      background: var(--forest-lt);
-      color: var(--forest);
+      background: rgba(16,6,0,0.1);
+      color: #100600;
       display: flex; align-items: center; justify-content: center;
       font-family: 'Playfair Display', serif;
       font-size: 0.9rem;
@@ -117,7 +117,7 @@
       position: absolute;
       bottom: 1px; right: 1px;
       width: 9px; height: 9px;
-      background: var(--green);
+      background: #1B7045;
       border-radius: 50%;
       border: 2px solid white;
     }
@@ -144,13 +144,15 @@
       text-overflow: ellipsis;
     }
     .thread-unread {
-      background: var(--forest);
+      background: #100600;
       color: white;
       width: 18px; height: 18px;
       border-radius: 50%;
       font-size: 0.6rem;
       font-weight: 700;
-      display: flex; align-items: center; justify-content: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
     }
 
@@ -172,8 +174,8 @@
     .chat-header-avatar {
       width: 38px; height: 38px;
       border-radius: 50%;
-      background: var(--forest-lt);
-      color: var(--forest);
+      background: rgba(16,6,0,0.1);
+      color: #100600;
       display: flex; align-items: center; justify-content: center;
       font-family: 'Playfair Display', serif;
       font-size: 0.9rem;
@@ -240,12 +242,12 @@
       border: 1px solid var(--line);
       border-radius: 20px;
       font-size: 0.72rem;
-      color: var(--forest);
+      color: #100600;
       font-weight: 500;
       cursor: pointer;
       transition: all 0.15s;
     }
-    .quick-chip:hover { background: var(--forest); color: white; border-color: var(--forest); }
+    .quick-chip:hover { background: #100600; color: white; border-color: #100600; }
 
     /* message input */
     .chat-input-bar {
@@ -267,7 +269,7 @@
       gap: 8px;
       transition: border-color 0.15s;
     }
-    .chat-input-wrap:focus-within { border-color: var(--forest); background: white; }
+    .chat-input-wrap:focus-within { border-color: #100600; background: white; }
     .chat-input-wrap input {
       flex: 1;
       border: none;
@@ -281,15 +283,16 @@
     .chat-send-btn {
       width: 40px; height: 40px;
       border-radius: 50%;
-      background: var(--forest);
+      background: #100600;
       color: white;
       border: none;
       display: flex; align-items: center; justify-content: center;
       font-size: 0.9rem;
       transition: all 0.15s;
       flex-shrink: 0;
+      cursor: pointer;
     }
-    .chat-send-btn:hover { background: var(--forest-2); transform: scale(1.05); }
+    .chat-send-btn:hover { background: #2C1A10; transform: scale(1.05); }
 
     /* Date divider */
     .date-divider {
@@ -322,7 +325,7 @@
       max-width: 320px;
     }
     .booking-request-card.mine { align-self: flex-end; }
-    .brc-header { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--forest); margin-bottom: 8px; }
+    .brc-header { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #100600; margin-bottom: 8px; }
     .brc-row { display: flex; justify-content: space-between; font-size: 0.75rem; padding: 4px 0; border-bottom: 1px solid var(--stone-2); }
     .brc-row:last-of-type { border-bottom: none; }
     .brc-label { color: var(--ink-4); font-weight: 500; }
@@ -392,13 +395,13 @@
             <h3>Messages</h3>
             <div class="thread-search">
               <i class="fas fa-search"></i>
-              <input type="text" placeholder="Search conversations…">
+              <input type="text" id="searchInput" placeholder="Search conversations…" onkeyup="filterThreads()">
             </div>
           </div>
           <div class="thread-tabs">
-            <div class="thread-tab active" onclick="setTab(this,'all')">All</div>
-            <div class="thread-tab" onclick="setTab(this,'bookings')">Bookings</div>
-            <div class="thread-tab" onclick="setTab(this,'updates')">Updates</div>
+            <div class="thread-tab active" data-tab="all" onclick="setActiveTab('all')">All</div>
+            <div class="thread-tab" data-tab="bookings" onclick="setActiveTab('bookings')">Bookings</div>
+            <div class="thread-tab" data-tab="unread" onclick="setActiveTab('unread')">Unread</div>
           </div>
           <div class="thread-items" id="threadItems"></div>
         </div>
@@ -454,14 +457,18 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const threads = [
-  { id:0, name:'Lea Santiago', initials:'LS', sub:'Mt. Batulao · Apr 25', preview:'Got it! I\'ll be there at 4:45.', time:'9:41 AM', unread:0, online:true },
-  { id:1, name:'Ben Torres',   initials:'BT', sub:'Mt. Talamitam · Apr 27', preview:'Booking Request', time:'9:20 AM', unread:1, online:true, hasRequest:true },
-  { id:2, name:'Nina Cruz',    initials:'NC', sub:'Mt. Batulao · Apr 30', preview:'What should we bring?', time:'Yesterday', unread:2, online:false },
-  { id:3, name:'Carlos Vidal', initials:'CV', sub:'Mt. Batulao · May 3', preview:'Can we confirm the time?', time:'Yesterday', unread:0, online:false },
+// Expanded dummy conversations with more threads for realistic filtering
+const threadsData = [
+  { id:0, name:'Lea Santiago', initials:'LS', sub:'Mt. Batulao · Apr 25', preview:'Got it! I\'ll be there at 4:45.', time:'9:41 AM', unread:0, online:true, hasRequest:false },
+  { id:1, name:'Ben Torres',   initials:'BT', sub:'Mt. Talamitam · Apr 27', preview:'Booking Request: 5 hikers · Day Hike', time:'9:20 AM', unread:1, online:true, hasRequest:true },
+  { id:2, name:'Nina Cruz',    initials:'NC', sub:'Mt. Batulao · Apr 30', preview:'What should we bring?', time:'Yesterday', unread:2, online:false, hasRequest:false },
+  { id:3, name:'Carlos Vidal', initials:'CV', sub:'Mt. Batulao · May 3', preview:'Can we confirm the time?', time:'Yesterday', unread:0, online:false, hasRequest:false },
+  { id:4, name:'Maya Flores',   initials:'MF', sub:'Mt. Pico de Loro · May 5', preview:'Booking Request: 3 pax · Overnight', time:'2 hours ago', unread:1, online:true, hasRequest:true },
+  { id:5, name:'Ramon Cruz',    initials:'RC', sub:'Mt. Makiling · May 7', preview:'Thanks for the info!', time:'3 hours ago', unread:0, online:false, hasRequest:false },
+  { id:6, name:'Sofia Reyes',   initials:'SR', sub:'Mt. Batulao · May 10', preview:'Booking Request: Group of 8', time:'5 hours ago', unread:1, online:true, hasRequest:true },
 ];
 
-const chats = {
+const chatsData = {
   0: [
     { from:'them', text:'Hi po! Pwede po ba malaman yung meeting point?', time:'8:30 AM' },
     { from:'me',   text:'Hello Lea! We will meet at the Batulao jump-off in Barangay Aga, Nasugbu.', time:'8:35 AM' },
@@ -478,15 +485,75 @@ const chats = {
   ],
   3: [
     { from:'them', text:'Good morning po! Can we confirm our meeting time for May 3?', time:'Yesterday' },
+    { from:'me',   text:'Yes, 5:00 AM at the jump-off. See you!', time:'Yesterday' },
+  ],
+  4: [
+    { type:'request', from:'them', booking:{ mountain:'Mt. Pico de Loro', date:'May 5, 2025', time:'4:30 AM', pax:'3 people', type:'Overnight Trek' }, time:'2 hours ago' },
+  ],
+  5: [
+    { from:'them', text:'Thanks for the trail tips! Really helpful.', time:'3 hours ago' },
+    { from:'me',   text:'You\'re welcome! Enjoy the hike!', time:'2 hours ago' },
+  ],
+  6: [
+    { type:'request', from:'them', booking:{ mountain:'Mt. Batulao', date:'May 10, 2025', time:'5:00 AM', pax:'8 people', type:'Day Hike + Picnic' }, time:'5 hours ago' },
   ],
 };
 
 let activeThread = 0;
+let currentFilter = 'all'; // 'all', 'bookings', 'unread'
+let searchQuery = '';
+
+// Helper: Check if thread has booking request
+function hasBookingRequest(threadId) {
+  const msgs = chatsData[threadId] || [];
+  return msgs.some(m => m.type === 'request');
+}
+
+// Helper: Check if thread has unread messages
+function hasUnread(thread) {
+  return thread.unread > 0;
+}
+
+// Filter threads based on current tab and search
+function getFilteredThreads() {
+  let filtered = [...threadsData];
+  
+  // Apply tab filter
+  if (currentFilter === 'bookings') {
+    filtered = filtered.filter(t => hasBookingRequest(t.id));
+  } else if (currentFilter === 'unread') {
+    filtered = filtered.filter(t => hasUnread(t));
+  }
+  
+  // Apply search filter
+  if (searchQuery.trim() !== '') {
+    const query = searchQuery.toLowerCase();
+    filtered = filtered.filter(t => 
+      t.name.toLowerCase().includes(query) || 
+      t.preview.toLowerCase().includes(query) ||
+      t.sub.toLowerCase().includes(query)
+    );
+  }
+  
+  return filtered;
+}
 
 function renderThreadList() {
   const el = document.getElementById('threadItems');
+  if (!el) return;
+  
+  const filteredThreads = getFilteredThreads();
+  
+  if (filteredThreads.length === 0) {
+    el.innerHTML = `<div style="padding: 40px 20px; text-align: center; color: var(--ink-4);">
+                      <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 8px; display: block;"></i>
+                      No conversations found
+                    </div>`;
+    return;
+  }
+  
   el.innerHTML = '';
-  threads.forEach(t => {
+  filteredThreads.forEach(t => {
     const div = document.createElement('div');
     div.className = 'thread-item' + (t.id === activeThread ? ' active' : '');
     div.innerHTML = `
@@ -508,8 +575,9 @@ function renderThreadList() {
 }
 
 function renderChat(id) {
-  const msgs = chats[id] || [];
+  const msgs = chatsData[id] || [];
   const el = document.getElementById('chatMessages');
+  if (!el) return;
   el.innerHTML = '';
 
   let lastGroup = null;
@@ -527,8 +595,8 @@ function renderChat(id) {
           <div class="brc-row"><span class="brc-label">Hikers</span><span class="brc-val">${m.booking.pax}</span></div>
           <div class="brc-row"><span class="brc-label">Type</span><span class="brc-val">${m.booking.type}</span></div>
           <div class="brc-actions">
-            <button class="btn btn-outline btn-sm" onclick="showToast('Booking declined.')">Decline</button>
-            <button class="btn btn-forest btn-sm" onclick="showToast('Booking accepted! ✅')"><i class="fas fa-check"></i> Accept</button>
+            <button class="btn btn-outline btn-sm" onclick="declineBooking(${id})">Decline</button>
+            <button class="btn btn-primary btn-sm" onclick="acceptBooking(${id})"><i class="fas fa-check"></i> Accept</button>
           </div>
         </div>`;
       el.appendChild(wrap);
@@ -557,11 +625,13 @@ function renderChat(id) {
 
 function openThread(id) {
   activeThread = id;
-  const t = threads.find(x => x.id === id);
-  t.unread = 0;
-  document.getElementById('chatName').textContent = t.name;
-  document.getElementById('chatSub').textContent = t.sub;
-  document.getElementById('chatAvatarHd').textContent = t.initials;
+  const t = threadsData.find(x => x.id === id);
+  if (t) {
+    t.unread = 0;
+    document.getElementById('chatName').textContent = t.name;
+    document.getElementById('chatSub').textContent = t.sub;
+    document.getElementById('chatAvatarHd').textContent = t.initials;
+  }
   renderThreadList();
   renderChat(id);
 
@@ -581,23 +651,90 @@ function sendMessage() {
   const input = document.getElementById('msgInput');
   const text = input.value.trim();
   if (!text) return;
-  chats[activeThread] = chats[activeThread] || [];
-  chats[activeThread].push({ from:'me', text, time: new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) });
-  threads.find(x=>x.id===activeThread).preview = text;
+  if (!chatsData[activeThread]) chatsData[activeThread] = [];
+  chatsData[activeThread].push({ from:'me', text, time: new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) });
+  const thread = threadsData.find(x=>x.id===activeThread);
+  if (thread) thread.preview = text;
   renderChat(activeThread);
   renderThreadList();
   input.value = '';
 }
 
 function sendQuick(text) {
-  chats[activeThread] = chats[activeThread] || [];
-  chats[activeThread].push({ from:'me', text, time: new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) });
+  if (!chatsData[activeThread]) chatsData[activeThread] = [];
+  chatsData[activeThread].push({ from:'me', text, time: new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) });
   renderChat(activeThread);
+  const thread = threadsData.find(x=>x.id===activeThread);
+  if (thread) thread.preview = text;
+  renderThreadList();
 }
 
-function setTab(el, tab) {
-  document.querySelectorAll('.thread-tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
+function acceptBooking(threadId) {
+  // Remove the booking request message from chat
+  const msgs = chatsData[threadId];
+  if (msgs) {
+    const requestIndex = msgs.findIndex(m => m.type === 'request');
+    if (requestIndex !== -1) {
+      msgs.splice(requestIndex, 1);
+      msgs.push({ from:'me', text: '✅ Booking accepted! See you on the trail!', time: new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) });
+    }
+  }
+  // Update thread preview
+  const thread = threadsData.find(t => t.id === threadId);
+  if (thread) {
+    thread.preview = 'Booking accepted ✓';
+    thread.hasRequest = false;
+  }
+  renderChat(threadId);
+  renderThreadList();
+  showToast('Booking accepted! ✅');
+}
+
+function declineBooking(threadId) {
+  const msgs = chatsData[threadId];
+  if (msgs) {
+    const requestIndex = msgs.findIndex(m => m.type === 'request');
+    if (requestIndex !== -1) {
+      msgs.splice(requestIndex, 1);
+      msgs.push({ from:'me', text: '❌ Booking declined. Let me know if you need alternative dates.', time: new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) });
+    }
+  }
+  const thread = threadsData.find(t => t.id === threadId);
+  if (thread) {
+    thread.preview = 'Booking declined';
+    thread.hasRequest = false;
+  }
+  renderChat(threadId);
+  renderThreadList();
+  showToast('Booking declined');
+}
+
+function setActiveTab(tab) {
+  currentFilter = tab;
+  // Update active class on tabs
+  document.querySelectorAll('.thread-tab').forEach(t => {
+    if (t.getAttribute('data-tab') === tab) {
+      t.classList.add('active');
+    } else {
+      t.classList.remove('active');
+    }
+  });
+  renderThreadList();
+  
+  // If current active thread is no longer in filtered list, clear selection or select first
+  const filtered = getFilteredThreads();
+  if (filtered.length > 0 && !filtered.some(t => t.id === activeThread)) {
+    openThread(filtered[0].id);
+  } else if (filtered.length === 0) {
+    // Clear chat area
+    document.getElementById('chatMessages').innerHTML = `<div class="chat-empty"><i class="fas fa-comment-slash"></i><p>No conversations in this category</p></div>`;
+  }
+}
+
+function filterThreads() {
+  const searchInput = document.getElementById('searchInput');
+  searchQuery = searchInput ? searchInput.value : '';
+  renderThreadList();
 }
 
 function showToast(msg) {
@@ -607,6 +744,7 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
+// Initialize
 renderThreadList();
 renderChat(0);
 </script>

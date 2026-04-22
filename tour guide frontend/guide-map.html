@@ -20,21 +20,38 @@
     /* ── MAP CANVAS ── */
     .map-canvas {
       flex: 1;
-      background: #2D4A3E;
+      background: #F4F1EA;  /* warm cream base that fits white/minimal palette */
       position: relative;
       overflow: hidden;
     }
     .map-bg {
       position: absolute; inset: 0;
       background:
-        radial-gradient(ellipse at 30% 40%, rgba(46,96,73,0.6) 0%, transparent 55%),
-        radial-gradient(ellipse at 70% 60%, rgba(27,58,45,0.8) 0%, transparent 50%),
-        linear-gradient(160deg, #2D4A3E 0%, #1B3A2D 50%, #122B20 100%);
+        /* Soft terrain gradients - warm earth tones that complement #100600 */
+        radial-gradient(ellipse at 25% 35%, rgba(210, 190, 160, 0.25) 0%, transparent 55%),
+        radial-gradient(ellipse at 70% 65%, rgba(180, 155, 125, 0.2) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 20%, rgba(200, 175, 145, 0.18) 0%, transparent 40%),
+        linear-gradient(145deg, #F0EDE5 0%, #EAE6DD 40%, #E3DFD4 100%);
     }
+
+    /* Topographic contour lines (elegant, subtle) */
+    .map-bg::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: 
+        repeating-linear-gradient(0deg, rgba(100, 80, 55, 0.04) 0px, rgba(100, 80, 55, 0.04) 1px, transparent 1px, transparent 40px),
+        repeating-linear-gradient(90deg, rgba(100, 80, 55, 0.04) 0px, rgba(100, 80, 55, 0.04) 1px, transparent 1px, transparent 40px),
+        repeating-linear-gradient(45deg, rgba(100, 80, 55, 0.03) 0px, rgba(100, 80, 55, 0.03) 1px, transparent 1px, transparent 60px),
+        repeating-linear-gradient(135deg, rgba(100, 80, 55, 0.03) 0px, rgba(100, 80, 55, 0.03) 1px, transparent 1px, transparent 60px);
+      pointer-events: none;
+    }
+
     /* Decorative trail path */
     .map-trail-svg {
       position: absolute; inset: 0;
       width: 100%; height: 100%;
+      pointer-events: none;
     }
     /* Map controls */
     .map-controls {
@@ -47,31 +64,33 @@
     }
     .map-ctrl-btn {
       width: 38px; height: 38px;
-      background: white;
-      border: none;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0,0,0,0.06);
       border-radius: var(--r-md);
       display: flex; align-items: center; justify-content: center;
       color: var(--ink-2);
       font-size: 0.9rem;
       cursor: pointer;
-      box-shadow: var(--shadow-md);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
       transition: all 0.15s;
     }
-    .map-ctrl-btn:hover { background: var(--forest); color: white; }
+    .map-ctrl-btn:hover { background: #100600; color: white; border-color: #100600; }
 
-    /* Status bar on map */
+    /* Status bar on map — glassmorphism */
     .map-status-bar {
       position: absolute;
       top: 16px; left: 16px;
-      background: rgba(255,255,255,0.95);
-      backdrop-filter: blur(8px);
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(12px);
       border-radius: var(--r-lg);
-      padding: 10px 16px;
+      padding: 10px 18px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      box-shadow: var(--shadow-md);
+      gap: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
       z-index: 10;
+      border: 1px solid rgba(255,255,255,0.6);
     }
     .live-dot {
       width: 8px; height: 8px;
@@ -80,13 +99,13 @@
       animation: pulse 1.5s infinite;
     }
     @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.5); }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.4); }
       50% { box-shadow: 0 0 0 6px rgba(231,76,60,0); }
     }
     .map-status-text {
-      font-size: 0.75rem;
+      font-size: 0.78rem;
       font-weight: 600;
-      color: var(--ink);
+      color: #100600;
     }
     .map-status-sub {
       font-size: 0.65rem;
@@ -110,25 +129,27 @@
       border-radius: 50%;
       border: 3px solid white;
       overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      background: var(--forest-lt);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+      background: #F0EDE8;
       display: flex; align-items: center; justify-content: center;
       font-family: 'Playfair Display', serif;
       font-size: 0.85rem;
       font-weight: 700;
-      color: var(--forest);
+      color: #100600;
     }
     .hiker-marker-name {
       font-size: 0.6rem;
       font-weight: 600;
       color: white;
-      background: rgba(0,0,0,0.55);
-      padding: 2px 7px;
-      border-radius: 10px;
+      background: rgba(16, 6, 0, 0.75);
+      backdrop-filter: blur(4px);
+      padding: 2px 8px;
+      border-radius: 20px;
       white-space: nowrap;
     }
-    .hiker-marker-avatar.safe-border { border-color: #2ECC71; }
-    .hiker-marker-avatar.warn-border { border-color: #F39C12; }
+    .hiker-marker-avatar.safe-border { border-color: #1B7045; }
+    .hiker-marker-avatar.warn-border { border-color: #C97B1A; }
+    .hiker-marker-avatar.critical-border { border-color: #B8312A; }
 
     /* Guide marker */
     .guide-marker {
@@ -138,71 +159,79 @@
     }
     .guide-marker-dot {
       width: 18px; height: 18px;
-      background: var(--red);
+      background: #100600;
       border-radius: 50%;
       border: 3px solid white;
-      box-shadow: 0 0 0 4px rgba(192,57,43,0.3), 0 2px 8px rgba(0,0,0,0.3);
+      box-shadow: 0 0 0 4px rgba(16, 6, 0, 0.2), 0 2px 12px rgba(0,0,0,0.2);
       animation: guidePulse 2s infinite;
     }
     @keyframes guidePulse {
-      0%, 100% { box-shadow: 0 0 0 4px rgba(192,57,43,0.3), 0 2px 8px rgba(0,0,0,0.3); }
-      50% { box-shadow: 0 0 0 10px rgba(192,57,43,0), 0 2px 8px rgba(0,0,0,0.3); }
+      0%, 100% { box-shadow: 0 0 0 4px rgba(16, 6, 0, 0.2), 0 2px 12px rgba(0,0,0,0.2); }
+      50% { box-shadow: 0 0 0 10px rgba(16, 6, 0, 0), 0 2px 12px rgba(0,0,0,0.2); }
     }
     .guide-marker-label {
       position: absolute;
-      top: -22px; left: 50%;
+      top: -24px; left: 50%;
       transform: translateX(-50%);
       font-size: 0.6rem;
       font-weight: 700;
       color: white;
-      background: var(--red);
-      padding: 2px 8px;
-      border-radius: 10px;
+      background: #100600;
+      padding: 2px 10px;
+      border-radius: 20px;
       white-space: nowrap;
+      letter-spacing: 0.3px;
     }
 
-    /* Trail checkpoint labels */
+    /* Trail checkpoint labels — glass style */
     .checkpoint {
       position: absolute;
-      display: flex; align-items: center; gap: 5px;
-      background: rgba(255,255,255,0.15);
-      backdrop-filter: blur(4px);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 20px;
-      padding: 4px 10px;
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 30px;
+      padding: 4px 12px;
+      transition: all 0.15s;
     }
     .checkpoint-dot {
       width: 6px; height: 6px;
       border-radius: 50%;
-      background: rgba(255,255,255,0.7);
+      background: rgba(255,255,255,0.8);
     }
+    .checkpoint-dot.summit { background: #1B7045; }
+    .checkpoint-dot.ridge { background: #C97B1A; }
     .checkpoint-label {
       font-size: 0.6rem;
-      color: rgba(255,255,255,0.8);
+      color: #444443;
       font-family: 'DM Mono', monospace;
+      font-weight: 500;
+      letter-spacing: 0.3px;
     }
 
     /* ── SIDE PANEL ── */
     .map-side-panel {
       width: 300px;
-      background: white;
-      border-left: 1px solid var(--line);
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: blur(4px);
+      border-left: 1px solid rgba(0,0,0,0.06);
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
     .side-panel-header {
       padding: 16px 18px;
-      border-bottom: 1px solid var(--line);
-      background: var(--stone);
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+      background: rgba(248,247,245,0.8);
     }
     .side-panel-header h3 {
       font-family: 'Playfair Display', serif;
       font-size: 0.95rem;
-      font-weight: 600;
+      font-weight: 700;
+      color: #100600;
     }
     .side-panel-header p {
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       color: var(--ink-4);
       margin-top: 2px;
     }
@@ -215,23 +244,23 @@
       gap: 8px;
     }
     .track-item {
-      background: var(--stone);
+      background: rgba(248,247,245,0.7);
       border-radius: var(--r-md);
       padding: 12px 14px;
       display: flex;
       align-items: center;
       gap: 12px;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: all 0.2s;
       border: 1.5px solid transparent;
     }
-    .track-item:hover { background: var(--forest-lt); border-color: rgba(27,58,45,0.15); }
-    .track-item.selected { background: var(--forest-lt); border-color: var(--forest); }
+    .track-item:hover { background: rgba(16,6,0,0.05); border-color: rgba(16,6,0,0.15); }
+    .track-item.selected { background: rgba(16,6,0,0.08); border-color: #100600; }
     .track-avatar {
       width: 36px; height: 36px;
       border-radius: 50%;
-      background: var(--forest-lt);
-      color: var(--forest);
+      background: #F0EDE8;
+      color: #100600;
       display: flex; align-items: center; justify-content: center;
       font-family: 'Playfair Display', serif;
       font-size: 0.85rem;
@@ -246,40 +275,55 @@
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .ts-safe { background: var(--green); }
-    .ts-moving { background: var(--amber); }
-    .ts-behind { background: var(--red); }
+    .ts-safe { background: #1B7045; box-shadow: 0 0 0 2px rgba(27,112,69,0.2); }
+    .ts-moving { background: #C97B1A; box-shadow: 0 0 0 2px rgba(201,123,26,0.2); }
+    .ts-behind { background: #B8312A; box-shadow: 0 0 0 2px rgba(184,49,42,0.2); }
 
     .legend {
-      padding: 14px 16px;
-      border-top: 1px solid var(--line);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
+      padding: 14px 18px;
+      border-top: 1px solid rgba(0,0,0,0.05);
+      background: rgba(255,255,255,0.9);
     }
     .legend-title {
-      font-size: 0.65rem;
+      font-size: 0.62rem;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: 1px;
       color: var(--ink-4);
-      margin-bottom: 2px;
+      margin-bottom: 8px;
     }
     .legend-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 0.72rem;
+      gap: 10px;
+      font-size: 0.7rem;
       color: var(--ink-3);
+      margin-bottom: 6px;
     }
     .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
     /* mobile map: hide side panel, show bottom sheet */
     @media (max-width: 768px) {
       .map-layout { height: calc(100vh - 60px - 64px); flex-direction: column; }
-      .map-side-panel { width: 100%; height: 200px; border-left: none; border-top: 1px solid var(--line); }
+      .map-side-panel { width: 100%; height: 200px; border-left: none; border-top: 1px solid rgba(0,0,0,0.05); }
       .hiker-track-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 8px 12px; }
       .track-item { min-width: 160px; }
+      .map-status-bar { top: 12px; left: 12px; padding: 6px 14px; }
+      .map-status-text { font-size: 0.7rem; }
+    }
+
+    /* Elevation marker styling */
+    .elevation-marker {
+      position: absolute;
+      font-size: 0.55rem;
+      font-family: 'DM Mono', monospace;
+      color: rgba(16,6,0,0.45);
+      background: rgba(255,255,255,0.5);
+      backdrop-filter: blur(4px);
+      padding: 2px 6px;
+      border-radius: 12px;
+      pointer-events: none;
+      white-space: nowrap;
     }
   </style>
 </head>
@@ -312,8 +356,8 @@
     <div class="guide-topbar">
       <div class="topbar-title">Live Trail Map</div>
       <div class="topbar-right">
-        <span class="badge badge-green"><span class="live-dot" style="width:6px;height:6px;display:inline-block;margin-right:2px;"></span> Tracking Active</span>
-        <button class="topbar-icon-btn" title="Refresh"><i class="fas fa-rotate"></i></button>
+        <span class="badge badge-primary" style="background:#10060010; color:#100600;"><span class="live-dot" style="width:6px;height:6px;display:inline-block;margin-right:6px; background:#100600;"></span> Tracking Active</span>
+        <button class="topbar-icon-btn" title="Refresh" onclick="showToast('Location updated')"><i class="fas fa-rotate"></i></button>
       </div>
     </div>
 
@@ -324,22 +368,32 @@
         <div class="map-canvas" id="mapCanvas">
           <div class="map-bg"></div>
 
-          <!-- Trail SVG path -->
+          <!-- Trail SVG path — elegant trail lines -->
           <svg class="map-trail-svg" viewBox="0 0 800 600" preserveAspectRatio="none">
-            <!-- Main trail path -->
+            <!-- Main trail path — warm brown stroke -->
             <path d="M 80 520 Q 150 480 200 420 Q 260 350 300 300 Q 360 240 420 200 Q 480 160 540 130 Q 600 110 660 90 Q 720 75 760 60"
-              stroke="rgba(255,255,255,0.18)" stroke-width="4" fill="none" stroke-dasharray="12,8" stroke-linecap="round"/>
-            <!-- Secondary path -->
+              stroke="rgba(100, 70, 45, 0.25)" stroke-width="4.5" fill="none" stroke-dasharray="10,8" stroke-linecap="round"/>
+            <!-- Secondary trail -->
             <path d="M 200 420 Q 240 400 280 410 Q 320 420 360 390"
-              stroke="rgba(255,255,255,0.1)" stroke-width="2.5" fill="none" stroke-dasharray="8,6"/>
-            <!-- Contour lines (decorative) -->
-            <ellipse cx="420" cy="300" rx="200" ry="120" stroke="rgba(255,255,255,0.05)" stroke-width="1.5" fill="none"/>
-            <ellipse cx="420" cy="300" rx="150" ry="85" stroke="rgba(255,255,255,0.04)" stroke-width="1.5" fill="none"/>
-            <ellipse cx="420" cy="300" rx="90" ry="50" stroke="rgba(255,255,255,0.04)" stroke-width="1" fill="none"/>
-            <!-- Summit indicator -->
-            <circle cx="760" cy="60" r="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
-            <circle cx="80" cy="520" r="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
+              stroke="rgba(100, 70, 45, 0.2)" stroke-width="2.5" fill="none" stroke-dasharray="6,6"/>
+            <!-- Alternative path -->
+            <path d="M 540 130 Q 560 160 590 180 Q 630 210 680 200 Q 720 190 760 180"
+              stroke="rgba(100, 70, 45, 0.15)" stroke-width="2" fill="none" stroke-dasharray="5,7"/>
+            <!-- Topographic contour rings (elegant) -->
+            <ellipse cx="420" cy="300" rx="200" ry="120" stroke="rgba(80, 60, 40, 0.08)" stroke-width="1.5" fill="none"/>
+            <ellipse cx="420" cy="300" rx="150" ry="85" stroke="rgba(80, 60, 40, 0.06)" stroke-width="1.5" fill="none"/>
+            <ellipse cx="420" cy="300" rx="90" ry="50" stroke="rgba(80, 60, 40, 0.05)" stroke-width="1" fill="none"/>
+            <ellipse cx="580" cy="150" rx="100" ry="60" stroke="rgba(80, 60, 40, 0.05)" stroke-width="1" fill="none"/>
+            <!-- Summit marker -->
+            <circle cx="760" cy="60" r="8" fill="rgba(16,6,0,0.12)" stroke="rgba(16,6,0,0.25)" stroke-width="1.5"/>
+            <circle cx="80" cy="520" r="6" fill="rgba(16,6,0,0.1)" stroke="rgba(16,6,0,0.2)" stroke-width="1"/>
           </svg>
+
+          <!-- Elevation markers -->
+          <div class="elevation-marker" style="left:12%;bottom:22%;">480m</div>
+          <div class="elevation-marker" style="left:35%;top:48%;">620m</div>
+          <div class="elevation-marker" style="left:58%;top:32%;">780m</div>
+          <div class="elevation-marker" style="right:8%;top:5%;">960m ⛰️</div>
 
           <!-- Status bar -->
           <div class="map-status-bar">
@@ -347,49 +401,53 @@
               <div class="live-dot"></div>
             </div>
             <div>
-              <div class="map-status-text">Mt. Batulao — Active</div>
+              <div class="map-status-text">Mt. Batulao — Active Trek</div>
               <div class="map-status-sub">5 hikers tracked · <span id="mapTime"></span></div>
             </div>
           </div>
 
-          <!-- Checkpoints -->
-          <div class="checkpoint" style="left:10%;bottom:18%;">
+          <!-- Checkpoints with refined glass look -->
+          <div class="checkpoint" style="left:8%;bottom:16%;">
             <div class="checkpoint-dot"></div>
-            <span class="checkpoint-label">Jump-off</span>
+            <span class="checkpoint-label">Trailhead / Jump-off</span>
           </div>
-          <div class="checkpoint" style="left:40%;top:45%;">
-            <div class="checkpoint-dot" style="background:#F39C12;"></div>
-            <span class="checkpoint-label">Ridge Point</span>
+          <div class="checkpoint" style="left:38%;top:48%;">
+            <div class="checkpoint-dot ridge"></div>
+            <span class="checkpoint-label">Ridge Camp · 620m</span>
           </div>
-          <div class="checkpoint" style="right:8%;top:7%;">
-            <div class="checkpoint-dot" style="background:#2ECC71;"></div>
-            <span class="checkpoint-label">Summit</span>
+          <div class="checkpoint" style="right:6%;top:6%;">
+            <div class="checkpoint-dot summit"></div>
+            <span class="checkpoint-label">Summit Peak · 960m</span>
+          </div>
+          <div class="checkpoint" style="left:58%;top:34%;">
+            <div class="checkpoint-dot"></div>
+            <span class="checkpoint-label">Rest Point</span>
           </div>
 
-          <!-- Hiker markers (positioned by %s) -->
-          <div class="hiker-marker" style="left:18%;bottom:28%;" onclick="selectHiker(0)">
+          <!-- Hiker markers (positioned by %) -->
+          <div class="hiker-marker" style="left:16%;bottom:26%;" onclick="selectHiker(0)">
             <div class="hiker-marker-avatar safe-border">LS</div>
             <div class="hiker-marker-name">Lea S.</div>
           </div>
-          <div class="hiker-marker" style="left:26%;bottom:38%;" onclick="selectHiker(1)">
+          <div class="hiker-marker" style="left:24%;bottom:36%;" onclick="selectHiker(1)">
             <div class="hiker-marker-avatar safe-border">BT</div>
             <div class="hiker-marker-name">Ben T.</div>
           </div>
-          <div class="hiker-marker" style="left:35%;top:52%;" onclick="selectHiker(2)">
+          <div class="hiker-marker" style="left:34%;top:50%;" onclick="selectHiker(2)">
             <div class="hiker-marker-avatar warn-border">NC</div>
             <div class="hiker-marker-name">Nina C.</div>
           </div>
-          <div class="hiker-marker" style="left:48%;top:44%;" onclick="selectHiker(3)">
+          <div class="hiker-marker" style="left:47%;top:42%;" onclick="selectHiker(3)">
             <div class="hiker-marker-avatar safe-border">CV</div>
             <div class="hiker-marker-name">Carlos V.</div>
           </div>
-          <div class="hiker-marker" style="left:58%;top:36%;" onclick="selectHiker(4)">
+          <div class="hiker-marker" style="left:57%;top:34%;" onclick="selectHiker(4)">
             <div class="hiker-marker-avatar safe-border">MR</div>
             <div class="hiker-marker-name">Marco R.</div>
           </div>
 
-          <!-- Guide marker (red dot) -->
-          <div class="guide-marker" style="left:32%;top:51%;">
+          <!-- Guide marker (#100600 primary) -->
+          <div class="guide-marker" style="left:31%;top:49%;">
             <div class="guide-marker-label">YOU</div>
             <div class="guide-marker-dot"></div>
           </div>
@@ -406,16 +464,17 @@
         <!-- SIDE PANEL -->
         <div class="map-side-panel">
           <div class="side-panel-header">
-            <h3>Hiker Positions</h3>
+            <h3><i class="fas fa-hiking" style="margin-right:6px; font-size:0.8rem;"></i> Hiker Positions</h3>
             <p id="panelTime">Updated just now</p>
           </div>
           <div class="hiker-track-list" id="trackList"></div>
           <div class="legend">
-            <div class="legend-title">Legend</div>
-            <div class="legend-item"><div class="legend-dot" style="background:var(--green);"></div> Safe / On schedule</div>
-            <div class="legend-item"><div class="legend-dot" style="background:var(--amber);"></div> Moving / Behind</div>
-            <div class="legend-item"><div class="legend-dot" style="background:var(--red);"></div> Needs attention</div>
-            <div class="legend-item"><div class="legend-dot" style="background:var(--red); border: 2px solid white; box-sizing:border-box;"></div> Guide (you)</div>
+            <div class="legend-title">Trail Legend</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#1B7045;"></div> Safe / On schedule</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#C97B1A;"></div> Moving / Behind</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#B8312A;"></div> Needs attention</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#100600; border:2px solid white; width:12px; height:12px;"></div> Guide (you)</div>
+            <div class="legend-item" style="margin-top:4px;"><i class="fas fa-mountain" style="font-size:0.7rem; color:#100600;"></i><span style="margin-left:6px;">Main trail · 4.8km to summit</span></div>
           </div>
         </div>
 
@@ -448,6 +507,7 @@ const statusClass = { safe:'ts-safe', moving:'ts-moving', behind:'ts-behind' };
 
 function renderTrackList(selectedIdx = -1) {
   const el = document.getElementById('trackList');
+  if (!el) return;
   el.innerHTML = '';
   hikers.forEach((h, i) => {
     const div = document.createElement('div');
@@ -467,19 +527,23 @@ function renderTrackList(selectedIdx = -1) {
 
 function selectHiker(i) {
   renderTrackList(i);
-  showToast(`Focused on ${hikers[i].name} — ${hikers[i].location}`);
+  showToast(`📍 ${hikers[i].name} — ${hikers[i].location}`);
 }
 
 function updateMapTime() {
   const d = new Date();
   const t = d.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-  document.getElementById('mapTime').textContent = t;
-  document.getElementById('panelTime').textContent = 'Updated ' + d.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'});
+  const timeSpan = document.getElementById('mapTime');
+  const panelSpan = document.getElementById('panelTime');
+  if (timeSpan) timeSpan.textContent = t;
+  if (panelSpan) panelSpan.textContent = 'Updated ' + d.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'});
 }
-updateMapTime(); setInterval(updateMapTime, 1000);
+updateMapTime(); 
+setInterval(updateMapTime, 1000);
 
 function showToast(msg) {
   const t = document.getElementById('toast');
+  if (!t) return;
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
