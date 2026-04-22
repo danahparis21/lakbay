@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAKBAY — Hikers</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="hikers">
+<div class="app">
+
+  <aside class="sidebar">
+    <div>
+      <div class="logo">
+        <div class="logo-wordmark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+              <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+            </svg>
+          </div>
+          LAKBAY
+        </div>
+        <div class="logo-sub">wilderness intelligence</div>
+      </div>
+      <div style="margin-bottom:8px; padding-left:28px;">
+        <div class="nav-section-label">Navigation</div>
+      </div>
+      <ul class="nav-list">
+        <li class="nav-item" data-tab="dashboard"><i class="fas fa-chart-line"></i> Dashboard</li>
+        <li class="nav-item" data-tab="mountains"><i class="fas fa-mountain"></i> Mountains</li>
+        <li class="nav-item active" data-tab="hikers"><i class="fas fa-person-hiking"></i> Hikers</li>
+        <li class="nav-item" data-tab="guides"><i class="fas fa-chalkboard-user"></i> Guides</li>
+        <div class="nav-divider"></div>
+        <li class="nav-item" data-tab="payments"><i class="fas fa-coins"></i> Revenue</li>
+        <li class="nav-item" data-tab="alerts"><i class="fas fa-bell"></i> Alerts</li>
+        <li class="nav-item" data-tab="analytics"><i class="fas fa-chart-simple"></i> Analytics</li>
+      </ul>
+    </div>
+    <div class="sidebar-footer"><div class="status-dot"></div> SYSTEM LIVE · V3</div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="page-heading"><i class="fas fa-person-hiking"></i> Hikers</div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="liveDate"></div>
+        <div class="topbar-user">
+          <div class="avatar">D</div>
+          Director <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <div class="section-header">
+        <div class="section-title">Hiker Registry</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="hikerSearch" placeholder="Search hikers..." style="width:180px;">
+          <select id="skillFilter">
+            <option>All skills</option>
+            <option>Beginner</option>
+            <option>Intermediate</option>
+            <option>Advanced</option>
+          </select>
+          <button class="btn" id="applyFilterBtn"><i class="fas fa-filter"></i> Filter</button>
+        </div>
+      </div>
+
+      <div class="panel" style="padding:0 4px; margin-bottom:20px;">
+        <table class="data-table" id="hikersTable">
+          <thead><tr>
+            <th>Name</th><th>Skill Level</th><th>Last Booking</th><th>Mountain</th><th>History</th><th>Manage</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td>Lea Santiago</td>
+              <td><span class="badge amber">Intermediate</span></td>
+              <td style="font-size:0.75rem;color:var(--ink-4);">Apr 20</td>
+              <td>Mt. Makiling</td>
+              <td><button class="btn btn-ghost histBtn" data-hiker="Lea"><i class="fas fa-folder-open"></i> History</button></td>
+              <td><button class="btn btn-ghost editHikerBtn"><i class="fas fa-edit"></i></button></td>
+            </tr>
+            <tr>
+              <td>Ben Torres</td>
+              <td><span class="badge red">Advanced</span></td>
+              <td style="font-size:0.75rem;color:var(--ink-4);">Apr 18</td>
+              <td>Mt. Apo</td>
+              <td><button class="btn btn-ghost histBtn" data-hiker="Ben"><i class="fas fa-folder-open"></i> History</button></td>
+              <td><button class="btn btn-ghost editHikerBtn"><i class="fas fa-edit"></i></button></td>
+            </tr>
+            <tr>
+              <td>Nina Cruz</td>
+              <td><span class="badge green">Beginner</span></td>
+              <td style="font-size:0.75rem;color:var(--ink-4);">Apr 22</td>
+              <td>Mt. Batulao</td>
+              <td><button class="btn btn-ghost histBtn" data-hiker="Nina"><i class="fas fa-folder-open"></i> History</button></td>
+              <td><button class="btn btn-ghost editHikerBtn"><i class="fas fa-edit"></i></button></td>
+            </tr>
+            <tr>
+              <td>Carlos Vidal</td>
+              <td><span class="badge amber">Intermediate</span></td>
+              <td style="font-size:0.75rem;color:var(--ink-4);">Apr 19</td>
+              <td>Mt. Pulag</td>
+              <td><button class="btn btn-ghost histBtn" data-hiker="Carlos"><i class="fas fa-folder-open"></i> History</button></td>
+              <td><button class="btn btn-ghost editHikerBtn"><i class="fas fa-edit"></i></button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="font-size:0.75rem;color:var(--ink-4);">
+        Showing 4 of 218 hikers · 46 bookings this month
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function updateDate() {
+  const d = new Date();
+  document.getElementById('liveDate').textContent =
+    d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}).toUpperCase() +
+    '  ' + d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+}
+updateDate(); setInterval(updateDate, 1000);
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => { window.location.href = item.dataset.tab + '.html'; });
+});
+
+document.getElementById('applyFilterBtn').addEventListener('click', () => alert('🔍 Filter applied.'));
+document.querySelectorAll('.histBtn').forEach(btn => {
+  btn.addEventListener('click', () => alert(`📜 Booking history for ${btn.dataset.hiker}: 4 past treks, ₱2,450 total.`));
+});
+document.querySelectorAll('.editHikerBtn').forEach(btn => {
+  btn.addEventListener('click', () => alert('✏️ Edit hiker profile: contact, emergency info, skill level.'));
+});
+</script>
+</body>
+</html>

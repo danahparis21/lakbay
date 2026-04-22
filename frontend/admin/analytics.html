@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAKBAY — Analytics</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="analytics">
+<div class="app">
+
+  <aside class="sidebar">
+    <div>
+      <div class="logo">
+        <div class="logo-wordmark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+              <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+            </svg>
+          </div>
+          LAKBAY
+        </div>
+        <div class="logo-sub">wilderness intelligence</div>
+      </div>
+      <div style="margin-bottom:8px; padding-left:28px;">
+        <div class="nav-section-label">Navigation</div>
+      </div>
+      <ul class="nav-list">
+        <li class="nav-item" data-tab="dashboard"><i class="fas fa-chart-line"></i> Dashboard</li>
+        <li class="nav-item" data-tab="mountains"><i class="fas fa-mountain"></i> Mountains</li>
+        <li class="nav-item" data-tab="hikers"><i class="fas fa-person-hiking"></i> Hikers</li>
+        <li class="nav-item" data-tab="guides"><i class="fas fa-chalkboard-user"></i> Guides</li>
+        <div class="nav-divider"></div>
+        <li class="nav-item" data-tab="payments"><i class="fas fa-coins"></i> Revenue</li>
+        <li class="nav-item" data-tab="alerts"><i class="fas fa-bell"></i> Alerts</li>
+        <li class="nav-item active" data-tab="analytics"><i class="fas fa-chart-simple"></i> Analytics</li>
+      </ul>
+    </div>
+    <div class="sidebar-footer"><div class="status-dot"></div> SYSTEM LIVE · V3</div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="page-heading"><i class="fas fa-chart-simple"></i> Analytics</div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="liveDate"></div>
+        <div class="topbar-user">
+          <div class="avatar">D</div>
+          Director <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- STAT CARDS -->
+      <div class="analytics-row">
+        <div class="stat-card">
+          <div class="stat-label">Visitor Growth <i class="fas fa-chart-line"></i></div>
+          <div class="stat-num">+23%</div>
+          <div class="stat-trend">↑ YTD vs prior year</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Top Mountain</div>
+          <div class="stat-num" style="font-size:1.3rem;font-weight:700;">Mt. Pulag</div>
+          <div class="stat-sub">340 avg visitors/day</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Guide Rating <i class="fas fa-star"></i></div>
+          <div class="stat-num">4.9</div>
+          <div class="stat-sub">Top: John Dela Cruz</div>
+        </div>
+      </div>
+
+      <!-- CHARTS -->
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Visitor Trend — 6 Months</span>
+            <button class="btn btn-ghost" id="refreshAnalyticsBtn"><i class="fas fa-rotate-right"></i> Refresh</button>
+          </div>
+          <div class="chart-wrap" style="height:150px"><canvas id="chartVisitors"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Monthly Revenue</span>
+          </div>
+          <div class="chart-wrap" style="height:150px"><canvas id="chartRevMonth"></canvas></div>
+        </div>
+      </div>
+
+      <!-- KEY INSIGHTS -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Key Insights</span>
+          <span class="panel-badge">Auto-generated</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:0.8rem;color:var(--ink-2);">
+          <div style="padding:14px;background:var(--paper);border-radius:8px;">
+            <div style="font-size:0.72rem;font-weight:600;color:var(--ink-3);margin-bottom:8px;">Congestion</div>
+            High traffic at Mt. Apo every Friday between 8–11AM. Consider imposing slot limits.
+          </div>
+          <div style="padding:14px;background:var(--paper);border-radius:8px;">
+            <div style="font-size:0.72rem;font-weight:600;color:var(--ink-3);margin-bottom:8px;">Seasonality</div>
+            Mt. Pulag peaks March–May. Prepare surge permits and extra guide deployment.
+          </div>
+          <div style="padding:14px;background:var(--paper);border-radius:8px;">
+            <div style="font-size:0.72rem;font-weight:600;color:var(--ink-3);margin-bottom:8px;">Revenue</div>
+            Weekend bookings account for 62% of weekly revenue. Optimize weekend pricing.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function updateDate() {
+  const d = new Date();
+  document.getElementById('liveDate').textContent =
+    d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}).toUpperCase() +
+    '  ' + d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+}
+updateDate(); setInterval(updateDate, 1000);
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => { window.location.href = item.dataset.tab + '.html'; });
+});
+
+function buildChart(id, type, data, opts = {}) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  new Chart(ctx, {
+    type, data,
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid:{ display:false }, ticks:{ font:{ family:"'Inter'", size:10 }, color:'#9098a6' } },
+        y: { display: false }
+      },
+      ...opts
+    }
+  });
+}
+
+buildChart('chartVisitors', 'line', {
+  labels: ['Jan','Feb','Mar','Apr','May','Jun'],
+  datasets: [{ data:[380,420,390,510,480,560], borderColor:'#4a6741', backgroundColor:'rgba(74,103,65,0.06)', tension:0.4, fill:true, pointRadius:3, pointBackgroundColor:'#4a6741', borderWidth:1.5 }]
+});
+buildChart('chartRevMonth', 'bar', {
+  labels: ['Jan','Feb','Mar','Apr'],
+  datasets: [{ data:[85000,96000,88000,124800], backgroundColor:'rgba(17,19,24,0.1)', borderRadius:4 }]
+});
+
+document.getElementById('refreshAnalyticsBtn').addEventListener('click', () => alert('📈 Analytics data refreshed.'));
+</script>
+</body>
+</html>

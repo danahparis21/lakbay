@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAKBAY — Alerts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="alerts">
+<div class="app">
+  
+  <aside class="sidebar">
+    <div>
+      <div class="logo">
+        <div class="logo-wordmark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+              <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+            </svg>
+          </div>
+          LAKBAY
+        </div>
+        <div class="logo-sub">wilderness intelligence</div>
+      </div>
+      <div style="margin-bottom:8px; padding-left:28px;">
+        <div class="nav-section-label">Navigation</div>
+      </div>
+      <ul class="nav-list">
+        <li class="nav-item" data-tab="dashboard"><i class="fas fa-chart-line"></i> Dashboard</li>
+        <li class="nav-item" data-tab="mountains"><i class="fas fa-mountain"></i> Mountains</li>
+        <li class="nav-item" data-tab="hikers"><i class="fas fa-person-hiking"></i> Hikers</li>
+        <li class="nav-item" data-tab="guides"><i class="fas fa-chalkboard-user"></i> Guides</li>
+        <div class="nav-divider"></div>
+        <li class="nav-item" data-tab="payments"><i class="fas fa-coins"></i> Revenue</li>
+        <li class="nav-item active" data-tab="alerts"><i class="fas fa-bell"></i> Alerts</li>
+        <li class="nav-item" data-tab="analytics"><i class="fas fa-chart-simple"></i> Analytics</li>
+      </ul>
+    </div>
+    <div class="sidebar-footer"><div class="status-dot"></div> SYSTEM LIVE · V3</div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="page-heading"><i class="fas fa-bell"></i> Alerts</div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="liveDate"></div>
+        <div class="topbar-user">
+          <div class="avatar">D</div>
+          Director <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <div class="two-col">
+        <!-- ACTIVE ALERTS -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Active Alerts</span>
+            <span class="panel-badge warn">3 open</span>
+          </div>
+
+          <div class="alert-item">
+            <div class="alert-icon warn"><i class="fas fa-cloud-bolt"></i></div>
+            <div class="alert-body">
+              <div class="alert-title">Heavy Rainfall — North Ridge</div>
+              <div class="alert-meta">Trail 3 · Apr 22, 09:14 · Weather</div>
+            </div>
+            <button class="btn btn-ghost" id="ackAlert1"><i class="fas fa-check"></i> Ack</button>
+          </div>
+
+          <div class="alert-item">
+            <div class="alert-icon warn"><i class="fas fa-person-falling"></i></div>
+            <div class="alert-body">
+              <div class="alert-title">Sprained Ankle — Hiker in Trail 2</div>
+              <div class="alert-meta">Mt. Pulag · Apr 21, 14:52 · Medical</div>
+            </div>
+            <button class="btn btn-ghost" id="ackAlert2"><i class="fas fa-check"></i> Ack</button>
+          </div>
+
+          <div class="alert-item">
+            <div class="alert-icon neutral"><i class="fas fa-person-walking-arrow-left"></i></div>
+            <div class="alert-body">
+              <div class="alert-title">Lost Hiker — Resolved</div>
+              <div class="alert-meta">Mt. Makiling · Apr 20, 11:30 · Resolved</div>
+            </div>
+            <span class="badge green"><i class="fas fa-check"></i> Done</span>
+          </div>
+
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+            <button class="btn" id="resolveAllBtn"><i class="fas fa-reply-all"></i> Mark All Resolved</button>
+          </div>
+        </div>
+
+        <!-- BROADCAST -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Broadcast Notification</span>
+          </div>
+          <textarea id="broadcastTxt" rows="5" placeholder="Write system-wide notification...">🌊 Heavy rainfall warning: Mt. Banahaw trails closed until further notice.</textarea>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button class="btn btn-primary" id="sendBroadcastBtn" style="flex:1">
+              <i class="fas fa-broadcast-tower"></i> Send to All
+            </button>
+            <button class="btn" id="previewBroadcastBtn"><i class="fas fa-eye"></i> Preview</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function updateDate() {
+  const d = new Date();
+  document.getElementById('liveDate').textContent =
+    d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}).toUpperCase() +
+    '  ' + d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+}
+updateDate(); setInterval(updateDate, 1000);
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => { window.location.href = item.dataset.tab + '.html'; });
+});
+
+document.getElementById('ackAlert1').addEventListener('click', () => alert('✅ Rainfall alert acknowledged.'));
+document.getElementById('ackAlert2').addEventListener('click', () => alert('✅ Medical alert acknowledged.'));
+document.getElementById('resolveAllBtn').addEventListener('click', () => alert('✅ All alerts marked as resolved.'));
+document.getElementById('sendBroadcastBtn').addEventListener('click', () => {
+  const msg = document.getElementById('broadcastTxt').value;
+  alert(`🔔 Broadcast sent:\n"${msg}"`);
+});
+document.getElementById('previewBroadcastBtn').addEventListener('click', () => {
+  const msg = document.getElementById('broadcastTxt').value;
+  alert(`👁 Preview:\n"${msg}"`);
+});
+</script>
+</body>
+</html>

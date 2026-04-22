@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAKBAY — Mountains</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="shared.css">
+
+  <style>
+    /* ─── MOUNTAIN GRID ─── */
+    .mtn-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 28px;
+      margin-bottom: 48px;
+    }
+    .mtn-card {
+      background: white;
+      border-radius: 28px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.02), 0 2px 4px rgba(0,0,0,0.02);
+      transition: 0.2s ease;
+      overflow: hidden;
+      border: 1px solid #EFF2F8;
+      display: flex;
+      flex-direction: column;
+    }
+    .mtn-card:hover { transform: translateY(-3px); box-shadow: 0 20px 28px -12px rgba(0,0,0,0.12); }
+    .mtn-photo { height: 170px; background-size: cover; background-position: center 30%; position: relative; }
+    .mtn-badge-overlay { position: absolute; top: 14px; right: 16px; }
+    .badge {
+      font-size: 11px; font-weight: 600; padding: 4px 12px;
+      border-radius: 40px; background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(2px); color: white; letter-spacing: 0.3px;
+    }
+    .badge.green { background: #1E7B48; }
+    .badge.amber { background: #E67E22; }
+    .badge.red   { background: #C0392B; }
+    .mtn-info { padding: 20px 20px 18px; }
+    .mtn-name {
+      font-size: 1.6rem; font-weight: 600;
+      font-family: 'Cormorant Garamond', serif;
+      margin-bottom: 12px;
+    }
+    .mtn-detail { font-size: 13px; color: #5B6A7E; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .elev-bar { background: #EFF2F6; height: 6px; border-radius: 12px; margin: 12px 0; overflow: hidden; }
+    .elev-fill { background: #111318; height: 100%; border-radius: 12px; }
+    .mtn-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .mtn-actions .btn { font-size: 12px; padding: 7px 12px; }
+    @media (max-width: 780px) { .mtn-grid { gap: 20px; } .mtn-name { font-size: 1.3rem; } }
+    @media (max-width: 640px) { .mtn-grid { grid-template-columns: 1fr; } }
+
+    /* ─── SHARED BTN ─── */
+    .btn {
+      border: none; background: transparent;
+      font-family: 'Inter', sans-serif; font-weight: 500;
+      padding: 8px 18px; border-radius: 40px; cursor: pointer;
+      transition: 0.2s; display: inline-flex; align-items: center; gap: 8px;
+      font-size: 13.5px;
+    }
+    .btn-primary { background: #111318; color: white; }
+    .btn-primary:hover { background: #2C2F3A; }
+    .btn-ghost { background: #F0F2F5; color: #1F2A3A; }
+    .btn-ghost:hover { background: #E2E6EC; }
+    .btn-success { background: #1E7B48; color: white; }
+    .btn-success:hover { background: #196040; }
+
+    /* ─── MODAL OVERLAY ─── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(10,12,18,0.55); backdrop-filter: blur(4px);
+      z-index: 1000; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 28px;
+      width: 100%; max-width: 660px; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 32px 64px rgba(0,0,0,0.18);
+      display: flex; flex-direction: column;
+    }
+
+    /* ─── MODAL HEADER ─── */
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 24px 28px 16px;
+      border-bottom: 1px solid #EFF2F6;
+      position: sticky; top: 0; background: white; z-index: 2;
+    }
+    .modal-title { font-family: 'Cormorant Garamond', serif; font-size: 1.5rem; font-weight: 600; color: #111318; }
+    .modal-subtitle { font-size: 11px; color: #8A99AE; margin-top: 3px; font-family: 'DM Mono', monospace; letter-spacing: 0.5px; }
+    .modal-close {
+      width: 36px; height: 36px; border-radius: 50%; border: none;
+      background: #F2F4F8; cursor: pointer; display: flex; align-items: center;
+      justify-content: center; color: #5B6A7E; font-size: 14px; transition: 0.15s; flex-shrink: 0;
+    }
+    .modal-close:hover { background: #E5E9EF; color: #111318; }
+
+    /* ─── STEP INDICATOR ─── */
+    .step-indicator { display: flex; align-items: center; padding: 16px 28px 0; }
+    .step-dot {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; color: #B0BAC8;
+      font-family: 'DM Mono', monospace; white-space: nowrap;
+    }
+    .step-dot.active { color: #111318; }
+    .step-dot.done   { color: #1E7B48; }
+    .step-dot span {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: #EFF2F6; color: #9AA6B5;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+    }
+    .step-dot.active span { background: #111318; color: white; }
+    .step-dot.done span   { background: #1E7B48; color: white; }
+    .step-line { flex: 1; height: 1px; background: #E5E9EF; margin: 0 10px; }
+
+    /* ─── MODAL BODY / FOOTER ─── */
+    .modal-body { padding: 20px 28px 28px; flex: 1; }
+    .modal-footer {
+      padding: 16px 28px 24px; display: flex; justify-content: flex-end; gap: 10px;
+      border-top: 1px solid #EFF2F6;
+      position: sticky; bottom: 0; background: white; z-index: 2;
+    }
+
+    /* ─── FORM ─── */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-label { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: #6C7A8E; }
+    .form-label .req { color: #E67E22; margin-left: 2px; }
+    .form-control {
+      border: 1.5px solid #E5E9EF; border-radius: 12px; padding: 10px 14px;
+      font-size: 13.5px; font-family: 'Inter', sans-serif; color: #111318;
+      background: #FAFBFC; outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s; width: 100%;
+    }
+    .form-control:focus { border-color: #111318; box-shadow: 0 0 0 3px rgba(17,19,24,0.07); background: white; }
+    .form-control[readonly], .form-control:disabled { background: #F2F4F8; color: #8A99AE; cursor: not-allowed; }
+    textarea.form-control { resize: vertical; min-height: 80px; line-height: 1.5; }
+    select.form-control {
+      cursor: pointer; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236C7A8E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 14px center; padding-right: 38px;
+    }
+    .fee-wrap { position: relative; }
+    .fee-prefix {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      font-size: 14px; font-weight: 600; color: #111318; pointer-events: none;
+    }
+    .fee-wrap .form-control { padding-left: 28px; }
+
+    /* photo upload */
+    .photo-upload-area {
+      border: 2px dashed #D8DDE6; border-radius: 14px; padding: 20px;
+      text-align: center; cursor: pointer; transition: 0.15s;
+      background: #FAFBFC; position: relative;
+    }
+    .photo-upload-area:hover { border-color: #111318; background: #F5F6F8; }
+    .photo-upload-area input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .photo-upload-preview { width: 100%; height: 110px; border-radius: 10px; object-fit: cover; display: none; margin-bottom: 8px; }
+    .photo-upload-icon { font-size: 1.6rem; color: #B0BAC8; margin-bottom: 6px; }
+    .photo-upload-text { font-size: 12.5px; color: #7A8899; }
+    .photo-upload-text strong { color: #111318; }
+    .photo-size-note { font-size: 11px; color: #9AA6B5; margin-top: 4px; }
+
+    /* booking toggles */
+    .booking-options { display: flex; gap: 10px; }
+    .booking-option {
+      flex: 1; border: 1.5px solid #E5E9EF; border-radius: 12px;
+      padding: 10px 10px; cursor: pointer; text-align: center;
+      font-size: 12.5px; font-weight: 500; color: #5B6A7E;
+      transition: 0.15s; user-select: none; font-family: 'Inter', sans-serif;
+    }
+    .booking-option:hover { border-color: #111318; color: #111318; }
+    .booking-option.selected { background: #111318; color: white; border-color: #111318; }
+    .booking-option i { margin-right: 5px; }
+
+    /* form section divider */
+    .form-section-label {
+      grid-column: 1 / -1; font-size: 11px; font-weight: 700;
+      letter-spacing: 1px; text-transform: uppercase; color: #9AA6B5;
+      padding: 10px 0 2px; border-top: 1px solid #EFF2F6; margin-top: 4px;
+    }
+
+    /* ─── CONFIRM STEP ─── */
+    .confirm-warn {
+      background: #FFF8F0; border: 1.5px solid #F5CBA7; border-radius: 12px;
+      padding: 12px 16px; font-size: 13px; color: #7D4E00;
+      display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+    }
+    .confirm-warn i { font-size: 1rem; color: #E67E22; flex-shrink: 0; }
+    .confirm-box {
+      background: #F8F9FB; border: 1.5px solid #E5E9EF;
+      border-radius: 16px; padding: 20px 22px;
+    }
+    .confirm-box-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+      text-transform: uppercase; color: #9AA6B5; margin-bottom: 14px;
+    }
+    .confirm-row {
+      display: flex; justify-content: space-between;
+      font-size: 13px; padding: 7px 0;
+      border-bottom: 1px solid #EDF0F4;
+    }
+    .confirm-row:last-child { border-bottom: none; }
+    .confirm-row .ck { color: #6C7A8E; font-weight: 500; }
+    .confirm-row .cv { color: #111318; font-weight: 600; text-align: right; max-width: 65%; }
+
+    /* ─── PREVIEW STEP ─── */
+    .preview-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: #9AA6B5; margin-bottom: 16px;
+    }
+    .preview-card-wrap { display: flex; justify-content: center; }
+    .preview-card-wrap .mtn-card {
+      width: 100%; max-width: 440px;
+      transform: none !important;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.08) !important;
+    }
+  </style>
+</head>
+<body data-page="mountains">
+<div class="app">
+
+  <aside class="sidebar">
+    <div>
+      <div class="logo">
+        <div class="logo-wordmark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+              <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+            </svg>
+          </div>
+          LAKBAY
+        </div>
+        <div class="logo-sub">wilderness intelligence</div>
+      </div>
+      <div style="margin-bottom:8px; padding-left:28px;">
+        <div class="nav-section-label">Navigation</div>
+      </div>
+      <ul class="nav-list">
+        <li class="nav-item" data-tab="dashboard"><i class="fas fa-chart-line"></i> Dashboard</li>
+        <li class="nav-item active" data-tab="mountains"><i class="fas fa-mountain"></i> Mountains</li>
+        <li class="nav-item" data-tab="hikers"><i class="fas fa-person-hiking"></i> Hikers</li>
+        <li class="nav-item" data-tab="guides"><i class="fas fa-chalkboard-user"></i> Guides</li>
+        <div class="nav-divider"></div>
+        <li class="nav-item" data-tab="payments"><i class="fas fa-coins"></i> Revenue</li>
+        <li class="nav-item" data-tab="alerts"><i class="fas fa-bell"></i> Alerts</li>
+        <li class="nav-item" data-tab="analytics"><i class="fas fa-chart-simple"></i> Analytics</li>
+      </ul>
+    </div>
+    <div class="sidebar-footer"><div class="status-dot"></div> SYSTEM LIVE · V3</div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="page-heading"><i class="fas fa-mountain"></i> Mountains</div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="liveDate"></div>
+        <div class="topbar-user">
+          <div class="avatar">D</div>
+          Director <i class="fas fa-chevron-down" style="font-size:0.5rem;color:#8A99AE;"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="section-header">
+        <div class="section-title">Mountain Registry</div>
+
+      </div>
+      <div class="mtn-grid" id="mountainsGrid"></div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title"><i class="fas fa-chart-simple"></i> Crowd Index — Daily Average</span>
+          <button class="btn btn-ghost" id="heatmapBtn"><i class="fas fa-fire"></i> Full heatmap</button>
+        </div>
+        <div class="chart-wrap" style="height:160px"><canvas id="chartCrowd"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     EDIT MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-box" id="modalBox">
+
+    <!-- HEADER -->
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalMtnName">Edit Mountain</div>
+        <div class="modal-subtitle" id="modalStepLabel">STEP 1 OF 3 · EDIT DETAILS</div>
+      </div>
+      <button class="modal-close" id="modalCloseBtn"><i class="fas fa-times"></i></button>
+    </div>
+
+    <!-- STEP DOTS -->
+    <div class="step-indicator">
+      <div class="step-dot active" id="sdot1"><span>1</span>&nbsp;Edit</div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="sdot2"><span>2</span>&nbsp;Confirm</div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="sdot3"><span>3</span>&nbsp;Preview</div>
+    </div>
+
+    <!-- ════ STEP 1: FORM ════ -->
+    <div class="modal-body" id="stepEditBody">
+      <div class="form-grid">
+
+        <div class="form-group full">
+          <label class="form-label">Mountain Name <span style="color:#8A99AE;font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(not editable)</span></label>
+          <input type="text" class="form-control" id="fName" readonly>
+        </div>
+
+        <div class="form-group full">
+          <label class="form-label">Mountain Picture <span style="color:#8A99AE;font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">JPG / PNG / WEBP · Max 5 MB</span></label>
+          <div class="photo-upload-area" id="photoUploadArea">
+            <input type="file" id="fPhoto" accept="image/jpeg,image/png,image/webp">
+            <img id="photoPreviewImg" class="photo-upload-preview" alt="preview">
+            <div id="photoPlaceholder">
+              <div class="photo-upload-icon"><i class="fas fa-image"></i></div>
+              <div class="photo-upload-text"><strong>Click to upload</strong> or drag & drop</div>
+              <div class="photo-size-note">JPG, PNG, WEBP · Max 5 MB</div>
+            </div>
+          </div>
+          <div id="photoError" style="color:#C0392B;font-size:12px;display:none;margin-top:4px;"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Difficulty <span class="req">*</span></label>
+          <select class="form-control" id="fDifficulty">
+            <option value="">— Select —</option>
+            <option>Easy</option>
+            <option>Easy · Scenic summit</option>
+            <option>Easy to Moderate</option>
+            <option>Moderate</option>
+            <option>Moderate · Technical</option>
+            <option>Moderate · Ridge trails</option>
+            <option>Difficult</option>
+            <option>Very Difficult</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Crowd Level <span class="req">*</span></label>
+          <select class="form-control" id="fCrowd">
+            <option value="">— Select —</option>
+            <option>Low</option>
+            <option>Moderate</option>
+            <option>High</option>
+            <option>Very High</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Elevation <span style="color:#8A99AE;font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(not editable)</span></label>
+          <input type="text" class="form-control" id="fElevation" readonly>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Duration (hours) <span class="req">*</span></label>
+          <input type="text" class="form-control" id="fDuration" placeholder="e.g. 4 or 3-5">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Trail Fee <span class="req">*</span></label>
+          <div class="fee-wrap">
+            <span class="fee-prefix">₱</span>
+            <input type="number" class="form-control" id="fFee" placeholder="250" min="0" step="1">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Jump-off Location <span class="req">*</span></label>
+          <input type="text" class="form-control" id="fJumpoff" placeholder="e.g. Brgy. Aga, Nasugbu">
+        </div>
+
+        <div class="form-section-label">Trail Information</div>
+
+        <div class="form-group full">
+          <label class="form-label">Overview</label>
+          <textarea class="form-control" id="fOverview" rows="3" placeholder="Brief description of the mountain and hiking experience…"></textarea>
+        </div>
+
+        <div class="form-group full">
+          <label class="form-label">Rules & Protocols</label>
+          <textarea class="form-control" id="fRules" rows="3" placeholder="List trail rules and protocols…"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Hazards</label>
+          <textarea class="form-control" id="fHazards" rows="3" placeholder="Known trail hazards…"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Environmental Reminders</label>
+          <textarea class="form-control" id="fEnvironment" rows="3" placeholder="Leave No Trace, waste disposal…"></textarea>
+        </div>
+
+        <div class="form-section-label">Conditions & Scheduling</div>
+
+        <div class="form-group">
+          <label class="form-label">Peak Times</label>
+          <input type="text" class="form-control" id="fPeakTimes" placeholder="e.g. Nov–Feb, Weekends">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Wind Condition</label>
+          <select class="form-control" id="fWind">
+            <option value="">— Select —</option>
+            <option>Calm</option>
+            <option>Breezy</option>
+            <option>Moderate Winds</option>
+            <option>Strong Winds</option>
+            <option>Variable</option>
+          </select>
+        </div>
+
+        <div class="form-group full">
+          <label class="form-label">Reviews / Notes</label>
+          <textarea class="form-control" id="fReviews" rows="2" placeholder="General reviewer notes or admin remarks…"></textarea>
+        </div>
+
+        <div class="form-section-label">Booking Settings</div>
+
+        <div class="form-group full">
+          <label class="form-label">Booking Availability <span class="req">*</span></label>
+          <div class="booking-options">
+            <div class="booking-option" id="bookOpt1" onclick="selectBooking('booking')">
+              <i class="fas fa-calendar-check"></i> Booking Only
+            </div>
+            <div class="booking-option" id="bookOpt2" onclick="selectBooking('walkin')">
+              <i class="fas fa-walking"></i> Walk-in Only
+            </div>
+            <div class="booking-option" id="bookOpt3" onclick="selectBooking('both')">
+              <i class="fas fa-door-open"></i> Both Accepted
+            </div>
+          </div>
+          <input type="hidden" id="fBooking" value="both">
+        </div>
+
+      </div>
+    </div>
+    <div class="modal-footer" id="stepEditFooter">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="goToConfirm()"><i class="fas fa-arrow-right"></i> Review Changes</button>
+    </div>
+
+    <!-- ════ STEP 2: CONFIRM ════ -->
+    <div class="modal-body" id="stepConfirmBody" style="display:none;">
+      <div class="confirm-warn">
+        <i class="fas fa-triangle-exclamation"></i>
+        Are you sure you want to save these changes? Please review carefully before proceeding.
+      </div>
+      <div class="confirm-box">
+        <div class="confirm-box-title">Summary of Changes</div>
+        <div id="confirmRows"></div>
+      </div>
+    </div>
+    <div class="modal-footer" id="stepConfirmFooter" style="display:none;">
+      <button class="btn btn-ghost" onclick="goBackToForm()"><i class="fas fa-arrow-left"></i> Back to Form</button>
+      <button class="btn btn-primary" onclick="goToPreview()"><i class="fas fa-eye"></i> Preview Card</button>
+    </div>
+
+    <!-- ════ STEP 3: PREVIEW ════ -->
+    <div class="modal-body" id="stepPreviewBody" style="display:none;">
+      <div class="preview-label">Card Preview — how it will appear on the registry</div>
+      <div class="preview-card-wrap" id="previewCardWrap"></div>
+    </div>
+    <div class="modal-footer" id="stepPreviewFooter" style="display:none;">
+      <button class="btn btn-ghost" onclick="goToConfirm()"><i class="fas fa-arrow-left"></i> Back</button>
+      <button class="btn btn-success" onclick="saveChanges()"><i class="fas fa-check"></i> Save Changes</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════
+const mountainsList = [
+  {
+    id: 1, name: "Mt. Batulao",
+    elevation: "811m", elevPercent: 27,
+    difficulty: "Easy to Moderate", fee: 250,
+    status: "Open", statusClass: "white", region: "Batangas",
+    photo: null, crowd: "High", duration: "4-6",
+    jumpoff: "Barangay Aga, Nasugbu, Batangas",
+    overview: "A popular beginner-friendly mountain in Batangas, known for its rolling ridgelines and panoramic views of Balayan Bay.",
+    rules: "No littering. Register at the jump-off. No alcohol. Camp only in designated areas.",
+    hazards: "Slippery trails during rainy season. Exposed ridges with strong winds.",
+    environment: "Pack out all waste. Do not pick plants or disturb wildlife.",
+    peakTimes: "Nov–Feb, Weekends", wind: "Moderate Winds",
+    reviews: "", booking: "both"
+  },
+  {
+    id: 2, name: "Mt. Apayang",
+    elevation: "1,847m", elevPercent: 62,
+    difficulty: "Moderate · Technical", fee: 380,
+    status: "Open", statusClass: "white", region: "Cordillera",
+    photo: null, crowd: "Low", duration: "8-10",
+    jumpoff: "Sitio Apayang, Kibungan, Benguet",
+    overview: "A remote technical climb in the Cordillera region, offering pristine mossy forests and challenging trail conditions.",
+    rules: "Guided climbs mandatory. No campfires. Permit required.",
+    hazards: "Steep technical sections. Cold temperatures at night. Loose rocks.",
+    environment: "Strict Leave No Trace. Mossy forest is protected.",
+    peakTimes: "Mar–May, Nov–Dec", wind: "Strong Winds",
+    reviews: "", booking: "booking"
+  },
+  {
+    id: 3, name: "Mt. Lantik",
+    elevation: "1,203m", elevPercent: 41,
+    difficulty: "Moderate · Ridge trails", fee: 290,
+    status: "Open", statusClass: "white", region: "Bataan / Zambales",
+    photo: null, crowd: "Moderate", duration: "5-7",
+    jumpoff: "Barangay Mambog, Hermosa, Bataan",
+    overview: "Mt. Lantik features scenic ridge trails and diverse flora along the Bataan Natural Park corridor.",
+    rules: "Trail registration required. Leave no trace. Respect community rules.",
+    hazards: "Dense vegetation. Wildlife encounters possible.",
+    environment: "Part of a protected area. Zero waste policy strictly enforced.",
+    peakTimes: "Dec–Apr", wind: "Breezy",
+    reviews: "", booking: "both"
+  },
+  {
+    id: 4, name: "Mt. Talamitam",
+    elevation: "630m", elevPercent: 21,
+    difficulty: "Easy · Scenic summit", fee: 190,
+    status: "Open", statusClass: "white", region: "Batangas",
+    photo: null, crowd: "High", duration: "2-3",
+    jumpoff: "Brgy. Papaya, Nasugbu, Batangas",
+    overview: "One of the most scenic easy climbs near Metro Manila, offering 360° views of the Nasugbu plains and nearby peaks.",
+    rules: "No littering. Register before ascending.",
+    hazards: "Grass fires during dry season. Open exposed trail.",
+    environment: "Grassland ecosystem—stay on trail to prevent erosion.",
+    peakTimes: "Year-round, peak on weekends", wind: "Breezy",
+    reviews: "", booking: "both"
+  }
+];
+
+const imgBank = [
+  "https://images.pexels.com/photos/1365425/pexels-photo-1365425.jpeg?auto=compress&cs=tinysrgb&w=800&h=500&fit=crop",
+  "https://images.pexels.com/photos/248797/pexels-photo-248797.jpeg?auto=compress&cs=tinysrgb&w=800&h=500&fit=crop",
+  "https://images.pexels.com/photos/417074/pexels-photo-417074.jpeg?auto=compress&cs=tinysrgb&w=800&h=500&fit=crop",
+  "https://images.pexels.com/photos/912110/pexels-photo-912110.jpeg?auto=compress&cs=tinysrgb&w=800&h=500&fit=crop",
+  "https://images.pexels.com/photos/699466/pexels-photo-699466.jpeg?auto=compress&cs=tinysrgb&w=800&h=500&fit=crop",
+  "https://images.pexels.com/photos/2387873/pexels-photo-2387873.jpeg?auto=compress&cs=tinysrgb&w=800&h=500&fit=crop",
+  "https://images.pexels.com/photos/1169937/pexels-photo-1169937.jpeg?auto=compress&cs=tinysrgb&w=800&h=500&fit=crop",
+  "https://images.pexels.com/photos/3712823/pexels-photo-3712823.jpeg?auto=compress&cs=tinysrgb&w=800&h=500&fit=crop"
+];
+const bookingLabels = { booking: 'Booking Only', walkin: 'Walk-in Only', both: 'Walk-in & Booking' };
+
+function getPhoto(mtn) {
+  if (mtn.photo) return mtn.photo;
+  let h = 0;
+  for (let i = 0; i < mtn.name.length; i++) { h = ((h << 5) - h) + mtn.name.charCodeAt(i); h |= 0; }
+  return imgBank[Math.abs(h) % imgBank.length];
+}
+
+// ══════════════════════════════════════════
+// RENDER CARDS
+// ══════════════════════════════════════════
+function renderMountains() {
+  const container = document.getElementById('mountainsGrid');
+  container.innerHTML = '';
+  mountainsList.forEach(mtn => {
+    const card = document.createElement('div');
+    card.className = 'mtn-card';
+    card.innerHTML = `
+      <div class="mtn-photo" style="background-image:url('${getPhoto(mtn)}');">
+        <div class="mtn-badge-overlay"><span class="badge ${mtn.statusClass}">${mtn.status}</span></div>
+      </div>
+      <div class="mtn-info">
+        <div class="mtn-name">${mtn.name}</div>
+        <div class="mtn-detail"><i class="fas fa-arrow-up"></i> ${mtn.elevation} · ELEVATION</div>
+        <div class="elev-bar"><div class="elev-fill" style="width:${mtn.elevPercent}%"></div></div>
+        <div class="mtn-detail"><i class="fas fa-signal"></i> ${mtn.difficulty} · ₱${mtn.fee} fee</div>
+        <div class="mtn-detail"><i class="fas fa-clock"></i> ${mtn.duration} hrs &nbsp;·&nbsp; <i class="fas fa-users"></i> ${mtn.crowd} Crowd</div>
+        <div class="mtn-detail"><i class="fas fa-map-pin"></i> ${mtn.region}</div>
+        <div class="mtn-detail"><i class="fas fa-calendar-check"></i> ${bookingLabels[mtn.booking]}</div>
+        <div class="mtn-actions">
+          <button class="btn edit-mtn-btn" data-id="${mtn.id}" style="flex:1"><i class="fas fa-edit"></i> Edit</button>
+          <button class="btn btn-ghost approv-mtn-btn" data-name="${mtn.name}"><i class="fas fa-check-circle"></i> Approve</button>
+        </div>
+      </div>`;
+    container.appendChild(card);
+  });
+  document.querySelectorAll('.edit-mtn-btn').forEach(btn =>
+    btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id))));
+  document.querySelectorAll('.approv-mtn-btn').forEach(btn =>
+    btn.addEventListener('click', () => alert(`✅ Opening approval submitted for ${btn.dataset.name}.`)));
+}
+
+// ══════════════════════════════════════════
+// MODAL
+// ══════════════════════════════════════════
+let activeMtnId = null;
+let pendingPhoto = null;
+
+function openEditModal(id) {
+  activeMtnId = id;
+  pendingPhoto = null;
+  const m = mountainsList.find(x => x.id === id);
+
+  document.getElementById('fName').value       = m.name;
+  document.getElementById('fElevation').value  = m.elevation;
+  document.getElementById('fDifficulty').value = m.difficulty;
+  document.getElementById('fCrowd').value      = m.crowd;
+  document.getElementById('fDuration').value   = m.duration;
+  document.getElementById('fFee').value        = m.fee;
+  document.getElementById('fJumpoff').value    = m.jumpoff;
+  document.getElementById('fOverview').value   = m.overview;
+  document.getElementById('fRules').value      = m.rules;
+  document.getElementById('fHazards').value    = m.hazards;
+  document.getElementById('fEnvironment').value= m.environment;
+  document.getElementById('fPeakTimes').value  = m.peakTimes;
+  document.getElementById('fWind').value       = m.wind;
+  document.getElementById('fReviews').value    = m.reviews;
+  selectBooking(m.booking);
+
+  // reset photo
+  document.getElementById('fPhoto').value = '';
+  document.getElementById('photoPreviewImg').style.display = 'none';
+  document.getElementById('photoPlaceholder').style.display = 'block';
+  document.getElementById('photoError').style.display = 'none';
+
+  document.getElementById('modalMtnName').textContent = m.name;
+  showStep(1);
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('open');
+  activeMtnId = null; pendingPhoto = null;
+}
+
+document.getElementById('editModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+
+// ══════════════════════════════════════════
+// STEPS
+// ══════════════════════════════════════════
+function showStep(n) {
+  ['Edit','Confirm','Preview'].forEach((_, i) => {
+    const s = i + 1;
+    document.getElementById('step' + ['Edit','Confirm','Preview'][i] + 'Body').style.display = s === n ? 'block' : 'none';
+    document.getElementById('step' + ['Edit','Confirm','Preview'][i] + 'Footer').style.display = s === n ? 'flex' : 'none';
+    const dot = document.getElementById('sdot' + s);
+    dot.className = 'step-dot' + (s < n ? ' done' : s === n ? ' active' : '');
+  });
+  const labels = ['STEP 1 OF 3 · EDIT DETAILS', 'STEP 2 OF 3 · CONFIRM CHANGES', 'STEP 3 OF 3 · PREVIEW CARD'];
+  document.getElementById('modalStepLabel').textContent = labels[n - 1];
+  document.getElementById('modalBox').scrollTop = 0;
+}
+
+function validateForm() {
+  const dur = document.getElementById('fDuration').value.trim();
+  if (!document.getElementById('fDifficulty').value) { alert('Please select a difficulty level.'); return false; }
+  if (!document.getElementById('fCrowd').value)      { alert('Please select a crowd level.');     return false; }
+  if (!dur)                                           { alert('Please enter the estimated duration.'); return false; }
+  if (!/^\d+(-\d+)?$/.test(dur))                     { alert('Duration must be a number or range like "4" or "3-5".'); return false; }
+  if (document.getElementById('fFee').value === '' || +document.getElementById('fFee').value < 0)
+                                                      { alert('Please enter a valid trail fee.'); return false; }
+  if (!document.getElementById('fJumpoff').value.trim()) { alert('Please enter the jump-off location.'); return false; }
+  return true;
+}
+
+function goToConfirm() {
+  if (!validateForm()) return;
+  const m = mountainsList.find(x => x.id === activeMtnId);
+  const fee = parseInt(document.getElementById('fFee').value);
+  const rows = [
+    ['Difficulty',           m.difficulty,              document.getElementById('fDifficulty').value],
+    ['Crowd Level',          m.crowd,                   document.getElementById('fCrowd').value],
+    ['Duration',             m.duration + ' hrs',       document.getElementById('fDuration').value.trim() + ' hrs'],
+    ['Trail Fee',            '₱' + m.fee,               '₱' + fee],
+    ['Jump-off Location',    m.jumpoff,                 document.getElementById('fJumpoff').value.trim()],
+    ['Peak Times',           m.peakTimes,               document.getElementById('fPeakTimes').value.trim()],
+    ['Wind Condition',       m.wind,                    document.getElementById('fWind').value],
+    ['Booking Availability', bookingLabels[m.booking],  bookingLabels[document.getElementById('fBooking').value]],
+    ['Photo',                m.photo ? 'Custom' : 'Default', pendingPhoto ? 'New upload' : (m.photo ? 'Custom (unchanged)' : 'Default (unchanged)')],
+  ];
+  const container = document.getElementById('confirmRows');
+  container.innerHTML = '';
+  rows.forEach(([label, oldVal, newVal]) => {
+    const changed = String(oldVal) !== String(newVal);
+    const row = document.createElement('div');
+    row.className = 'confirm-row';
+    row.innerHTML = `<span class="ck">${label}</span><span class="cv" style="${changed ? 'color:#1E7B48;' : ''}">${newVal}${changed ? ' <span style="font-size:10px;color:#9AA6B5;font-weight:400;">(changed)</span>' : ''}</span>`;
+    container.appendChild(row);
+  });
+  showStep(2);
+}
+
+function goBackToForm() { showStep(1); }
+
+function goToPreview() {
+  const m = mountainsList.find(x => x.id === activeMtnId);
+  const photoSrc   = pendingPhoto || getPhoto(m);
+  const difficulty = document.getElementById('fDifficulty').value;
+  const fee        = parseInt(document.getElementById('fFee').value);
+  const crowd      = document.getElementById('fCrowd').value;
+  const duration   = document.getElementById('fDuration').value;
+  const booking    = document.getElementById('fBooking').value;
+
+  document.getElementById('previewCardWrap').innerHTML = `
+    <div class="mtn-card">
+      <div class="mtn-photo" style="background-image:url('${photoSrc}');">
+        <div class="mtn-badge-overlay"><span class="badge ${m.statusClass}">${m.status}</span></div>
+      </div>
+      <div class="mtn-info">
+        <div class="mtn-name">${m.name}</div>
+        <div class="mtn-detail"><i class="fas fa-arrow-up"></i> ${m.elevation} · ELEVATION</div>
+        <div class="elev-bar"><div class="elev-fill" style="width:${m.elevPercent}%"></div></div>
+        <div class="mtn-detail"><i class="fas fa-signal"></i> ${difficulty} · ₱${fee} fee</div>
+        <div class="mtn-detail"><i class="fas fa-clock"></i> ${duration} hrs &nbsp;·&nbsp; <i class="fas fa-users"></i> ${crowd} Crowd</div>
+        <div class="mtn-detail"><i class="fas fa-map-pin"></i> ${m.region}</div>
+        <div class="mtn-detail"><i class="fas fa-calendar-check"></i> ${bookingLabels[booking]}</div>
+        <div class="mtn-actions">
+          <button class="btn" style="flex:1;opacity:0.4;cursor:default;pointer-events:none;"><i class="fas fa-edit"></i> Edit</button>
+          <button class="btn btn-ghost" style="opacity:0.4;cursor:default;pointer-events:none;"><i class="fas fa-check-circle"></i> Approve</button>
+        </div>
+      </div>
+    </div>`;
+  showStep(3);
+}
+
+function saveChanges() {
+  const m   = mountainsList.find(x => x.id === activeMtnId);
+  m.difficulty  = document.getElementById('fDifficulty').value;
+  m.crowd       = document.getElementById('fCrowd').value;
+  m.duration    = document.getElementById('fDuration').value.trim();
+  m.fee         = parseInt(document.getElementById('fFee').value);
+  m.jumpoff     = document.getElementById('fJumpoff').value.trim();
+  m.overview    = document.getElementById('fOverview').value;
+  m.rules       = document.getElementById('fRules').value;
+  m.hazards     = document.getElementById('fHazards').value;
+  m.environment = document.getElementById('fEnvironment').value;
+  m.peakTimes   = document.getElementById('fPeakTimes').value.trim();
+  m.wind        = document.getElementById('fWind').value;
+  m.reviews     = document.getElementById('fReviews').value;
+  m.booking     = document.getElementById('fBooking').value;
+  if (pendingPhoto) m.photo = pendingPhoto;
+
+  renderMountains();
+  closeModal();
+  showToast(`✅ ${m.name} updated successfully.`);
+}
+
+// ══════════════════════════════════════════
+// BOOKING TOGGLE
+// ══════════════════════════════════════════
+function selectBooking(val) {
+  ['booking','walkin','both'].forEach((v, i) => {
+    document.getElementById('bookOpt' + (i+1)).classList.toggle('selected', v === val);
+  });
+  document.getElementById('fBooking').value = val;
+}
+
+// ══════════════════════════════════════════
+// PHOTO UPLOAD
+// ══════════════════════════════════════════
+document.getElementById('fPhoto').addEventListener('change', function() {
+  const file = this.files[0];
+  const err  = document.getElementById('photoError');
+  err.style.display = 'none';
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) {
+    err.textContent = `File too large (${(file.size/1024/1024).toFixed(1)} MB). Maximum is 5 MB.`;
+    err.style.display = 'block';
+    this.value = ''; return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    pendingPhoto = e.target.result;
+    const img = document.getElementById('photoPreviewImg');
+    img.src = pendingPhoto; img.style.display = 'block';
+    document.getElementById('photoPlaceholder').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+});
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  Object.assign(t.style, {
+    position:'fixed', bottom:'28px', left:'50%', transform:'translateX(-50%)',
+    background:'#111318', color:'white', padding:'12px 24px',
+    borderRadius:'40px', fontSize:'13.5px', fontWeight:'500',
+    zIndex:'9999', boxShadow:'0 8px 24px rgba(0,0,0,0.2)',
+    opacity:'0', transition:'opacity 0.25s', fontFamily:"'Inter',sans-serif"
+  });
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.style.opacity = '1');
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2800);
+}
+
+// ══════════════════════════════════════════
+// CHART
+// ══════════════════════════════════════════
+new Chart(document.getElementById('chartCrowd'), {
+  type: 'bar',
+  data: {
+    labels: ['Mt. Batulao','Mt. Apayang','Mt. Lantik','Mt. Talamitam'],
+    datasets: [{ data:[312,98,145,268], borderRadius:8, barPercentage:0.65,
+      backgroundColor:['rgba(17,19,24,0.9)','rgba(30,60,90,0.8)','rgba(17,19,24,0.85)','rgba(61,90,110,0.75)'] }]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false}, tooltip:{backgroundColor:'#111318',titleColor:'#fff',bodyColor:'#ddd'} },
+    scales:{
+      x:{ grid:{display:false}, ticks:{font:{family:"'Inter'",size:11,weight:'500'},color:'#2C3E4F'} },
+      y:{ grid:{color:'#EFF2F6'}, ticks:{stepSize:100,font:{size:10},color:'#6F7D91'},
+          title:{display:true,text:'avg visitors/day',font:{size:9},color:'#8A99AE'} }
+    }
+  }
+});
+
+// ══════════════════════════════════════════
+// MISC
+// ══════════════════════════════════════════
+function updateDate() {
+  const d = new Date();
+  document.getElementById('liveDate').textContent =
+    d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}).toUpperCase() +
+    '  ' + d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+}
+updateDate(); setInterval(updateDate, 1000);
+
+document.querySelectorAll('.nav-item').forEach(item =>
+  item.addEventListener('click', () => { window.location.href = item.dataset.tab + '.html'; }));
+document.getElementById('heatmapBtn').addEventListener('click', () => alert('🔥 Full interactive crowd heatmap view.'));
+
+renderMountains();
+</script>
+</body>
+</html>

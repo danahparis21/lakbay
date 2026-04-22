@@ -1,0 +1,67 @@
+<!--
+  shared-shell.html
+  ─────────────────
+  Copy the <aside> and <div class="main"> blocks below into each page.
+  Replace ACTIVE_TAB with the current page's data-tab value.
+  Replace PAGE_ICON and PAGE_TITLE with the page's icon class and title.
+-->
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div>
+    <div class="logo">
+      <div class="logo-wordmark">
+        <div class="logo-icon">
+          <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+            <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+          </svg>
+        </div>
+        LAKBAY
+      </div>
+      <div class="logo-sub">wilderness intelligence</div>
+    </div>
+    <div style="margin-bottom:8px; padding-left:28px;">
+      <div class="nav-section-label">Navigation</div>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item" data-tab="dashboard"><i class="fas fa-chart-line"></i> Dashboard</li>
+      <li class="nav-item" data-tab="mountains"><i class="fas fa-mountain"></i> Mountains</li>
+      <li class="nav-item" data-tab="hikers"><i class="fas fa-person-hiking"></i> Hikers</li>
+      <li class="nav-item" data-tab="guides"><i class="fas fa-chalkboard-user"></i> Guides</li>
+      <div class="nav-divider"></div>
+      <li class="nav-item" data-tab="payments"><i class="fas fa-coins"></i> Revenue</li>
+      <li class="nav-item" data-tab="alerts"><i class="fas fa-bell"></i> Alerts</li>
+      <li class="nav-item" data-tab="analytics"><i class="fas fa-chart-simple"></i> Analytics</li>
+    </ul>
+  </div>
+  <div class="sidebar-footer">
+    <div class="status-dot"></div>
+    SYSTEM LIVE · V3
+  </div>
+</aside>
+
+<!-- SHARED NAV SCRIPT: add to every page -->
+<script>
+// Mark active nav item based on current page
+(function() {
+  const page = document.body.dataset.page;
+  document.querySelectorAll('.nav-item').forEach(item => {
+    if (item.dataset.tab === page) item.classList.add('active');
+    item.addEventListener('click', () => {
+      window.location.href = item.dataset.tab + '.html';
+    });
+  });
+
+  // Live clock
+  function updateDate() {
+    const el = document.getElementById('liveDate');
+    if (!el) return;
+    const d = new Date();
+    el.textContent =
+      d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}).toUpperCase() +
+      '  ' + d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+  }
+  updateDate(); setInterval(updateDate, 1000);
+})();
+</script>

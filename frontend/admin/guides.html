@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAKBAY — Guides</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="guides">
+<div class="app">
+
+  <aside class="sidebar">
+    <div>
+      <div class="logo">
+        <div class="logo-wordmark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+              <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+            </svg>
+          </div>
+          LAKBAY
+        </div>
+        <div class="logo-sub">wilderness intelligence</div>
+      </div>
+      <div style="margin-bottom:8px; padding-left:28px;">
+        <div class="nav-section-label">Navigation</div>
+      </div>
+      <ul class="nav-list">
+        <li class="nav-item" data-tab="dashboard"><i class="fas fa-chart-line"></i> Dashboard</li>
+        <li class="nav-item" data-tab="mountains"><i class="fas fa-mountain"></i> Mountains</li>
+        <li class="nav-item" data-tab="hikers"><i class="fas fa-person-hiking"></i> Hikers</li>
+        <li class="nav-item active" data-tab="guides"><i class="fas fa-chalkboard-user"></i> Guides</li>
+        <div class="nav-divider"></div>
+        <li class="nav-item" data-tab="payments"><i class="fas fa-coins"></i> Revenue</li>
+        <li class="nav-item" data-tab="alerts"><i class="fas fa-bell"></i> Alerts</li>
+        <li class="nav-item" data-tab="analytics"><i class="fas fa-chart-simple"></i> Analytics</li>
+      </ul>
+    </div>
+    <div class="sidebar-footer"><div class="status-dot"></div> SYSTEM LIVE · V3</div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="page-heading"><i class="fas fa-chalkboard-user"></i> Guides</div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="liveDate"></div>
+        <div class="topbar-user">
+          <div class="avatar">D</div>
+          Director <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <div class="section-header">
+        <div class="section-title">Tour Guides</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" id="addGuideBtn"><i class="fas fa-user-plus"></i> Add Guide</button>
+          <button class="btn" id="broadcastBtn"><i class="fas fa-bullhorn"></i> Broadcast</button>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <!-- GUIDE LIST -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Active Guides</span>
+            <span class="panel-badge">4 on roster</span>
+          </div>
+          <div class="guide-row">
+            <div class="guide-avatar">JD</div>
+            <div class="guide-info">
+              <div class="guide-name">John Dela Cruz</div>
+              <div class="guide-meta">Mt. Pulag · 12 bookings · ★ 4.9</div>
+            </div>
+            <button class="btn btn-ghost msgGuideBtn" data-guide="John"><i class="fas fa-comment"></i> Message</button>
+          </div>
+          <div class="guide-row">
+            <div class="guide-avatar">MR</div>
+            <div class="guide-info">
+              <div class="guide-name">Maya Reyes</div>
+              <div class="guide-meta">Mt. Makiling · 8 bookings · ★ 4.8</div>
+            </div>
+            <button class="btn btn-ghost msgGuideBtn" data-guide="Maya"><i class="fas fa-comment"></i> Message</button>
+          </div>
+          <div class="guide-row">
+            <div class="guide-avatar">RC</div>
+            <div class="guide-info">
+              <div class="guide-name">Rico Cabanlit</div>
+              <div class="guide-meta">Mt. Apo · 15 bookings · ★ 5.0</div>
+            </div>
+            <button class="btn btn-ghost msgGuideBtn" data-guide="Rico"><i class="fas fa-comment"></i> Message</button>
+          </div>
+          <div class="guide-row">
+            <div class="guide-avatar">EL</div>
+            <div class="guide-info">
+              <div class="guide-name">Elena Llorente</div>
+              <div class="guide-meta">Mt. Batulao · 6 bookings · ★ 4.7</div>
+            </div>
+            <button class="btn btn-ghost msgGuideBtn" data-guide="Elena"><i class="fas fa-comment"></i> Message</button>
+          </div>
+        </div>
+
+        <!-- ANNOUNCEMENT -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Send Announcement</span>
+          </div>
+          <textarea id="announceTxt" rows="5" placeholder="Write announcement for guides...">New safety protocol: mandatory radio check at 7AM and 3PM daily.</textarea>
+          <button class="btn btn-primary" id="sendAnnounceBtn" style="width:100%">
+            <i class="fas fa-paper-plane"></i> Send to All Guides
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function updateDate() {
+  const d = new Date();
+  document.getElementById('liveDate').textContent =
+    d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}).toUpperCase() +
+    '  ' + d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+}
+updateDate(); setInterval(updateDate, 1000);
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => { window.location.href = item.dataset.tab + '.html'; });
+});
+
+document.getElementById('addGuideBtn').addEventListener('click', () => alert('➕ Add new guide form.'));
+document.getElementById('broadcastBtn').addEventListener('click', () => alert('📢 Opening broadcast to all guides.'));
+document.getElementById('sendAnnounceBtn').addEventListener('click', () => {
+  const msg = document.getElementById('announceTxt').value;
+  alert(`📢 Announcement sent to all guides:\n"${msg}"`);
+});
+document.querySelectorAll('.msgGuideBtn').forEach(btn => {
+  btn.addEventListener('click', () => alert(`💬 Opening message thread with ${btn.dataset.guide}.`));
+});
+</script>
+</body>
+</html>

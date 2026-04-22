@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAKBAY — Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body data-page="dashboard">
+<div class="app">
+
+  
+  <aside class="sidebar">
+    <div>
+      <div class="logo">
+        <div class="logo-wordmark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+              <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+            </svg>
+          </div>
+          LAKBAY
+        </div>
+        <div class="logo-sub">wilderness intelligence</div>
+      </div>
+      <div style="margin-bottom:8px; padding-left:28px;">
+        <div class="nav-section-label">Navigation</div>
+      </div>
+      <ul class="nav-list">
+        <li class="nav-item active" data-tab="dashboard"><i class="fas fa-chart-line"></i> Dashboard</li>
+        <li class="nav-item" data-tab="mountains"><i class="fas fa-mountain"></i> Mountains</li>
+        <li class="nav-item" data-tab="hikers"><i class="fas fa-person-hiking"></i> Hikers</li>
+        <li class="nav-item" data-tab="guides"><i class="fas fa-chalkboard-user"></i> Guides</li>
+        <div class="nav-divider"></div>
+        <li class="nav-item" data-tab="payments"><i class="fas fa-coins"></i> Revenue</li>
+        <li class="nav-item" data-tab="alerts"><i class="fas fa-bell"></i> Alerts</li>
+        <li class="nav-item" data-tab="analytics"><i class="fas fa-chart-simple"></i> Analytics</li>
+      </ul>
+    </div>
+    <div class="sidebar-footer"><div class="status-dot"></div> SYSTEM LIVE · V3</div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="page-heading"><i class="fas fa-chart-line"></i> Dashboard</div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="liveDate"></div>
+        <div class="topbar-user">
+          <div class="avatar">D</div>
+          Director <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- STAT CARDS -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Daily Bookings <i class="fas fa-ticket-alt"></i></div>
+          <div class="stat-num" id="dailyBookVal">48</div>
+          <div class="stat-trend">↑ +12% vs yesterday</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active Hikers <i class="fas fa-person-hiking"></i></div>
+          <div class="stat-num" id="activeHikVal">32</div>
+          <div class="stat-trend">↑ +5 since 8AM</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">MTD Revenue <i class="fas fa-coins"></i></div>
+          <div class="stat-num">₱124k</div>
+          <div class="stat-trend">↑ +18% projected</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Open Alerts <i class="fas fa-triangle-exclamation"></i></div>
+          <div class="stat-num" style="color:var(--warn);">3</div>
+          <div class="stat-trend warn">↑ 1 critical</div>
+        </div>
+      </div>
+
+      <!-- CHARTS -->
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Revenue — This Week</span>
+            <span class="panel-badge">₱133.9k total</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartRevenue"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Bookings / Week</span>
+            <button class="btn btn-ghost" id="refreshStatsBtn"><i class="fas fa-rotate-right"></i> Refresh</button>
+          </div>
+          <div class="chart-wrap"><canvas id="chartActivity"></canvas></div>
+        </div>
+      </div>
+
+      <!-- RECENT BOOKINGS -->
+      <div class="full-span">
+        <div class="section-header">
+          <div class="section-title">Recent Bookings</div>
+          <button class="section-action" id="viewAllBookings">View all →</button>
+        </div>
+        <div class="panel" style="padding:0 4px;">
+          <table class="data-table">
+            <thead><tr>
+              <th>Hiker</th><th>Mountain</th><th>Date</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td>Maria Santos</td><td>Mt. Pulag</td>
+                <td style="font-size:0.75rem;color:var(--ink-4);">Apr 22</td>
+                <td><span class="badge green"><i class="fas fa-circle"></i> Paid</span></td>
+                <td><button class="btn btn-ghost viewBookBtn" data-name="Maria"><i class="fas fa-arrow-up-right-from-square"></i></button></td>
+              </tr>
+              <tr>
+                <td>James Rivera</td><td>Mt. Makiling</td>
+                <td style="font-size:0.75rem;color:var(--ink-4);">Apr 23</td>
+                <td><span class="badge amber"><i class="fas fa-clock"></i> Pending</span></td>
+                <td><button class="btn btn-ghost viewBookBtn" data-name="James"><i class="fas fa-arrow-up-right-from-square"></i></button></td>
+              </tr>
+              <tr>
+                <td>Clara Lim</td><td>Mt. Batulao</td>
+                <td style="font-size:0.75rem;color:var(--ink-4);">Apr 21</td>
+                <td><span class="badge"><i class="fas fa-check"></i> Completed</span></td>
+                <td><button class="btn btn-ghost viewBookBtn" data-name="Clara"><i class="fas fa-arrow-up-right-from-square"></i></button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ALERT BANNER -->
+      <div class="panel" style="background:var(--ink);border-color:var(--ink);color:var(--paper);padding:18px 22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">
+          <div>
+            <div style="font-size:0.65rem;font-weight:600;color:var(--ink-5);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Active Alert</div>
+            <div style="font-size:0.88rem;font-weight:500;">⚠️ Trail 3 — North Ridge · Heavy rainfall advisory</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" style="border-color:rgba(255,255,255,0.2);color:var(--paper);background:rgba(255,255,255,0.1);" id="ackAlertBtn"><i class="fas fa-check"></i> Acknowledge</button>
+            <button class="btn" style="border-color:rgba(255,255,255,0.2);color:var(--paper);background:rgba(255,255,255,0.1);" id="viewAlertBtn"><i class="fas fa-arrow-right"></i> Details</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// Live clock
+function updateDate() {
+  const d = new Date();
+  document.getElementById('liveDate').textContent =
+    d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}).toUpperCase() +
+    '  ' + d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+}
+updateDate(); setInterval(updateDate, 1000);
+
+// Nav
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    window.location.href = item.dataset.tab + '.html';
+  });
+});
+
+// Charts
+const charts = {};
+function buildChart(id, type, data, opts = {}) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  charts[id] = new Chart(ctx, {
+    type, data,
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid:{ display:false }, ticks:{ font:{ family:"'Inter'", size:10 }, color:'#9098a6' } },
+        y: { display: false }
+      },
+      ...opts
+    }
+  });
+}
+
+buildChart('chartRevenue', 'line', {
+  labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+  datasets: [{ data:[12800,14500,13200,16800,22400,27800,25400], borderColor:'#111318', backgroundColor:'rgba(17,19,24,0.04)', tension:0.4, fill:true, pointRadius:3, pointBackgroundColor:'#111318', borderWidth:1.5 }]
+});
+buildChart('chartActivity', 'bar', {
+  labels: ['Wk 1','Wk 2','Wk 3','Wk 4'],
+  datasets: [{ data:[42,58,51,66], backgroundColor:'rgba(17,19,24,0.12)', borderRadius:4 }]
+});
+
+// Button events
+document.getElementById('refreshStatsBtn').addEventListener('click', () => {
+  document.getElementById('dailyBookVal').textContent = Math.floor(45 + Math.random() * 20);
+  document.getElementById('activeHikVal').textContent = Math.floor(28 + Math.random() * 15);
+  alert('📊 Stats refreshed.');
+});
+document.getElementById('viewAllBookings').addEventListener('click', () => alert('📋 Opening full bookings list…'));
+document.getElementById('ackAlertBtn').addEventListener('click', () => alert('✅ Alert acknowledged.'));
+document.getElementById('viewAlertBtn').addEventListener('click', () => alert('🔔 Opening alert details…'));
+document.querySelectorAll('.viewBookBtn').forEach(btn => {
+  btn.addEventListener('click', () => alert(`📋 Booking details for ${btn.dataset.name}.`));
+});
+</script>
+</body>
+</html>
