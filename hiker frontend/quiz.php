@@ -190,7 +190,7 @@ body {
   align-items: center;
   gap: 12px;
 }
-.quiz-question .question-icon { font-size: 28px; }
+.quiz-question .question-icon { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .quiz-options { display: flex; flex-direction: column; gap: 12px; }
 .quiz-option {
   display: flex;
@@ -208,7 +208,7 @@ body {
 }
 .quiz-option:hover { border-color: var(--sage); background: var(--sky); }
 .quiz-option.selected { border-color: var(--btn-special); background: var(--btn-special); color: var(--cream); box-shadow: 0 4px 12px rgba(16,6,0,0.3); }
-.quiz-option .opt-icon { font-size: 24px; flex-shrink: 0; }
+.quiz-option .opt-icon { width: 28px; height: 28px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
 .quiz-option .opt-text { flex: 1; }
 .quiz-nav {
   display: flex;
@@ -278,7 +278,7 @@ body {
   color: var(--gold);
   margin-bottom: 16px;
 }
-.result-title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; color: white; margin-bottom: 8px; }
+.result-title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; color: white; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
 .result-sub { font-size: 14px; color: var(--mist); }
 .result-body { padding: 32px 40px; background: rgba(255, 255, 245, 0.96); }
 @media(max-width:480px){ .result-body { padding: 24px 20px; } }
@@ -291,7 +291,7 @@ body {
   padding: 20px;
   margin-bottom: 28px;
 }
-.level-icon { font-size: 40px; }
+.level-icon { width: 48px; height: 48px; flex-shrink: 0; }
 .level-name { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 600; color: var(--forest); }
 .level-desc { font-size: 13px; color: var(--stone); margin-top: 4px; line-height: 1.5; }
 .rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
@@ -310,7 +310,7 @@ body {
 .rec-card-label { position: absolute; bottom: 8px; left: 10px; font-size: 12px; font-weight: 700; color: white; z-index: 1; }
 .rec-card-body { padding: 12px; background: var(--white); }
 .rec-card-name { font-weight: 700; font-size: 13px; color: var(--forest); margin-bottom: 2px; }
-.rec-card-meta { font-size: 11px; color: var(--stone); margin: 4px 0 6px; display: flex; gap: 10px; }
+.rec-card-meta { font-size: 11px; color: var(--stone); margin: 4px 0 6px; display: flex; gap: 10px; align-items: center; }
 .badge { display: inline-block; padding: 4px 10px; border-radius: 40px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .badge-easy { background: #d9ead3; color: #2a6b2a; }
 .badge-moderate { background: #ffe0b5; color: #8a5a2a; }
@@ -350,6 +350,11 @@ body {
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .container { max-width: 1280px; margin: 0 auto; padding: 0 24px; width: 100%; }
+
+/* Utility icon colors for option icons */
+.icon-mtn, .icon-leaf, .icon-clock, .icon-foot, .icon-fire, .icon-rock, .icon-sun, .icon-tent { stroke: currentColor; stroke-width: 1.8; fill: none; }
+.selected .opt-icon svg { stroke: var(--cream); }
+.quiz-option.selected .opt-icon svg { stroke: var(--cream); }
 </style>
 </head>
 <body>
@@ -406,11 +411,14 @@ body {
   </div>
 </nav>
 
-<!-- HERO with enhanced background image + glass morphism (text unchanged) -->
+<!-- HERO with enhanced background image + glass morphism -->
 <div class="quiz-hero" id="quizHero">
   <div class="container">
     <div class="hero-glass-card">
-      <div class="quiz-hero-label">⭐ Skill Assessment</div>
+      <div class="quiz-hero-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Skill Assessment
+      </div>
       <div class="quiz-hero-title">Find Your Perfect Mountain</div>
       <div class="quiz-hero-sub">Answer 6 quick questions and we'll match you with trails suited to your experience, fitness, and goals.</div>
     </div>
@@ -435,19 +443,56 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
+// SVG icon mapping (replaces all emojis)
+const iconMap = {
+  // Question icons
+  mountainQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L12 4L20 20H4Z" stroke="currentColor" fill="none"/><path d="M12 4L8 12L12 16L16 12L12 4Z" stroke="currentColor" fill="none"/></svg>',
+  clockQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+  fitnessQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L15 9H22L16 14L19 22L12 17.5L5 22L8 14L2 9H9L12 2Z"/></svg>',
+  terrainQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 20L7 10L12 15L17 7L22 20H2Z"/><circle cx="7" cy="10" r="2"/><circle cx="17" cy="7" r="2"/></svg>',
+  hikeTypeQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7L12 12L22 7L12 2Z"/><path d="M2 17L12 22L22 17"/><path d="M2 12L12 17L22 12"/></svg>',
+  weatherQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2V4M4 12H2M6.5 6.5L5 5M17.5 6.5L19 5M22 12H20M18.5 17.5L20 19M5.5 17.5L4 19M12 20V22M16 12C16 14.209 14.209 16 12 16C9.791 16 8 14.209 8 12C8 9.791 9.791 8 12 8C14.209 8 16 9.791 16 12Z"/></svg>',
+  // Option icons
+  seedling: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 8V20M12 8C10 8 7 6 7 3C9 3 12 5 12 8Z"/><path d="M12 8C14 8 17 6 17 3C15 3 12 5 12 8Z"/><path d="M4 20H20"/></svg>',
+  boot: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 16H6V12L8 8H16L18 12V16Z"/><path d="M6 16L4 20M18 16L20 20"/></svg>',
+  climbing: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2L8 10L4 16L12 22L20 16L16 10L12 2Z"/><path d="M12 2L12 10L8 16"/></svg>',
+  peak: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20L12 4L20 20"/><line x1="8" y1="14" x2="12" y2="8"/><line x1="12" y1="20" x2="12" y2="14"/></svg>',
+  walk: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="18" r="2"/><path d="M12 16V8M8 12L12 8L16 12"/><path d="M6 20L4 22M18 20L20 22"/></svg>',
+  runner: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="16" cy="5" r="2"/><path d="M12 13L14 9L19 10L21 14"/><path d="M7 12L10 10L13 13L9 17L5 15L7 12Z"/></svg>',
+  lightning: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><polygon points="13 2 3 14 11 14 9 22 19 10 11 10 13 2"/></svg>',
+  couch: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="10" width="14" height="8" rx="2"/><path d="M5 10V6H19V10"/><path d="M9 18V20M15 18V20"/></svg>',
+  bike: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><path d="M13 6L9 15L12 18L17 11"/><path d="M13 9L16 6H20"/></svg>',
+  weight: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6" y="12" width="12" height="8" rx="2"/><path d="M12 8V12"/><path d="M8 4L10 8M16 4L14 8"/></svg>',
+  flame: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2C12 4 10 6 10 8C10 10.5 12 11 12 14C12 16 10 17 10 19C10 20.5 11 22 12 22"/><path d="M18 15C18 12 14 12 14 9C14 6 15 4 17 2"/></svg>',
+  gentle: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 20L7 10L10 15L14 8L16 12L22 20"/><circle cx="7" cy="10" r="2"/></svg>',
+  incline: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 18L12 9L21 18"/><path d="M9 15L12 12L15 15"/></svg>',
+  steep: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 20L12 5L19 20"/><path d="M9 14L12 9L15 14"/></svg>',
+  scramble: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2L8 10L4 16L12 22L20 16L16 10L12 2Z"/><path d="M12 10L16 16M12 10L8 16"/></svg>',
+  sunrise: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2V6M4 20H20M6 12L8 10M18 12L16 10M12 12L16 20H8L12 12Z"/><path d="M2 20H22"/></svg>',
+  forest: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 20L10 8L14 20"/><path d="M12 20L16 8L20 20"/><path d="M8 20L12 12L16 20"/></svg>',
+  adventure: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2L3 12L5 14L12 22L19 14L21 12L12 2Z"/><circle cx="12" cy="12" r="2"/></svg>',
+  tent: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20L12 4L20 20"/><polygon points="12 11 6 20 18 20 12 11"/></svg>',
+  fog: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 18H22M4 14H20M6 10H18"/><circle cx="12" cy="6" r="4"/></svg>',
+  wind: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 12H20M2 8H18M2 16H22"/><path d="M18 6C18 3.5 16 2 14 2C11.5 2 10 4 10 6"/></svg>',
+  shield: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2L3 6V12C3 17.5 12 22 12 22C12 22 21 17.5 21 12V6L12 2Z"/><path d="M12 8V12M12 16H12.01"/></svg>',
+  leaf: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12 2C9 8 4 12 4 16C4 18 8 20 12 20C16 20 20 18 20 16C20 12 15 8 12 2Z"/><path d="M12 20V22"/></svg>',
+  mountainBadge: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 20L12 4L20 20H4Z"/><circle cx="12" cy="16" r="1.5"/></svg>',
+  bookmarkIcon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>'
+};
+
 const questions = [
-  { q: "How many mountains have you climbed before?", icon: "🏔️",
-    opts: [{icon:"🌱",text:"None — this is my first!",score:0},{icon:"🥾",text:"1–3 mountains",score:1},{icon:"🧗",text:"4–10 mountains",score:2},{icon:"⛰️",text:"More than 10",score:3}] },
-  { q: "How long can you comfortably hike without resting?", icon: "⏱️",
-    opts: [{icon:"🚶",text:"Less than 1 hour",score:0},{icon:"🚶‍♂️",text:"1–2 hours",score:1},{icon:"🏃",text:"3–4 hours",score:2},{icon:"⚡",text:"5+ hours no problem",score:3}] },
-  { q: "What's your fitness level?", icon: "💪",
-    opts: [{icon:"🛋️",text:"Couch potato — I'm new to this",score:0},{icon:"🚴",text:"Light exercise, walks occasionally",score:1},{icon:"🏋️",text:"Regular exercise, decent stamina",score:2},{icon:"🔥",text:"Athletic — I train regularly",score:3}] },
-  { q: "Are you comfortable with steep or technical terrain?", icon: "🪨",
-    opts: [{icon:"🌄",text:"No, I prefer flat or gentle slopes",score:0},{icon:"🙂",text:"Mild inclines are fine",score:1},{icon:"⛰️",text:"I can handle steep sections",score:2},{icon:"🧗‍♀️",text:"Technical rock scrambles? Bring it!",score:3}] },
-  { q: "What type of hike appeals to you?", icon: "🌿",
-    opts: [{icon:"🌅",text:"Scenic views, mostly easy walking",score:0},{icon:"🌲",text:"Forest trails with moderate challenge",score:1},{icon:"🏞️",text:"Multi-terrain adventure with a reward",score:2},{icon:"🏕️",text:"Overnight expedition, the full experience",score:3}] },
-  { q: "How do you handle altitude and weather changes?", icon: "🌤️",
-    opts: [{icon:"🌫️",text:"I haven't experienced this yet",score:0},{icon:"🌀",text:"Mild discomfort but manageable",score:1},{icon:"😎",text:"Generally fine, I adapt quickly",score:2},{icon:"🦾",text:"No issues at all — I'm experienced",score:3}] }
+  { q: "How many mountains have you climbed before?", icon: iconMap.mountainQ,
+    opts: [{icon:iconMap.seedling, text:"None — this is my first!",score:0},{icon:iconMap.boot,text:"1–3 mountains",score:1},{icon:iconMap.climbing,text:"4–10 mountains",score:2},{icon:iconMap.peak,text:"More than 10",score:3}] },
+  { q: "How long can you comfortably hike without resting?", icon: iconMap.clockQ,
+    opts: [{icon:iconMap.walk,text:"Less than 1 hour",score:0},{icon:iconMap.boot,text:"1–2 hours",score:1},{icon:iconMap.runner,text:"3–4 hours",score:2},{icon:iconMap.lightning,text:"5+ hours no problem",score:3}] },
+  { q: "What's your fitness level?", icon: iconMap.fitnessQ,
+    opts: [{icon:iconMap.couch,text:"Couch potato — I'm new to this",score:0},{icon:iconMap.bike,text:"Light exercise, walks occasionally",score:1},{icon:iconMap.weight,text:"Regular exercise, decent stamina",score:2},{icon:iconMap.flame,text:"Athletic — I train regularly",score:3}] },
+  { q: "Are you comfortable with steep or technical terrain?", icon: iconMap.terrainQ,
+    opts: [{icon:iconMap.gentle,text:"No, I prefer flat or gentle slopes",score:0},{icon:iconMap.incline,text:"Mild inclines are fine",score:1},{icon:iconMap.steep,text:"I can handle steep sections",score:2},{icon:iconMap.scramble,text:"Technical rock scrambles? Bring it!",score:3}] },
+  { q: "What type of hike appeals to you?", icon: iconMap.hikeTypeQ,
+    opts: [{icon:iconMap.sunrise,text:"Scenic views, mostly easy walking",score:0},{icon:iconMap.forest,text:"Forest trails with moderate challenge",score:1},{icon:iconMap.adventure,text:"Multi-terrain adventure with a reward",score:2},{icon:iconMap.tent,text:"Overnight expedition, the full experience",score:3}] },
+  { q: "How do you handle altitude and weather changes?", icon: iconMap.weatherQ,
+    opts: [{icon:iconMap.fog,text:"I haven't experienced this yet",score:0},{icon:iconMap.wind,text:"Mild discomfort but manageable",score:1},{icon:iconMap.sunrise,text:"Generally fine, I adapt quickly",score:2},{icon:iconMap.shield,text:"No issues at all — I'm experienced",score:3}] }
 ];
 
 const mountains = [
@@ -458,9 +503,9 @@ const mountains = [
 ];
 
 const levels = {
-  beginner: {icon:"🌱",name:"Beginner Explorer",desc:"You're just starting your hiking journey! We recommend gentle, scenic trails with easy terrain. Great views ahead!"},
-  intermediate:{icon:"🌿",name:"Intermediate Adventurer",desc:"You have some experience and decent fitness. Moderate trails with varied terrain and rewarding summits await you."},
-  advanced: {icon:"🏔️",name:"Experienced Mountaineer",desc:"You're no stranger to the trails. Challenging ascents, technical terrain, and multi-day expeditions are your playground."}
+  beginner: {icon:iconMap.seedling,name:"Beginner Explorer",desc:"You're just starting your hiking journey! We recommend gentle, scenic trails with easy terrain. Great views ahead!"},
+  intermediate:{icon:iconMap.leaf,name:"Intermediate Adventurer",desc:"You have some experience and decent fitness. Moderate trails with varied terrain and rewarding summits await you."},
+  advanced: {icon:iconMap.mountainBadge,name:"Experienced Mountaineer",desc:"You're no stranger to the trails. Challenging ascents, technical terrain, and multi-day expeditions are your playground."}
 };
 
 let currentQ = 0;
@@ -531,7 +576,7 @@ function showResults() {
       </div>
       <div class="rec-card-body">
         <div class="rec-card-name">${m.name}</div>
-        <div class="rec-card-meta">⛰️ ${m.elevation} · ⏱️ ${m.time}</div>
+        <div class="rec-card-meta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L12 4L20 20H4Z"/></svg> ${m.elevation} · <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${m.time}</div>
         <div><span class="badge badge-${m.diff}">${m.diff}</span></div>
       </div>
     </div>
@@ -541,8 +586,8 @@ function showResults() {
   document.getElementById('quizContainer').style.marginTop = '24px';
   document.getElementById('quizCard').innerHTML = `
     <div class="result-hero">
-      <div class="result-badge">🎉 Results Ready</div>
-      <div class="result-title">${lvl.icon} ${lvl.name}</div>
+      <div class="result-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Results Ready</div>
+      <div class="result-title"><span class="level-icon">${lvl.icon}</span> ${lvl.name}</div>
       <div class="result-sub">Score: ${total}/${max} · ${Math.round(pct*100)}% proficiency</div>
     </div>
     <div class="result-body">
@@ -553,10 +598,10 @@ function showResults() {
           <div class="level-desc">${lvl.desc}</div>
         </div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--sage);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;">🗻 Recommended for You</div>
+      <div style="font-size:12px;font-weight:600;color:var(--sage);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L12 4L20 20H4Z"/></svg> Recommended for You</div>
       <div class="rec-grid">${recHtml}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="save-btn" onclick="saveResults('${levelKey}')">🔖 Save recommendations</button>
+        <button class="save-btn" onclick="saveResults('${levelKey}')">${iconMap.bookmarkIcon} Save recommendations</button>
         <button class="btn btn-outline btn-sm" onclick="location.reload()">Retake Quiz</button>
         <a href="explore.php" class="btn btn-primary btn-sm">Explore All →</a>
       </div>
