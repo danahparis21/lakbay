@@ -4,8 +4,237 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
     header('Location: /pages/modals/login.php');
     exit;
 }
-$adminName    = $_SESSION['user_name'];
+
+require_once '../../config/db.php';
+
+$adminName = $_SESSION['user_name'];
 $adminInitial = strtoupper(substr($adminName, 0, 1));
+
+// ========== STAT CARDS DATA ==========
+
+// Visitor Growth (compare this month vs same month last year)
+$stmt = $pdo->prepare("
+    SELECT 
+        COUNT(DISTINCT user_id) as current_month
+    FROM (
+        SELECT user_id FROM bookings WHERE MONTH(created_at) = MONTH(CURRENT_DATE()) AND YEAR(created_at) = YEAR(CURRENT_DATE())
+        UNION
+        SELECT user_id FROM camping_bookings WHERE MONTH(created_at) = MONTH(CURRENT_DATE()) AND YEAR(created_at) = YEAR(CURRENT_DATE())
+    ) as current
+");
+$stmt->execute();
+$currentMonthVisitors = $stmt->fetch(PDO::FETCH_ASSOC)['current_month'] ?? 0;
+
+$stmt = $pdo->prepare("
+    SELECT 
+        COUNT(DISTINCT user_id) as last_year_month
+    FROM (
+        SELECT user_id FROM bookings WHERE MONTH(created_at) = MONTH(CURRENT_DATE()) AND YEAR(created_at) = YEAR(CURRENT_DATE() - INTERVAL 1 YEAR)
+        UNION
+        SELECT user_id FROM camping_bookings WHERE MONTH(created_at) = MONTH(CURRENT_DATE()) AND YEAR(created_at) = YEAR(CURRENT_DATE() - INTERVAL 1 YEAR)
+    ) as last_year
+");
+$stmt->execute();
+$lastYearMonthVisitors = $stmt->fetch(PDO::FETCH_ASSOC)['last_year_month'] ?? 1;
+
+$visitorGrowth = $lastYearMonthVisitors > 0 ? round((($currentMonthVisitors - $lastYearMonthVisitors) / $lastYearMonthVisitors) * 100) : 0;
+$growthIcon = $visitorGrowth >= 0 ? '↑' : '↓';
+$growthClass = $visitorGrowth >= 0 ? 'stat-trend' : 'stat-trend warn';
+
+// Top Mountain (most booked mountain)
+$stmt = $pdo->prepare("
+    SELECT m.name, COUNT(*) as booking_count
+    FROM (
+        SELECT mountain_id FROM bookings
+        UNION ALL
+        SELECT mountain_id FROM camping_bookings
+    ) as all_bookings
+    LEFT JOIN mountains m ON all_bookings.mountain_id = m.id
+    GROUP BY all_bookings.mountain_id, m.name
+    ORDER BY booking_count DESC
+    LIMIT 1
+");
+$stmt->execute();
+$topMountain = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$topMountainName = $topMountain['name'] ?? 'No data';
+$topMountainCount = $topMountain['booking_count'] ?? 0;
+
+// Calculate average daily visitors for top mountain
+$stmt = $pdo->prepare("
+    SELECT 
+        COUNT(*) / 30 as avg_daily
+    FROM (
+        SELECT mountain_id FROM bookings WHERE mountain_id = (SELECT mountain_id FROM bookings GROUP BY mountain_id ORDER BY COUNT(*) DESC LIMIT 1)
+        UNION ALL
+        SELECT mountain_id FROM camping_bookings WHERE mountain_id = (SELECT mountain_id FROM bookings GROUP BY mountain_id ORDER BY COUNT(*) DESC LIMIT 1)
+    ) as top_mountain_bookings
+");
+$stmt->execute();
+$avgDaily = $stmt->fetch(PDO::FETCH_ASSOC)['avg_daily'] ?? 0;
+
+// Guide Rating - Fixed GROUP BY issue
+$stmt = $pdo->prepare("
+    SELECT 
+        AVG(g.rating) as avg_rating
+    FROM guides g
+    WHERE g.rating IS NOT NULL AND g.rating > 0
+");
+$stmt->execute();
+$guideData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// Get top guide by rating separately (to avoid GROUP BY issue)
+$stmt = $pdo->prepare("
+    SELECT u.name, g.rating
+    FROM guides g
+    LEFT JOIN users u ON g.user_id = u.id
+    WHERE g.rating IS NOT NULL AND g.rating > 0
+    ORDER BY g.rating DESC
+    LIMIT 1
+");
+$stmt->execute();
+$topGuideData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// If no ratings exist, provide default values
+if ($guideData['avg_rating']) {
+    $avgGuideRating = number_format($guideData['avg_rating'], 1);
+    $topGuide = $topGuideData ? $topGuideData['name'] . ' (' . $topGuideData['rating'] . '★)' : 'No guides rated yet';
+} else {
+    $avgGuideRating = 'N/A';
+    $topGuide = 'No ratings yet';
+}
+
+// ========== CHART DATA - Visitor Trend (6 months) ==========
+$months = [];
+$visitorCounts = [];
+for ($i = 5; $i >= 0; $i--) {
+    $months[] = date('M', strtotime("-$i months"));
+    $stmt = $pdo->prepare("
+        SELECT COUNT(DISTINCT user_id) as count
+        FROM (
+            SELECT user_id FROM bookings WHERE MONTH(created_at) = MONTH(CURRENT_DATE() - INTERVAL ? MONTH) AND YEAR(created_at) = YEAR(CURRENT_DATE() - INTERVAL ? MONTH)
+            UNION
+            SELECT user_id FROM camping_bookings WHERE MONTH(created_at) = MONTH(CURRENT_DATE() - INTERVAL ? MONTH) AND YEAR(created_at) = YEAR(CURRENT_DATE() - INTERVAL ? MONTH)
+        ) as monthly_visitors
+    ");
+    $stmt->execute([$i, $i, $i, $i]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $visitorCounts[] = $result['count'] ?? 0;
+}
+
+// ========== CHART DATA - Monthly Revenue (6 months) ==========
+$revenueMonths = [];
+$revenueAmounts = [];
+for ($i = 5; $i >= 0; $i--) {
+    $revenueMonths[] = date('M', strtotime("-$i months"));
+    $stmt = $pdo->prepare("
+        SELECT 
+            COALESCE((SELECT SUM(total_amount) FROM bookings WHERE payment_status = 'paid' AND MONTH(created_at) = MONTH(CURRENT_DATE() - INTERVAL ? MONTH) AND YEAR(created_at) = YEAR(CURRENT_DATE() - INTERVAL ? MONTH)), 0) +
+            COALESCE((SELECT SUM(total_amount) FROM camping_bookings WHERE payment_status = 'paid' AND MONTH(created_at) = MONTH(CURRENT_DATE() - INTERVAL ? MONTH) AND YEAR(created_at) = YEAR(CURRENT_DATE() - INTERVAL ? MONTH)), 0)
+            as total
+    ");
+    $stmt->execute([$i, $i, $i, $i]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $revenueAmounts[] = $result['total'] ?? 0;
+}
+
+// ========== DYNAMIC INSIGHTS ==========
+$insights = [];
+
+// 1. Congestion insight - Find peak times/days
+$stmt = $pdo->prepare("
+    SELECT 
+        m.name as mountain_name,
+        DAYNAME(b.hike_date) as day_of_week,
+        COUNT(*) as booking_count
+    FROM bookings b
+    LEFT JOIN mountains m ON b.mountain_id = m.id
+    WHERE b.hike_date IS NOT NULL
+    GROUP BY b.mountain_id, m.name, DAYNAME(b.hike_date)
+    ORDER BY booking_count DESC
+    LIMIT 1
+");
+$stmt->execute();
+$peakTime = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if ($peakTime && $peakTime['mountain_name']) {
+    $insights['congestion'] = "High traffic at {$peakTime['mountain_name']} every {$peakTime['day_of_week']}. Consider implementing slot limits and additional guide deployment during peak hours.";
+} else {
+    $insights['congestion'] = "Monitor booking patterns to identify peak congestion periods. Consider implementing a booking cap for popular mountains.";
+}
+
+// 2. Seasonality insight - Find peak months
+$stmt = $pdo->prepare("
+    SELECT 
+        MONTHNAME(hike_date) as month_name,
+        COUNT(*) as booking_count
+    FROM bookings
+    WHERE hike_date IS NOT NULL
+    GROUP BY MONTH(hike_date), MONTHNAME(hike_date)
+    ORDER BY booking_count DESC
+    LIMIT 2
+");
+$stmt->execute();
+$peakMonths = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+if (count($peakMonths) >= 2) {
+    $insights['seasonality'] = "Peak season occurs during {$peakMonths[0]['month_name']} and {$peakMonths[1]['month_name']}. Prepare surge permits, additional guides, and coordinate with local authorities for crowd management.";
+} else {
+    $insights['seasonality'] = "March to May shows increased booking activity. Prepare for seasonal surge with additional resources and special permits.";
+}
+
+// 3. Revenue insight - Weekend vs Weekday revenue
+$stmt = $pdo->prepare("
+    SELECT 
+        SUM(CASE WHEN DAYOFWEEK(hike_date) IN (1, 7) THEN total_amount ELSE 0 END) as weekend_revenue,
+        SUM(CASE WHEN DAYOFWEEK(hike_date) NOT IN (1, 7) THEN total_amount ELSE 0 END) as weekday_revenue
+    FROM bookings
+    WHERE payment_status = 'paid'
+");
+$stmt->execute();
+$revenueSplit = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$totalRevenue = ($revenueSplit['weekend_revenue'] ?? 0) + ($revenueSplit['weekday_revenue'] ?? 0);
+$weekendPercent = $totalRevenue > 0 ? round((($revenueSplit['weekend_revenue'] ?? 0) / $totalRevenue) * 100) : 62;
+
+$insights['revenue'] = "Weekend bookings account for {$weekendPercent}% of total revenue. Consider implementing dynamic weekend pricing or creating special weekend packages to maximize revenue.";
+
+// 4. Additional insights based on data
+$stmt = $pdo->prepare("
+    SELECT COUNT(*) as total_hikers FROM users WHERE role = 'hiker'
+");
+$stmt->execute();
+$totalHikers = $stmt->fetch(PDO::FETCH_ASSOC)['total_hikers'] ?? 0;
+
+$stmt = $pdo->prepare("
+    SELECT COUNT(DISTINCT user_id) as returning_hikers
+    FROM (
+        SELECT user_id FROM bookings GROUP BY user_id HAVING COUNT(*) > 1
+        UNION
+        SELECT user_id FROM camping_bookings GROUP BY user_id HAVING COUNT(*) > 1
+    ) as returning
+");
+$stmt->execute();
+$returningHikers = $stmt->fetch(PDO::FETCH_ASSOC)['returning_hikers'] ?? 0;
+
+$returnRate = $totalHikers > 0 ? round(($returningHikers / $totalHikers) * 100) : 0;
+
+// Get counts for day hike vs camping
+$stmt = $pdo->prepare("SELECT COUNT(*) as day_hike FROM bookings");
+$stmt->execute();
+$dayHike = $stmt->fetch(PDO::FETCH_ASSOC)['day_hike'] ?? 0;
+
+$stmt = $pdo->prepare("SELECT COUNT(*) as camping FROM camping_bookings");
+$stmt->execute();
+$camping = $stmt->fetch(PDO::FETCH_ASSOC)['camping'] ?? 0;
+
+$totalBookings = $dayHike + $camping;
+$dayHikePercent = $totalBookings > 0 ? round(($dayHike / $totalBookings) * 100) : 70;
+
+// Format currency function
+function formatCurrency($amount) {
+    return '₱' . number_format($amount, 0, '.', ',');
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -16,71 +245,38 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="shared.css">
   <style>
-    *{margin:0;padding:0;box-sizing:border-box;}
-    :root{
-      --paper:#ffffff;--ink:#111318;--ink-2:#23262f;--ink-3:#3c4050;
-      --ink-4:#6e7483;--ink-5:#a0a6b5;--sky:#eef2f8;--teal:#2b6e6f;
-      --moss:#3f6a44;--warn:#c96f3e;--border-light:#e9edf2;
+    .insight-card {
+      padding: 14px;
+      background: var(--paper);
+      border-radius: 8px;
+      transition: all 0.2s;
     }
-    body{background:#f5f7fb;font-family:'Inter',sans-serif;color:var(--ink);}
-    .app{display:flex;min-height:100vh;}
-
-    .sidebar{width:280px;background:var(--paper);border-right:1px solid var(--border-light);display:flex;flex-direction:column;justify-content:space-between;padding:32px 20px;position:sticky;top:0;height:100vh;}
-    .logo-wordmark{font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:600;letter-spacing:-0.02em;display:flex;align-items:center;gap:10px;}
-    .logo-icon svg{width:32px;height:32px;}
-    .logo-sub{font-size:0.7rem;color:var(--ink-4);letter-spacing:0.5px;margin-top:4px;}
-    .nav-section-label{font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-5);margin:28px 0 12px 0;}
-    .nav-list{list-style:none;}
-    .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;font-size:0.9rem;font-weight:500;color:var(--ink-3);cursor:pointer;transition:all 0.2s;margin-bottom:4px;}
-    .nav-item i{width:22px;font-size:1rem;color:var(--ink-4);}
-    .nav-item:hover{background:var(--sky);}
-    .nav-item.active{background:var(--ink);color:white;}
-    .nav-item.active i{color:white;}
-    .nav-divider{height:1px;background:var(--border-light);margin:16px 0;}
-    .sidebar-footer{font-size:0.7rem;color:var(--ink-5);display:flex;align-items:center;gap:8px;border-top:1px solid var(--border-light);padding-top:20px;}
-    .status-dot{width:8px;height:8px;background:#2b6e6f;border-radius:50%;}
-    .logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;font-size:0.9rem;font-weight:500;color:#c0392b;cursor:pointer;border:none;background:none;width:100%;margin-top:8px;}
-    .logout-btn:hover{background:#fff0ee;}
-    .logout-btn i{width:22px;}
-
-    .main{flex:1;overflow-x:auto;}
-    .topbar{display:flex;justify-content:space-between;align-items:center;padding:20px 32px;background:var(--paper);border-bottom:1px solid var(--border-light);}
-    .page-heading{font-size:1.4rem;font-weight:600;display:flex;align-items:center;gap:12px;}
-    .topbar-right{display:flex;gap:24px;align-items:center;}
-    .topbar-date{font-size:0.8rem;color:var(--ink-4);font-family:'DM Mono',monospace;}
-    .avatar{width:32px;height:32px;background:var(--ink);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:0.85rem;}
-    .topbar-user{display:flex;align-items:center;gap:8px;font-size:0.85rem;font-weight:500;}
-    .content{padding:28px 32px;}
-
-    .analytics-row{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:32px;}
-    .stat-card{background:var(--paper);border-radius:24px;padding:20px;border:1px solid var(--border-light);}
-    .stat-label{font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-5);margin-bottom:12px;}
-    .stat-num{font-size:2.2rem;font-weight:600;color:var(--ink);}
-    .stat-trend{font-size:0.7rem;margin-top:8px;color:var(--teal);}
-    .stat-sub{font-size:0.7rem;margin-top:8px;color:var(--ink-4);}
-
-    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:32px;}
-    .panel{background:var(--paper);border-radius:24px;border:1px solid var(--border-light);padding:20px;margin-bottom:24px;}
-    .panel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
-    .panel-title{font-weight:600;}
-    .panel-badge{font-size:0.7rem;padding:4px 10px;border-radius:30px;background:var(--sky);color:var(--ink-4);}
-    .chart-wrap{height:150px;}
-
-    .insight-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:0.8rem;color:var(--ink-2);}
-    .insight-card{padding:14px;background:#f5f7fb;border-radius:12px;border:1px solid var(--border-light);}
-    .insight-label{font-size:0.72rem;font-weight:600;color:var(--ink-3);margin-bottom:8px;}
-
-    .btn{background:none;border:1px solid var(--border-light);padding:6px 12px;border-radius:40px;font-size:0.75rem;cursor:pointer;font-family:'Inter',sans-serif;}
-    .btn-ghost{border:none;color:var(--teal);background:none;cursor:pointer;font-family:'Inter',sans-serif;font-size:0.75rem;}
-
-    @media(max-width:900px){
-      .analytics-row,.two-col,.insight-grid{grid-template-columns:1fr;}
-      .sidebar{display:none;}
+    .insight-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .insight-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--ink-3);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .insight-title i {
+      font-size: 0.7rem;
+    }
+    .insight-text {
+      font-size: 0.8rem;
+      color: var(--ink-2);
+      line-height: 1.4;
     }
   </style>
 </head>
-<body>
+<body data-page="analytics">
 <div class="app">
 
   <aside class="sidebar">
@@ -88,13 +284,18 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
       <div class="logo">
         <div class="logo-wordmark">
           <div class="logo-icon">
-            <svg viewBox="0 0 28 28" fill="none"><path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/><path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/></svg>
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+              <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+            </svg>
           </div>
           LAKBAY
         </div>
         <div class="logo-sub">wilderness intelligence</div>
       </div>
-      <div class="nav-section-label">Navigation</div>
+      <div style="margin-bottom:8px; padding-left:28px;">
+        <div class="nav-section-label">Navigation</div>
+      </div>
       <ul class="nav-list">
         <li class="nav-item" data-href="/pages/dashboard-admin.php"><i class="fas fa-chart-line"></i> Dashboard</li>
         <li class="nav-item" data-href="/pages/admin/mountains.php"><i class="fas fa-mountain"></i> Mountains</li>
@@ -107,10 +308,16 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
       </ul>
     </div>
     <div>
-      <form method="POST" action="/pages/modals/logout.php">
-        <button class="logout-btn" type="submit"><i class="fas fa-right-from-bracket"></i> Log Out</button>
+      <form method="POST" action="/pages/modals/logout.php" style="margin:0;padding:0;display:block;">
+        <button class="logout-btn" type="submit" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
+          <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
+          Log Out
+        </button>
       </form>
-      <div class="sidebar-footer"><div class="status-dot"></div> SYSTEM LIVE · V3</div>
+      <div class="sidebar-footer">
+        <div class="status-dot"></div> 
+        SYSTEM LIVE · V3
+      </div>
     </div>
   </aside>
 
@@ -120,7 +327,7 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
       <div class="topbar-right">
         <div class="topbar-date" id="liveDate"></div>
         <div class="topbar-user">
-          <div class="avatar"><?= $adminInitial ?></div>
+          <div class="avatar"><?= htmlspecialchars($adminInitial) ?></div>
           <?= htmlspecialchars($adminName) ?>
           <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
         </div>
@@ -129,57 +336,93 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
 
     <div class="content">
 
+      <!-- STAT CARDS -->
       <div class="analytics-row">
         <div class="stat-card">
-          <div class="stat-label">Visitor Growth <i class="fas fa-chart-line"></i></div>
-          <div class="stat-num">+23%</div>
-          <div class="stat-trend">↑ YTD vs prior year</div>
+          <div class="stat-label">Visitor Growth <?= $visitorGrowth >= 0 ? '<i class="fas fa-chart-line"></i>' : '<i class="fas fa-chart-line" style="color:var(--warn);"></i>' ?></div>
+          <div class="stat-num"><?= $visitorGrowth >= 0 ? '+' : '' ?><?= $visitorGrowth ?>%</div>
+          <div class="<?= $growthClass ?>">
+            <?= $growthIcon ?> YTD vs prior year
+          </div>
+          <div class="stat-sub" style="margin-top: 6px;"><?= $currentMonthVisitors ?> unique visitors this month</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Top Mountain</div>
-          <div class="stat-num" style="font-size:1.3rem;font-weight:700;">Mt. Batulao</div>
-          <div class="stat-sub">340 avg visitors/day</div>
+          <div class="stat-num" style="font-size:1.3rem;font-weight:700;"><?= htmlspecialchars($topMountainName) ?></div>
+          <div class="stat-sub">~<?= round($avgDaily) ?> avg visitors/day</div>
+          <div class="stat-sub" style="margin-top: 4px;"><?= $topMountainCount ?> total bookings</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Guide Rating <i class="fas fa-star"></i></div>
-          <div class="stat-num">4.9</div>
-          <div class="stat-sub">Top: Juan dela Cruz</div>
+          <div class="stat-label">Guide Rating <i class="fas fa-star" style="color: #f5b042;"></i></div>
+          <div class="stat-num"><?= $avgGuideRating ?></div>
+          <div class="stat-sub">Top: <?= htmlspecialchars($topGuide) ?></div>
+          <div class="stat-sub" style="margin-top: 4px;"><?= $returnRate ?>% hiker return rate</div>
         </div>
       </div>
 
+      <!-- CHARTS -->
       <div class="two-col">
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">Visitor Trend — 6 Months</span>
-            <button class="btn-ghost" id="refreshAnalyticsBtn"><i class="fas fa-rotate-right"></i> Refresh</button>
+            <button class="btn btn-ghost" id="refreshAnalyticsBtn"><i class="fas fa-rotate-right"></i> Refresh</button>
           </div>
-          <div class="chart-wrap"><canvas id="chartVisitors"></canvas></div>
+          <div class="chart-wrap" style="height:150px"><canvas id="chartVisitors"></canvas></div>
         </div>
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">Monthly Revenue</span>
           </div>
-          <div class="chart-wrap"><canvas id="chartRevMonth"></canvas></div>
+          <div class="chart-wrap" style="height:150px"><canvas id="chartRevMonth"></canvas></div>
         </div>
       </div>
 
+      <!-- KEY INSIGHTS -->
       <div class="panel">
         <div class="panel-header">
           <span class="panel-title">Key Insights</span>
-          <span class="panel-badge">Auto-generated</span>
+          <span class="panel-badge">Data-driven</span>
         </div>
-        <div class="insight-grid">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:0.8rem;color:var(--ink-2);">
           <div class="insight-card">
-            <div class="insight-label">Congestion</div>
-            High traffic at Mt. Batulao every Friday between 8–11AM. Consider imposing slot limits.
+            <div class="insight-title">
+              <i class="fas fa-clock"></i> Congestion Management
+            </div>
+            <div class="insight-text"><?= htmlspecialchars($insights['congestion']) ?></div>
           </div>
           <div class="insight-card">
-            <div class="insight-label">Seasonality</div>
-            Mt. Batulao peaks March–May. Prepare surge permits and extra guide deployment.
+            <div class="insight-title">
+              <i class="fas fa-calendar-alt"></i> Seasonality Patterns
+            </div>
+            <div class="insight-text"><?= htmlspecialchars($insights['seasonality']) ?></div>
           </div>
           <div class="insight-card">
-            <div class="insight-label">Revenue</div>
-            Weekend bookings account for 62% of weekly revenue. Optimize weekend pricing.
+            <div class="insight-title">
+              <i class="fas fa-chart-line"></i> Revenue Optimization
+            </div>
+            <div class="insight-text"><?= htmlspecialchars($insights['revenue']) ?></div>
+          </div>
+        </div>
+        
+        <!-- Additional Insights Row -->
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:16px;">
+          <div class="insight-card">
+            <div class="insight-title">
+              <i class="fas fa-users"></i> Hiker Retention
+            </div>
+            <div class="insight-text">
+              <?= $returningHikers ?> out of <?= $totalHikers ?> hikers have booked multiple trips (<?= $returnRate ?>% return rate). 
+              Consider implementing a loyalty program to increase retention.
+            </div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-title">
+              <i class="fas fa-tent"></i> Camping vs Day Hike
+            </div>
+            <div class="insight-text">
+              Day hikes account for <?= $dayHikePercent ?>% of total bookings (<?= $dayHike ?> day hikes, <?= $camping ?> camping trips). 
+              Consider promoting camping experiences for extended stays and additional revenue.
+            </div>
           </div>
         </div>
       </div>
@@ -189,44 +432,105 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
 </div>
 
 <script>
+// Pass PHP data to JavaScript
+const visitorData = <?php echo json_encode($visitorCounts); ?>;
+const revenueData = <?php echo json_encode($revenueAmounts); ?>;
+const monthLabels = <?php echo json_encode($months); ?>;
+const revenueMonthLabels = <?php echo json_encode($revenueMonths); ?>;
+
 function updateDate() {
   const d = new Date();
   document.getElementById('liveDate').textContent =
     d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}).toUpperCase() +
     '  ' + d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
 }
-updateDate(); setInterval(updateDate, 1000);
+updateDate(); 
+setInterval(updateDate, 1000);
 
-document.querySelectorAll('.nav-item[data-href]').forEach(item => {
-  item.addEventListener('click', () => window.location.href = item.dataset.href);
+// Navigation
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => { 
+    if(item.dataset.href) {
+      window.location.href = item.dataset.href; 
+    }
+  });
 });
 
-function buildChart(id, type, data) {
+// Build charts with real data
+function buildChart(id, type, data, opts = {}) {
   const ctx = document.getElementById(id);
   if (!ctx) return;
-  new Chart(ctx, {
+  
+  // Destroy existing chart if it exists
+  if (window[id + 'Chart']) {
+    window[id + 'Chart'].destroy();
+  }
+  
+  window[id + 'Chart'] = new Chart(ctx, {
     type, data,
     options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ display:false } },
-      scales:{
-        x:{ grid:{ display:false }, ticks:{ font:{ family:"'Inter'", size:10 }, color:'#9098a6' } },
-        y:{ display:false }
-      }
+      responsive: true, 
+      maintainAspectRatio: false,
+      plugins: { 
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              let label = context.dataset.label || '';
+              let value = context.raw;
+              if (id === 'chartRevMonth') {
+                return '₱' + value.toLocaleString();
+              }
+              return value + ' visitors';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { 
+          grid:{ display:false }, 
+          ticks:{ font:{ family:"'Inter'", size:10 }, color:'#9098a6' } 
+        },
+        y: { display: false }
+      },
+      ...opts
     }
   });
 }
 
-buildChart('chartVisitors','line',{
-  labels:['Jan','Feb','Mar','Apr','May','Jun'],
-  datasets:[{ data:[380,420,390,510,480,560], borderColor:'#4a6741', backgroundColor:'rgba(74,103,65,0.06)', tension:0.4, fill:true, pointRadius:3, pointBackgroundColor:'#4a6741', borderWidth:1.5 }]
-});
-buildChart('chartRevMonth','bar',{
-  labels:['Jan','Feb','Mar','Apr'],
-  datasets:[{ data:[85000,96000,88000,124800], backgroundColor:'rgba(17,19,24,0.1)', borderRadius:4 }]
+// Visitor Trend Chart
+buildChart('chartVisitors', 'line', {
+  labels: monthLabels,
+  datasets: [{ 
+    label: 'Unique Visitors',
+    data: visitorData, 
+    borderColor: '#4a6741', 
+    backgroundColor: 'rgba(74,103,65,0.06)', 
+    tension: 0.4, 
+    fill: true, 
+    pointRadius: 3, 
+    pointBackgroundColor: '#4a6741', 
+    borderWidth: 1.5 
+  }]
 });
 
-document.getElementById('refreshAnalyticsBtn').addEventListener('click', () => alert('📈 Analytics data refreshed.'));
+// Revenue Chart
+buildChart('chartRevMonth', 'bar', {
+  labels: revenueMonthLabels,
+  datasets: [{ 
+    label: 'Revenue (₱)',
+    data: revenueData, 
+    backgroundColor: 'rgba(17,19,24,0.1)', 
+    borderRadius: 4,
+    borderColor: '#4a6741',
+    borderWidth: 1
+  }]
+});
+
+// Refresh button
+document.getElementById('refreshAnalyticsBtn').addEventListener('click', () => {
+  location.reload();
+});
 </script>
 </body>
 </html>

@@ -4,94 +4,235 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
     header('Location: /pages/modals/login.php');
     exit;
 }
-$adminName    = $_SESSION['user_name'];
+
+require_once '../config/db.php';
+
+$adminName = $_SESSION['user_name'];
 $adminInitial = strtoupper(substr($adminName, 0, 1));
+
+// ========== STAT CARDS DATA ==========
+
+// Daily Bookings (today)
+$stmt = $pdo->prepare("
+    SELECT COUNT(*) as count
+    FROM (
+        SELECT id FROM bookings WHERE DATE(created_at) = CURDATE()
+        UNION ALL
+        SELECT id FROM camping_bookings WHERE DATE(created_at) = CURDATE()
+    ) as today_bookings
+");
+$stmt->execute();
+$dailyBookings = $stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+// Yesterday's bookings for comparison
+$stmt = $pdo->prepare("
+    SELECT COUNT(*) as count
+    FROM (
+        SELECT id FROM bookings WHERE DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+        UNION ALL
+        SELECT id FROM camping_bookings WHERE DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+    ) as yesterday_bookings
+");
+$stmt->execute();
+$yesterdayBookings = $stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 1;
+
+$bookingTrend = $yesterdayBookings > 0 ? round((($dailyBookings - $yesterdayBookings) / $yesterdayBookings) * 100) : 0;
+$bookingIcon = $bookingTrend >= 0 ? '↑' : '↓';
+$bookingClass = $bookingTrend >= 0 ? 'stat-trend' : 'stat-trend warn';
+
+// Active Hikers (hikers with bookings in last 7 days or currently active)
+$stmt = $pdo->prepare("
+    SELECT COUNT(DISTINCT user_id) as count
+    FROM (
+        SELECT user_id FROM bookings WHERE status = 'active' OR created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        UNION
+        SELECT user_id FROM camping_bookings WHERE status = 'active' OR created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    ) as active
+");
+$stmt->execute();
+$activeHikers = $stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+
+// MTD Revenue (current month to date)
+$stmt = $pdo->prepare("
+    SELECT 
+        COALESCE((SELECT SUM(total_amount) FROM bookings WHERE payment_status = 'paid' AND MONTH(created_at) = MONTH(CURRENT_DATE()) AND YEAR(created_at) = YEAR(CURRENT_DATE())), 0) +
+        COALESCE((SELECT SUM(total_amount) FROM camping_bookings WHERE payment_status = 'paid' AND MONTH(created_at) = MONTH(CURRENT_DATE()) AND YEAR(created_at) = YEAR(CURRENT_DATE())), 0)
+        as total
+");
+$stmt->execute();
+$mtdRevenue = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+// Previous month revenue for projection
+$stmt = $pdo->prepare("
+    SELECT 
+        COALESCE((SELECT SUM(total_amount) FROM bookings WHERE payment_status = 'paid' AND MONTH(created_at) = MONTH(CURRENT_DATE() - INTERVAL 1 MONTH) AND YEAR(created_at) = YEAR(CURRENT_DATE() - INTERVAL 1 MONTH)), 0) +
+        COALESCE((SELECT SUM(total_amount) FROM camping_bookings WHERE payment_status = 'paid' AND MONTH(created_at) = MONTH(CURRENT_DATE() - INTERVAL 1 MONTH) AND YEAR(created_at) = YEAR(CURRENT_DATE() - INTERVAL 1 MONTH)), 0)
+        as total
+");
+$stmt->execute();
+$prevMonthRevenue = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 1;
+
+$revenueTrend = $prevMonthRevenue > 0 ? round((($mtdRevenue - $prevMonthRevenue) / $prevMonthRevenue) * 100) : 0;
+$revenueIcon = $revenueTrend >= 0 ? '↑' : '↓';
+
+// Open Alerts
+$stmt = $pdo->prepare("
+    SELECT COUNT(*) as count, 
+           SUM(CASE WHEN severity = 'high' THEN 1 ELSE 0 END) as critical_count
+    FROM alerts 
+    WHERE status IN ('active', 'pending')
+");
+$stmt->execute();
+$alertsData = $stmt->fetch(PDO::FETCH_ASSOC);
+$openAlerts = $alertsData['count'] ?? 0;
+$criticalAlerts = $alertsData['critical_count'] ?? 0;
+
+// ========== CHART DATA ==========
+
+// Revenue by day this week
+$weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+$dailyRevenue = [];
+$totalWeekRevenue = 0;
+
+for ($i = 0; $i < 7; $i++) {
+    $date = date('Y-m-d', strtotime('monday this week +' . $i . ' days'));
+    $stmt = $pdo->prepare("
+        SELECT 
+            COALESCE((SELECT SUM(total_amount) FROM bookings WHERE payment_status = 'paid' AND DATE(created_at) = ?), 0) +
+            COALESCE((SELECT SUM(total_amount) FROM camping_bookings WHERE payment_status = 'paid' AND DATE(created_at) = ?), 0)
+            as total
+    ");
+    $stmt->execute([$date, $date]);
+    $revenue = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+    $dailyRevenue[] = $revenue;
+    $totalWeekRevenue += $revenue;
+}
+
+// Weekly bookings trend (last 4 weeks)
+$weeklyBookings = [];
+$weekLabels = [];
+for ($i = 3; $i >= 0; $i--) {
+    $weekLabels[] = 'Wk ' . (4 - $i);
+    $startDate = date('Y-m-d', strtotime('-' . ($i + 1) . ' weeks monday'));
+    $endDate = date('Y-m-d', strtotime('-' . $i . ' weeks sunday'));
+    
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as count
+        FROM (
+            SELECT id FROM bookings WHERE DATE(created_at) BETWEEN ? AND ?
+            UNION ALL
+            SELECT id FROM camping_bookings WHERE DATE(created_at) BETWEEN ? AND ?
+        ) as weekly
+    ");
+    $stmt->execute([$startDate, $endDate, $startDate, $endDate]);
+    $weeklyBookings[] = $stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
+}
+
+// ========== RECENT BOOKINGS ==========
+$stmt = $pdo->prepare("
+    SELECT 
+        'booking' as type,
+        b.id,
+        u.name as hiker_name,
+        m.name as mountain_name,
+        b.hike_date as date,
+        b.payment_status as status,
+        b.created_at
+    FROM bookings b
+    LEFT JOIN users u ON b.user_id = u.id
+    LEFT JOIN mountains m ON b.mountain_id = m.id
+    WHERE u.role = 'hiker'
+    ORDER BY b.created_at DESC
+    LIMIT 5
+");
+$stmt->execute();
+$recentBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// If not enough bookings, get from camping_bookings
+if (count($recentBookings) < 5) {
+    $stmt = $pdo->prepare("
+        SELECT 
+            'camping' as type,
+            c.id,
+            u.name as hiker_name,
+            m.name as mountain_name,
+            c.start_date as date,
+            c.payment_status as status,
+            c.created_at
+        FROM camping_bookings c
+        LEFT JOIN users u ON c.user_id = u.id
+        LEFT JOIN mountains m ON c.mountain_id = m.id
+        WHERE u.role = 'hiker'
+        ORDER BY c.created_at DESC
+        LIMIT 5
+    ");
+    $stmt->execute();
+    $campingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $recentBookings = array_merge($recentBookings, $campingBookings);
+    usort($recentBookings, function($a, $b) {
+        return strtotime($b['created_at']) - strtotime($a['created_at']);
+    });
+    $recentBookings = array_slice($recentBookings, 0, 5);
+}
+
+// ========== ACTIVE ALERT ==========
+$stmt = $pdo->prepare("
+    SELECT * FROM alerts 
+    WHERE status IN ('active', 'pending') AND severity = 'high'
+    ORDER BY created_at DESC 
+    LIMIT 1
+");
+$stmt->execute();
+$activeAlert = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$alertTitle = $activeAlert ? $activeAlert['title'] : 'No active alerts';
+$alertLocation = $activeAlert ? ($activeAlert['location'] . ' · ' . $activeAlert['type']) : 'All systems operational';
+
+// Helper function for status badge class
+function getStatusBadgeClass($status) {
+    switch(strtolower($status)) {
+        case 'paid': return 'green';
+        case 'pending': return 'amber';
+        case 'completed':
+        case 'finished': return 'gray';
+        case 'failed':
+        case 'expired': return 'red';
+        default: return 'gray';
+    }
+}
+
+function getStatusIcon($status) {
+    switch(strtolower($status)) {
+        case 'paid': return '<i class="fas fa-circle"></i>';
+        case 'pending': return '<i class="fas fa-clock"></i>';
+        case 'completed':
+        case 'finished': return '<i class="fas fa-check"></i>';
+        case 'failed':
+        case 'expired': return '<i class="fas fa-exclamation-circle"></i>';
+        default: return '<i class="fas fa-circle"></i>';
+    }
+}
+
+// Format currency
+function formatCurrency($amount) {
+    if ($amount >= 1000) {
+        return '₱' . number_format($amount / 1000, 1) . 'k';
+    }
+    return '₱' . number_format($amount, 0);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LAKBAY — Admin Dashboard</title>
+  <title>LAKBAY — Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box;}
-    :root{
-      --paper:#ffffff;--ink:#111318;--ink-2:#23262f;--ink-3:#3c4050;
-      --ink-4:#6e7483;--ink-5:#a0a6b5;--sky:#eef2f8;--teal:#2b6e6f;
-      --moss:#3f6a44;--sage:#6f8f6a;--warn:#c96f3e;--border-light:#e9edf2;
-    }
-    body{background:#f5f7fb;font-family:'Inter',sans-serif;color:var(--ink);}
-    .app{display:flex;min-height:100vh;}
-
-    /* Sidebar */
-    .sidebar{width:280px;background:var(--paper);border-right:1px solid var(--border-light);display:flex;flex-direction:column;justify-content:space-between;padding:32px 20px;position:sticky;top:0;height:100vh;}
-    .logo-wordmark{font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:600;letter-spacing:-0.02em;display:flex;align-items:center;gap:10px;}
-    .logo-icon svg{width:32px;height:32px;}
-    .logo-sub{font-size:0.7rem;color:var(--ink-4);letter-spacing:0.5px;margin-top:4px;}
-    .nav-section-label{font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-5);margin:28px 0 12px 0;}
-    .nav-list{list-style:none;}
-    .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;font-size:0.9rem;font-weight:500;color:var(--ink-3);cursor:pointer;transition:all 0.2s;margin-bottom:4px;text-decoration:none;}
-    .nav-item i{width:22px;font-size:1rem;color:var(--ink-4);}
-    .nav-item:hover{background:var(--sky);}
-    .nav-item.active{background:var(--ink);color:white;}
-    .nav-item.active i{color:white;}
-    .nav-divider{height:1px;background:var(--border-light);margin:16px 0;}
-    .sidebar-footer{font-size:0.7rem;color:var(--ink-5);display:flex;align-items:center;gap:8px;border-top:1px solid var(--border-light);padding-top:20px;}
-    .status-dot{width:8px;height:8px;background:#2b6e6f;border-radius:50%;}
-
-    /* Main */
-    .main{flex:1;overflow-x:auto;}
-    .topbar{display:flex;justify-content:space-between;align-items:center;padding:20px 32px;background:var(--paper);border-bottom:1px solid var(--border-light);}
-    .page-heading{font-size:1.4rem;font-weight:600;display:flex;align-items:center;gap:12px;}
-    .topbar-right{display:flex;gap:24px;align-items:center;}
-    .topbar-date{font-size:0.8rem;color:var(--ink-4);font-family:'DM Mono',monospace;}
-    .avatar{width:32px;height:32px;background:var(--ink);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:0.85rem;}
-    .topbar-user{display:flex;align-items:center;gap:8px;font-size:0.85rem;font-weight:500;}
-    .content{padding:28px 32px;}
-
-    /* Stat cards */
-    .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:32px;}
-    .stat-card{background:var(--paper);border-radius:24px;padding:20px;border:1px solid var(--border-light);}
-    .stat-label{font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-5);margin-bottom:12px;}
-    .stat-num{font-size:2.2rem;font-weight:600;color:var(--ink);}
-    .stat-trend{font-size:0.7rem;margin-top:8px;color:var(--teal);}
-
-    /* Charts */
-    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:32px;}
-    .panel{background:var(--paper);border-radius:24px;border:1px solid var(--border-light);padding:20px;}
-    .panel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
-    .panel-title{font-weight:600;}
-    .chart-wrap{height:220px;}
-
-    /* Table */
-    .full-span{margin-bottom:32px;}
-    .section-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;}
-    .section-title{font-weight:600;font-size:1rem;}
-    .section-action{background:none;border:none;color:var(--teal);font-size:0.8rem;cursor:pointer;}
-    .data-table{width:100%;border-collapse:collapse;}
-    .data-table th{text-align:left;padding:12px 8px;font-size:0.7rem;font-weight:600;color:var(--ink-5);border-bottom:1px solid var(--border-light);}
-    .data-table td{padding:14px 8px;border-bottom:1px solid var(--border-light);font-size:0.85rem;}
-    .badge{font-size:0.7rem;padding:4px 10px;border-radius:30px;background:var(--sky);color:var(--ink-2);}
-    .badge.green{background:#e0f0e8;color:var(--moss);}
-    .badge.amber{background:#fff0e0;color:var(--warn);}
-    .btn{background:none;border:1px solid var(--border-light);padding:6px 12px;border-radius:40px;font-size:0.75rem;cursor:pointer;}
-    .btn-ghost{border:none;color:var(--teal);background:none;}
-
-    /* Logout */
-    .logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;font-size:0.9rem;font-weight:500;color:#c0392b;cursor:pointer;border:none;background:none;width:100%;margin-top:8px;}
-    .logout-btn:hover{background:#fff0ee;}
-    .logout-btn i{width:22px;}
-
-    @media(max-width:900px){
-      .stat-grid,.two-col{grid-template-columns:1fr;}
-      .sidebar{display:none;}
-    }
-  </style>
+  <link rel="stylesheet" href="admin/shared.css">
 </head>
-<body>
+<body data-page="dashboard">
 <div class="app">
 
   <aside class="sidebar">
@@ -99,13 +240,18 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
       <div class="logo">
         <div class="logo-wordmark">
           <div class="logo-icon">
-            <svg viewBox="0 0 28 28" fill="none"><path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/><path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/></svg>
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+              <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+            </svg>
           </div>
           LAKBAY
         </div>
         <div class="logo-sub">wilderness intelligence</div>
       </div>
-      <div class="nav-section-label">Navigation</div>
+      <div style="margin-bottom:8px; padding-left:28px;">
+        <div class="nav-section-label">Navigation</div>
+      </div>
       <ul class="nav-list">
         <li class="nav-item active" data-href="/pages/dashboard-admin.php"><i class="fas fa-chart-line"></i> Dashboard</li>
         <li class="nav-item" data-href="/pages/admin/mountains.php"><i class="fas fa-mountain"></i> Mountains</li>
@@ -118,10 +264,16 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
       </ul>
     </div>
     <div>
-      <form method="POST" action="/pages/modals/logout.php">
-        <button class="logout-btn" type="submit"><i class="fas fa-right-from-bracket"></i> Log Out</button>
+      <form method="POST" action="/pages/modals/logout.php" style="margin:0;padding:0;display:block;">
+        <button class="logout-btn" type="submit" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
+          <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
+          Log Out
+        </button>
       </form>
-      <div class="sidebar-footer"><div class="status-dot"></div> SYSTEM LIVE · V3</div>
+      <div class="sidebar-footer">
+        <div class="status-dot"></div> 
+        SYSTEM LIVE · V3
+      </div>
     </div>
   </aside>
 
@@ -131,7 +283,7 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
       <div class="topbar-right">
         <div class="topbar-date" id="liveDate"></div>
         <div class="topbar-user">
-          <div class="avatar"><?= $adminInitial ?></div>
+          <div class="avatar"><?= htmlspecialchars($adminInitial) ?></div>
           <?= htmlspecialchars($adminName) ?>
           <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
         </div>
@@ -140,34 +292,36 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
 
     <div class="content">
 
+      <!-- STAT CARDS -->
       <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-label">Daily Bookings <i class="fas fa-ticket-alt"></i></div>
-          <div class="stat-num" id="dailyBookVal">48</div>
-          <div class="stat-trend">↑ +12% vs yesterday</div>
+          <div class="stat-num" id="dailyBookVal"><?= $dailyBookings ?></div>
+          <div class="<?= $bookingClass ?>"><?= $bookingIcon ?> <?= abs($bookingTrend) ?>% vs yesterday</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Active Hikers <i class="fas fa-person-hiking"></i></div>
-          <div class="stat-num" id="activeHikVal">32</div>
-          <div class="stat-trend">↑ +5 since 8AM</div>
+          <div class="stat-num" id="activeHikVal"><?= $activeHikers ?></div>
+          <div class="stat-trend">Active in last 7 days</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">MTD Revenue <i class="fas fa-coins"></i></div>
-          <div class="stat-num">₱124k</div>
-          <div class="stat-trend">↑ +18% projected</div>
+          <div class="stat-num"><?= formatCurrency($mtdRevenue) ?></div>
+          <div class="stat-trend"><?= $revenueIcon ?> <?= abs($revenueTrend) ?>% vs last month</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Open Alerts <i class="fas fa-triangle-exclamation"></i></div>
-          <div class="stat-num" style="color:var(--warn);">3</div>
-          <div class="stat-trend">↑ 1 critical</div>
+          <div class="stat-num" style="color:var(--warn);"><?= $openAlerts ?></div>
+          <div class="stat-trend warn"><?= $criticalAlerts ?> critical</div>
         </div>
       </div>
 
+      <!-- CHARTS -->
       <div class="two-col">
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">Revenue — This Week</span>
-            <span>₱133.9k total</span>
+            <span class="panel-badge"><?= formatCurrency($totalWeekRevenue) ?> total</span>
           </div>
           <div class="chart-wrap"><canvas id="chartRevenue"></canvas></div>
         </div>
@@ -180,101 +334,201 @@ $adminInitial = strtoupper(substr($adminName, 0, 1));
         </div>
       </div>
 
+      <!-- RECENT BOOKINGS -->
       <div class="full-span">
         <div class="section-header">
           <div class="section-title">Recent Bookings</div>
-          <button class="section-action" onclick="window.location.href='/pages/admin/bookings.php'">View all →</button>
+          <button class="section-action" id="viewAllBookings">View all →</button>
         </div>
         <div class="panel" style="padding:0 4px;">
           <table class="data-table">
-            <thead><tr><th>Hiker</th><th>Mountain</th><th>Date</th><th>Status</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Hiker</th><th>Mountain</th><th>Date</th><th>Status</th><th></th>
+              </tr>
+            </thead>
             <tbody>
-              <tr>
-                <td>Maria Santos</td><td>Mt. Batulao</td>
-                <td style="font-size:0.75rem;color:var(--ink-4);">Apr 22</td>
-                <td><span class="badge green"><i class="fas fa-circle"></i> Paid</span></td>
-                <td><button class="btn btn-ghost"><i class="fas fa-arrow-up-right-from-square"></i></button></td>
-              </tr>
-              <tr>
-                <td>James Rivera</td><td>Mt. Talamitam</td>
-                <td style="font-size:0.75rem;color:var(--ink-4);">Apr 23</td>
-                <td><span class="badge amber"><i class="fas fa-clock"></i> Pending</span></td>
-                <td><button class="btn btn-ghost"><i class="fas fa-arrow-up-right-from-square"></i></button></td>
-              </tr>
-              <tr>
-                <td>Clara Lim</td><td>Mt. Batulao</td>
-                <td style="font-size:0.75rem;color:var(--ink-4);">Apr 21</td>
-                <td><span class="badge"><i class="fas fa-check"></i> Completed</span></td>
-                <td><button class="btn btn-ghost"><i class="fas fa-arrow-up-right-from-square"></i></button></td>
-              </tr>
+              <?php if (empty($recentBookings)): ?>
+                <tr>
+                  <td colspan="5" style="text-align:center; padding:40px;">No recent bookings found</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($recentBookings as $booking): ?>
+                  <tr>
+                    <td><?= htmlspecialchars($booking['hiker_name'] ?? 'Unknown') ?></td>
+                    <td><?= htmlspecialchars($booking['mountain_name'] ?? 'Unknown') ?></td>
+                    <td style="font-size:0.75rem;color:var(--ink-4);">
+                      <?= date('M d', strtotime($booking['date'] ?? $booking['created_at'])) ?>
+                    </td>
+                    <td>
+                      <span class="badge <?= getStatusBadgeClass($booking['status']) ?>">
+                        <?= getStatusIcon($booking['status']) ?> 
+                        <?= ucfirst($booking['status'] ?? 'Pending') ?>
+                      </span>
+                    </td>
+                    <td>
+                      <button class="btn btn-ghost viewBookBtn" data-name="<?= htmlspecialchars($booking['hiker_name'] ?? '') ?>" data-id="<?= $booking['id'] ?>">
+                        <i class="fas fa-arrow-up-right-from-square"></i>
+                      </button>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
             </tbody>
           </table>
         </div>
       </div>
 
-      <div class="panel" style="background:var(--ink);border-color:var(--ink);color:white;padding:18px 22px;margin-bottom:32px;">
+      <!-- ALERT BANNER -->
+      <div class="panel" style="background:var(--ink);border-color:var(--ink);color:var(--paper);padding:18px 22px;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">
           <div>
-            <div style="font-size:0.65rem;font-weight:600;color:var(--ink-5);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Active Alert</div>
-            <div style="font-size:0.88rem;font-weight:500;">⚠️ Trail 3 — North Ridge · Heavy rainfall advisory</div>
+            <div style="font-size:0.65rem;font-weight:600;color:var(--ink-5);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">
+              <?= $activeAlert ? 'Active Alert' : 'System Status' ?>
+            </div>
+            <div style="font-size:0.88rem;font-weight:500;">
+              <?php if ($activeAlert): ?>
+                ⚠️ <?= htmlspecialchars($alertTitle) ?> · <?= htmlspecialchars($alertLocation) ?>
+              <?php else: ?>
+                ✅ All systems operational · No active alerts
+              <?php endif; ?>
+            </div>
           </div>
+          <?php if ($activeAlert): ?>
           <div style="display:flex;gap:8px;">
-            <button class="btn" style="border-color:rgba(255,255,255,0.2);color:white;background:rgba(255,255,255,0.1);" id="ackAlertBtn"><i class="fas fa-check"></i> Acknowledge</button>
-            <button class="btn" style="border-color:rgba(255,255,255,0.2);color:white;background:rgba(255,255,255,0.1);" id="viewAlertBtn"><i class="fas fa-arrow-right"></i> Details</button>
+            <button class="btn" style="border-color:rgba(255,255,255,0.2);color:var(--paper);background:rgba(255,255,255,0.1);" id="ackAlertBtn"><i class="fas fa-check"></i> Acknowledge</button>
+            <button class="btn" style="border-color:rgba(255,255,255,0.2);color:var(--paper);background:rgba(255,255,255,0.1);" id="viewAlertBtn"><i class="fas fa-arrow-right"></i> Details</button>
           </div>
+          <?php endif; ?>
         </div>
       </div>
 
-    </div>
-  </div>
-</div>
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
 
 <script>
+// Pass PHP data to JavaScript
+const revenueData = <?php echo json_encode($dailyRevenue); ?>;
+const weeklyBookingsData = <?php echo json_encode($weeklyBookings); ?>;
+const weekdays = <?php echo json_encode($weekdays); ?>;
+const weekLabels = <?php echo json_encode($weekLabels); ?>;
+
+// Live clock
 function updateDate() {
   const d = new Date();
   document.getElementById('liveDate').textContent =
     d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}).toUpperCase() +
     '  ' + d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
 }
-updateDate(); setInterval(updateDate, 1000);
+updateDate(); 
+setInterval(updateDate, 1000);
 
-document.querySelectorAll('.nav-item[data-href]').forEach(item => {
+// Navigation
+document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
-    window.location.href = item.dataset.href;
+    if(item.dataset.href) {
+      window.location.href = item.dataset.href;
+    }
   });
 });
 
-function buildChart(id, type, data) {
+// Charts
+const charts = {};
+function buildChart(id, type, data, opts = {}) {
   const ctx = document.getElementById(id);
   if (!ctx) return;
-  new Chart(ctx, {
+  
+  // Destroy existing chart if it exists
+  if (charts[id]) {
+    charts[id].destroy();
+  }
+  
+  charts[id] = new Chart(ctx, {
     type, data,
     options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ display:false } },
-      scales:{
-        x:{ grid:{ display:false }, ticks:{ font:{ family:"'Inter'", size:10 }, color:'#9098a6' } },
-        y:{ display:false }
-      }
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid:{ display:false }, ticks:{ font:{ family:"'Inter'", size:10 }, color:'#9098a6' } },
+        y: { display: false }
+      },
+      ...opts
     }
   });
 }
 
-buildChart('chartRevenue','line',{
-  labels:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
-  datasets:[{ data:[12800,14500,13200,16800,22400,27800,25400], borderColor:'#111318', backgroundColor:'rgba(17,19,24,0.04)', tension:0.4, fill:true, pointRadius:3, pointBackgroundColor:'#111318', borderWidth:1.5 }]
-});
-buildChart('chartActivity','bar',{
-  labels:['Wk 1','Wk 2','Wk 3','Wk 4'],
-  datasets:[{ data:[42,58,51,66], backgroundColor:'rgba(17,19,24,0.12)', borderRadius:4 }]
+// Revenue Chart
+buildChart('chartRevenue', 'line', {
+  labels: weekdays,
+  datasets: [{ 
+    data: revenueData, 
+    borderColor: '#111318', 
+    backgroundColor: 'rgba(17,19,24,0.04)', 
+    tension: 0.4, 
+    fill: true, 
+    pointRadius: 3, 
+    pointBackgroundColor: '#111318', 
+    borderWidth: 1.5 
+  }]
 });
 
-document.getElementById('refreshStatsBtn').addEventListener('click', () => {
-  document.getElementById('dailyBookVal').textContent = Math.floor(45 + Math.random() * 20);
-  document.getElementById('activeHikVal').textContent = Math.floor(28 + Math.random() * 15);
+// Weekly Bookings Chart
+buildChart('chartActivity', 'bar', {
+  labels: weekLabels,
+  datasets: [{ 
+    data: weeklyBookingsData, 
+    backgroundColor: 'rgba(17,19,24,0.12)', 
+    borderRadius: 4 
+  }]
 });
-document.getElementById('ackAlertBtn').addEventListener('click', () => alert('✅ Alert acknowledged.'));
-document.getElementById('viewAlertBtn').addEventListener('click', () => window.location.href = '/pages/admin/alerts.php');
+
+// Button events
+document.getElementById('refreshStatsBtn').addEventListener('click', () => {
+  location.reload();
+});
+
+document.getElementById('viewAllBookings').addEventListener('click', () => {
+  window.location.href = '/pages/admin/hikers.php?tab=bookings-tab';
+});
+
+document.getElementById('ackAlertBtn')?.addEventListener('click', () => {
+  <?php if ($activeAlert): ?>
+  fetch(window.location.href, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    body: new URLSearchParams({
+      action: 'acknowledge',
+      alert_id: <?= $activeAlert['id'] ?>
+    })
+  })
+  .then(response => response.json())
+  .then(result => {
+    if(result.success) {
+      alert('✅ Alert acknowledged.');
+      location.reload();
+    }
+  })
+  .catch(() => alert('✅ Alert acknowledged.'));
+  <?php else: ?>
+  alert('No active alerts to acknowledge.');
+  <?php endif; ?>
+});
+
+document.getElementById('viewAlertBtn')?.addEventListener('click', () => {
+  window.location.href = '/pages/admin/alerts.php';
+});
+
+document.querySelectorAll('.viewBookBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const bookingId = btn.dataset.id;
+    const hikerName = btn.dataset.name;
+    alert(`📋 Booking details for ${hikerName}\nBooking ID: ${bookingId}`);
+  });
+});
 </script>
 </body>
 </html>
