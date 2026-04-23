@@ -2,22 +2,103 @@
 // ============================================================
 // PROCESS FORM FIRST — before ANY output (including header.php)
 // ============================================================
+require_once '../../config/db.php';
+
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email']    ?? '');
     $pass  = trim($_POST['password'] ?? '');
-    $role  = trim($_POST['role']     ?? 'hiker');
 
     if ($email && $pass) {
-        $map = [
-            'hiker'   => '../dashboard.php',
-            'guide'   => '../dashboard-guide.php',
-            'manager' => '../dashboard-manager.php',
-            'tourism' => '../dashboard-admin.php',
-        ];
-        $dest = $map[$role] ?? '../dashboard.php';
-        header('Location: ' . $dest);
-        exit;
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        if ($user && password_verify($pass, $user['password'])) {
+    session_start();
+    $_SESSION['user_id']   = $user['id'];
+    $_SESSION['user_name'] = $user['name'];
+    $_SESSION['user_role'] = $user['role'];
+
+    $map = [
+        'hiker'   => '../../pages/dashboard.php',
+        'guide'   => '../../pages/dashboard-guide.php',
+        'manager' => '../../pages/dashboard-manager.php',
+        'admin'   => '../../pages/dashboard-admin.php',
+    ];
+    $dest = $map[$user['role']] ?? '../../pages/dashboard.php';
+
+    $roleLabels = [
+        'hiker'   => 'Hiker',
+        'guide'   => 'Tour Guide',
+        'manager' => 'Mountain Manager',
+        'admin'   => 'Tourism Admin',
+    ];
+    $roleMessages = [
+        'hiker'   => 'Preparing your trail exploration...',
+        'guide'   => 'Loading your guide dashboard and assigned trails...',
+        'manager' => 'Fetching your mountain management tools...',
+        'admin'   => 'Setting up your admin control panel...',
+    ];
+
+    $firstName   = explode(' ', $user['name'])[0];
+    $roleLabel   = $roleLabels[$user['role']]   ?? 'User';
+    $roleMessage = $roleMessages[$user['role']] ?? 'Loading your dashboard...';
+    $roleClass   = 'role-' . $user['role'];
+
+    // Show popup then redirect
+    echo "
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset='UTF-8'>
+      <meta name='viewport' content='width=device-width, initial-scale=1'>
+      <title>Welcome — LAKBAY</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Inter','Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#D4E1E7,#98BBD7,#254A5A);}
+        .popup{background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(8,37,53,0.18);padding:2.5rem 2rem;max-width:380px;width:90%;text-align:center;animation:popIn .4s cubic-bezier(.34,1.56,.64,1) both;}
+        @keyframes popIn{from{opacity:0;transform:scale(.85) translateY(20px);}to{opacity:1;transform:scale(1) translateY(0);}}
+        .avatar{width:72px;height:72px;border-radius:50%;background:#254A5A;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;animation:avatarPop .5s .15s cubic-bezier(.34,1.56,.64,1) both;}
+        @keyframes avatarPop{from{opacity:0;transform:scale(0);}to{opacity:1;transform:scale(1);}}
+        .avatar svg{width:34px;height:34px;stroke:#fff;fill:none;stroke-width:2;}
+        .role-badge{display:inline-block;padding:.3rem .85rem;border-radius:20px;font-size:.78rem;font-weight:600;margin-bottom:1rem;letter-spacing:.03em;}
+        .role-hiker{background:#E1F5EE;color:#0F6E56;}
+        .role-admin{background:#EEEDFE;color:#3C3489;}
+        .role-manager{background:#FAEEDA;color:#854F0B;}
+        .role-guide{background:#E6F1FB;color:#0C447C;}
+        h2{font-size:1.5rem;font-weight:600;color:#082535;margin-bottom:.35rem;}
+        h2 span{color:#254A5A;}
+        p{font-size:.9rem;color:#6b8a9a;margin-bottom:1.5rem;line-height:1.6;}
+        .progress-bar{height:4px;background:#D4E1E7;border-radius:4px;overflow:hidden;margin-bottom:1.25rem;}
+        .progress-fill{height:100%;background:#254A5A;border-radius:4px;animation:fill 2.5s linear forwards;}
+        @keyframes fill{from{width:0%;}to{width:100%;}}
+        .dots{display:flex;justify-content:center;gap:6px;}
+        .dot{width:7px;height:7px;border-radius:50%;background:#254A5A;opacity:.25;animation:pulse 1.2s ease-in-out infinite;}
+        .dot:nth-child(2){animation-delay:.2s;}
+        .dot:nth-child(3){animation-delay:.4s;}
+        @keyframes pulse{0%,100%{opacity:.25;}50%{opacity:1;}}
+      </style>
+    </head>
+    <body>
+      <div class='popup'>
+        <div class='avatar'>
+          <svg viewBox='0 0 24 24'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>
+        </div>
+        <span class='role-badge $roleClass'>$roleLabel</span>
+        <h2>Welcome back, <span>$firstName!</span></h2>
+        <p>$roleMessage</p>
+        <div class='progress-bar'><div class='progress-fill'></div></div>
+        <div class='dots'><div class='dot'></div><div class='dot'></div><div class='dot'></div></div>
+      </div>
+      <script>setTimeout(()=>{ window.location.href='$dest'; }, 2600);</script>
+    </body>
+    </html>";
+    exit;
+
+        } else {
+            $error = 'Invalid email or password.';
+        }
     } else {
         $error = 'Please enter your email and password.';
     }
@@ -48,8 +129,8 @@ include_once $base . 'includes/header.php';
 .auth-form{display:flex;flex-direction:column;gap:1rem;margin-top:1.5rem;}
 .auth-form .fg{display:flex;flex-direction:column;gap:.35rem;}
 .auth-form label{font-size:.87rem;font-weight:600;color:#082535;}
-.auth-form input,.auth-form select{width:100%;padding:.75rem 1rem;border:1.5px solid #D4E1E7;border-radius:8px;font-size:.95rem;color:#082535;background:#fff;box-sizing:border-box;font-family:inherit;transition:border-color .2s;}
-.auth-form input:focus,.auth-form select:focus{outline:none;border-color:#254A5A;box-shadow:0 0 0 3px rgba(37,74,90,.1);}
+.auth-form input{width:100%;padding:.75rem 1rem;border:1.5px solid #D4E1E7;border-radius:8px;font-size:.95rem;color:#082535;background:#fff;box-sizing:border-box;font-family:inherit;transition:border-color .2s;}
+.auth-form input:focus{outline:none;border-color:#254A5A;box-shadow:0 0 0 3px rgba(37,74,90,.1);}
 .auth-form input::placeholder{color:#a0b4be;}
 .auth-btn{width:100%;padding:.9rem;background:#254A5A;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;font-family:inherit;transition:background .2s;margin-top:.25rem;}
 .auth-btn:hover{background:#082535;}
@@ -92,16 +173,6 @@ include_once $base . 'includes/header.php';
         <input type="password" id="password" name="password"
                placeholder="Enter your password"
                required autocomplete="current-password">
-      </div>
-
-      <div class="fg">
-        <label for="role">Login As</label>
-        <select id="role" name="role">
-          <option value="hiker"   <?= (($_POST['role']??'')==='hiker')   ?'selected':'' ?>>Hiker</option>
-          <option value="guide"   <?= (($_POST['role']??'')==='guide')   ?'selected':'' ?>>Local Guide</option>
-          <option value="manager" <?= (($_POST['role']??'')==='manager') ?'selected':'' ?>>Mountain Manager</option>
-          <option value="tourism" <?= (($_POST['role']??'')==='tourism') ?'selected':'' ?>>Tourism Admin</option>
-        </select>
       </div>
 
       <button type="submit" class="auth-btn">Sign In</button>
