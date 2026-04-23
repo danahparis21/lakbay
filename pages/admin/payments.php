@@ -201,17 +201,15 @@ function formatCurrency($amount) {
       </ul>
     </div>
     <div>
-      <form method="POST" action="/pages/modals/logout.php" style="margin:0;padding:0;display:block;">
-        <button class="logout-btn" type="submit" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
-          <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
-          Log Out
-        </button>
-      </form>
-      <div class="sidebar-footer">
-        <div class="status-dot"></div> 
-        SYSTEM LIVE · V3
-      </div>
-    </div>
+  <button class="logout-btn" onclick="showLogoutModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
+    <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
+    Log Out
+  </button>
+  <div class="sidebar-footer">
+    <div class="status-dot"></div> 
+    TEAM AURIX
+  </div>
+</div>
   </aside>
 
   <div class="main">
@@ -219,11 +217,17 @@ function formatCurrency($amount) {
       <div class="page-heading"><i class="fas fa-coins"></i> Revenue</div>
       <div class="topbar-right">
         <div class="topbar-date" id="liveDate"></div>
-        <div class="topbar-user">
-          <div class="avatar"><?= htmlspecialchars($adminInitial) ?></div>
-          <?= htmlspecialchars($adminName) ?>
-          <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
-        </div>
+        <div class="topbar-user" style="cursor: pointer;">
+    <div class="avatar" id="topbarAvatar">
+        <?php if (!empty($_SESSION['user_avatar'])): ?>
+            <img src="<?= htmlspecialchars($_SESSION['user_avatar']) ?>" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+        <?php else: ?>
+            <?= htmlspecialchars($adminInitial) ?>
+        <?php endif; ?>
+    </div>
+    <?= htmlspecialchars($adminName) ?>
+    <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+</div>
       </div>
     </div>
 
@@ -256,6 +260,62 @@ function formatCurrency($amount) {
           <div class="panel-header">
             <span class="panel-title">Recent Transactions</span>
             <button class="btn" id="genReportBtn"><i class="fas fa-file-invoice"></i> Export Report</button>
+
+            <!-- Add this modal/dialog for export options -->
+<div id="exportModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:white; border-radius:12px; padding:24px; max-width:500px; width:90%;">
+        <h3 style="margin:0 0 16px 0;">Export Revenue Report</h3>
+        <form id="exportForm">
+            <div style="margin-bottom:16px;">
+                <label style="display:block; margin-bottom:6px; font-weight:500;">Report Type</label>
+                <select name="type" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+                    <option value="full">Complete Report (Summary + Transactions)</option>
+                    <option value="summary">Summary Only</option>
+                    <option value="transactions">Transactions Only</option>
+                </select>
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block; margin-bottom:6px; font-weight:500;">Start Date</label>
+                <input type="date" name="start_date" value="<?= date('Y-m-01') ?>" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block; margin-bottom:6px; font-weight:500;">End Date</label>
+                <input type="date" name="end_date" value="<?= date('Y-m-d') ?>" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+            </div>
+            <div style="display:flex; gap:12px; justify-content:flex-end;">
+                <button type="button" onclick="closeExportModal()" style="padding:8px 16px; background:#f0f0f0; border:none; border-radius:4px; cursor:pointer;">Cancel</button>
+                <button type="submit" style="padding:8px 16px; background:#2c5f2d; color:white; border:none; border-radius:4px; cursor:pointer;">Export Excel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Export functionality
+document.getElementById('genReportBtn').addEventListener('click', function() {
+    document.getElementById('exportModal').style.display = 'flex';
+});
+
+function closeExportModal() {
+    document.getElementById('exportModal').style.display = 'none';
+}
+
+document.getElementById('exportForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const params = new URLSearchParams(formData);
+    window.location.href = 'generate_revenue_report.php?' + params.toString();
+    closeExportModal();
+});
+
+// Close modal when clicking outside
+document.getElementById('exportModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeExportModal();
+    }
+});
+</script>
+
           </div>
           <table class="data-table">
             <thead>
@@ -357,7 +417,59 @@ document.querySelectorAll('.nav-item').forEach(item => {
   });
 });
 
-document.getElementById('genReportBtn').addEventListener('click', () => alert('📑 Generating PDF revenue report…'));
+
+
+// Make topbar user clickable
+document.addEventListener('DOMContentLoaded', function() {
+    const topbarUser = document.querySelector('.topbar-user');
+    console.log('Setting up topbar click listener');
+    if (topbarUser) {
+        topbarUser.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Topbar clicked - opening modal');
+            if (typeof openProfileModal === 'function') {
+                openProfileModal();
+            } else {
+                console.error('openProfileModal function not found!');
+                alert('Modal function not loaded yet. Please refresh the page.');
+            }
+        });
+    }
+});
+
 </script>
+<!-- Include Profile Modal -->
+<?php 
+
+$modalPath = __DIR__ . '/profile-modal.php';
+if (file_exists($modalPath)) {
+    include_once $modalPath;
+    echo '<!-- Profile modal loaded from: ' . $modalPath . ' -->';
+} else {
+    echo '<!-- Profile modal NOT found at: ' . $modalPath . ' -->';
+    // Fallback: try alternative path
+    $altPath = 'admin/profile-modal.php';
+    if (file_exists($altPath)) {
+        include_once $altPath;
+        echo '<!-- Profile modal loaded from: ' . $altPath . ' -->';
+    }
+}
+?>
+<?php 
+$logoutModalPath = __DIR__ . '/../../includes/logout-modal.php';
+if (file_exists($logoutModalPath)) {
+    include_once $logoutModalPath;
+    echo '<!-- Logout modal loaded from: ' . $logoutModalPath . ' -->';
+} else {
+    // Try alternative path from pages directory
+    $altLogoutPath = '../includes/logout-modal.php';
+    if (file_exists($altLogoutPath)) {
+        include_once $altLogoutPath;
+        echo '<!-- Logout modal loaded from: ' . $altLogoutPath . ' -->';
+    } else {
+        echo '<!-- Logout modal NOT found -->';
+    }
+}
+?>
 </body>
 </html>

@@ -46,75 +46,9 @@ function getGuideMountains($pdo, $guideId) {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="shared.css">
   <style>
-    /* ─── RESPONSIVE LAYOUT OVERRIDES ─── */
-    
-    /* Global stacked layout for mobile */
-    @media (max-width: 992px) {
-      .two-col { 
-        display: flex; 
-        flex-direction: column; 
-        gap: 24px; 
-      }
-    }
+    /* ─── GUIDES-SPECIFIC STYLES ─── */
 
-    /* Sidebar Responsiveness */
-    @media (max-width: 850px) {
-      .sidebar { 
-        width: 70px; 
-        padding: 20px 10px; 
-      }
-      .logo-wordmark, .logo-sub, .nav-section-label, .sidebar-footer, .nav-item span { 
-        display: none; 
-      }
-      .nav-item { 
-        justify-content: center; 
-        padding: 15px 0;
-        font-size: 1.2rem;
-      }
-      .nav-item i { margin-right: 0; }
-      .main { margin-left: 70px; }
-    }
-
-    /* Top Buttons and Header Responsiveness */
-    @media (max-width: 600px) {
-      .section-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 16px;
-      }
-      .section-header div { width: 100%; }
-      
-      /* Make buttons take equal space on mobile or shrink labels */
-      .btn-responsive-text { display: none; } /* Hide text, show icon only */
-      
-      .btn { 
-        flex: 1; 
-        justify-content: center; 
-        padding: 12px;
-      }
-
-      .topbar-date { display: none; } /* Hide date on very small screens */
-    }
-
-    /* Guide Row Responsiveness */
-    @media (max-width: 480px) {
-      .guide-row {
-        padding: 12px !important;
-      }
-      .guide-avatar {
-        width: 36px !important;
-        height: 36px !important;
-        font-size: 12px !important;
-      }
-      .guide-name { font-size: 14px; }
-      .guide-meta { font-size: 11px; }
-      
-      /* Message Button: Icon only on mobile */
-      .msg-btn-text { display: none; }
-      .btn-ghost { padding: 10px; min-width: 40px; }
-    }
-
-    /* ─── MODAL STYLES (Previously defined) ─── */
+    /* ─── MODAL STYLES ─── */
     .modal-overlay {
       display: none; position: fixed; inset: 0;
       background: rgba(10,12,18,0.55); backdrop-filter: blur(4px);
@@ -318,18 +252,16 @@ function getGuideMountains($pdo, $guideId) {
         <li class="nav-item" data-href="/pages/admin/analytics.php"><i class="fas fa-chart-simple"></i> Analytics</li>
       </ul>
     </div>
-    <div>
-      <form method="POST" action="/pages/modals/logout.php" style="margin:0;padding:0;display:block;">
-        <button class="logout-btn" type="submit">
-          <i class="fas fa-right-from-bracket"></i> 
-          Log Out
-        </button>
-      </form>
-      <div class="sidebar-footer">
-        <div class="status-dot"></div> 
-        SYSTEM LIVE · V3
-      </div>
-    </div>
+       <div>
+  <button class="logout-btn" onclick="showLogoutModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
+    <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
+    Log Out
+  </button>
+  <div class="sidebar-footer">
+    <div class="status-dot"></div> 
+    TEAM AURIX
+  </div>
+</div>
   </aside>
 
   <div class="main">
@@ -337,13 +269,20 @@ function getGuideMountains($pdo, $guideId) {
       <div class="page-heading"><i class="fas fa-chalkboard-user"></i> Guides</div>
       <div class="topbar-right">
         <div class="topbar-date" id="liveDate"></div>
-        <div class="topbar-user">
-          <div class="avatar"><?= $adminInitial ?></div>
-          <?= htmlspecialchars($adminName) ?>
-          <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
-        </div>
+        <div class="topbar-user" style="cursor: pointer;">
+    <div class="avatar" id="topbarAvatar">
+        <?php if (!empty($_SESSION['user_avatar'])): ?>
+            <img src="<?= htmlspecialchars($_SESSION['user_avatar']) ?>" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+        <?php else: ?>
+            <?= htmlspecialchars($adminInitial) ?>
+        <?php endif; ?>
+    </div>
+    <?= htmlspecialchars($adminName) ?>
+    <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+</div>
       </div>
     </div>
+
 
     <div class="content">
       <div class="section-header">
@@ -718,6 +657,57 @@ function updateDate() {
 setInterval(updateDate, 1000); 
 updateDate();
 renderGuides();
+// Make topbar user clickable
+document.addEventListener('DOMContentLoaded', function() {
+    const topbarUser = document.querySelector('.topbar-user');
+    console.log('Setting up topbar click listener');
+    if (topbarUser) {
+        topbarUser.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Topbar clicked - opening modal');
+            if (typeof openProfileModal === 'function') {
+                openProfileModal();
+            } else {
+                console.error('openProfileModal function not found!');
+                alert('Modal function not loaded yet. Please refresh the page.');
+            }
+        });
+    }
+});
+
 </script>
+<!-- Include Profile Modal -->
+<?php 
+
+$modalPath = __DIR__ . '/profile-modal.php';
+if (file_exists($modalPath)) {
+    include_once $modalPath;
+    echo '<!-- Profile modal loaded from: ' . $modalPath . ' -->';
+} else {
+    echo '<!-- Profile modal NOT found at: ' . $modalPath . ' -->';
+    // Fallback: try alternative path
+    $altPath = 'admin/profile-modal.php';
+    if (file_exists($altPath)) {
+        include_once $altPath;
+        echo '<!-- Profile modal loaded from: ' . $altPath . ' -->';
+    }
+}
+?>
+<?php 
+$logoutModalPath = __DIR__ . '/../../includes/logout-modal.php';
+if (file_exists($logoutModalPath)) {
+    include_once $logoutModalPath;
+    echo '<!-- Logout modal loaded from: ' . $logoutModalPath . ' -->';
+} else {
+    // Try alternative path from pages directory
+    $altLogoutPath = '../includes/logout-modal.php';
+    if (file_exists($altLogoutPath)) {
+        include_once $altLogoutPath;
+        echo '<!-- Logout modal loaded from: ' . $altLogoutPath . ' -->';
+    } else {
+        echo '<!-- Logout modal NOT found -->';
+    }
+}
+?>
 </body>
 </html>

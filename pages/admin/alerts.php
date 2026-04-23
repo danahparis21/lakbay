@@ -179,18 +179,16 @@ function getAlertSeverityClass($severity) {
         <li class="nav-item" data-href="/pages/admin/analytics.php"><i class="fas fa-chart-simple"></i> Analytics</li>
       </ul>
     </div>
-    <div>
-      <form method="POST" action="/pages/modals/logout.php" style="margin:0;padding:0;display:block;">
-        <button class="logout-btn" type="submit" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
-          <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
-          Log Out
-        </button>
-      </form>
-      <div class="sidebar-footer">
-        <div class="status-dot"></div> 
-        SYSTEM LIVE · V3
-      </div>
-    </div>
+       <div>
+  <button class="logout-btn" onclick="showLogoutModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
+    <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
+    Log Out
+  </button>
+  <div class="sidebar-footer">
+    <div class="status-dot"></div> 
+    TEAM AURIX
+  </div>
+</div>
   </aside>
 
   <div class="main">
@@ -198,11 +196,17 @@ function getAlertSeverityClass($severity) {
       <div class="page-heading"><i class="fas fa-bell"></i> Alerts</div>
       <div class="topbar-right">
         <div class="topbar-date" id="liveDate"></div>
-        <div class="topbar-user">
-          <div class="avatar"><?= htmlspecialchars($adminInitial) ?></div>
-          <?= htmlspecialchars($adminName) ?>
-          <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
-        </div>
+        <div class="topbar-user" style="cursor: pointer;">
+    <div class="avatar" id="topbarAvatar">
+        <?php if (!empty($_SESSION['user_avatar'])): ?>
+            <img src="<?= htmlspecialchars($_SESSION['user_avatar']) ?>" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+        <?php else: ?>
+            <?= htmlspecialchars($adminInitial) ?>
+        <?php endif; ?>
+    </div>
+    <?= htmlspecialchars($adminName) ?>
+    <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+</div>
       </div>
     </div>
 
@@ -382,8 +386,58 @@ function formatDate(dateStr) {
 
 // Load recent broadcasts if the endpoint exists
 // loadRecentBroadcasts();
+// Make topbar user clickable
+document.addEventListener('DOMContentLoaded', function() {
+    const topbarUser = document.querySelector('.topbar-user');
+    console.log('Setting up topbar click listener');
+    if (topbarUser) {
+        topbarUser.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Topbar clicked - opening modal');
+            if (typeof openProfileModal === 'function') {
+                openProfileModal();
+            } else {
+                console.error('openProfileModal function not found!');
+                alert('Modal function not loaded yet. Please refresh the page.');
+            }
+        });
+    }
+});
+
 </script>
+<!-- Include Profile Modal -->
+<?php 
 
-
+$modalPath = __DIR__ . '/profile-modal.php';
+if (file_exists($modalPath)) {
+    include_once $modalPath;
+    echo '<!-- Profile modal loaded from: ' . $modalPath . ' -->';
+} else {
+    echo '<!-- Profile modal NOT found at: ' . $modalPath . ' -->';
+    // Fallback: try alternative path
+    $altPath = 'admin/profile-modal.php';
+    if (file_exists($altPath)) {
+        include_once $altPath;
+        echo '<!-- Profile modal loaded from: ' . $altPath . ' -->';
+    }
+}
+?>
+<!-- Include Logout Modal -->
+<?php 
+$logoutModalPath = __DIR__ . '/../../includes/logout-modal.php';
+if (file_exists($logoutModalPath)) {
+    include_once $logoutModalPath;
+    echo '<!-- Logout modal loaded from: ' . $logoutModalPath . ' -->';
+} else {
+    // Try alternative path from pages directory
+    $altLogoutPath = '../includes/logout-modal.php';
+    if (file_exists($altLogoutPath)) {
+        include_once $altLogoutPath;
+        echo '<!-- Logout modal loaded from: ' . $altLogoutPath . ' -->';
+    } else {
+        echo '<!-- Logout modal NOT found -->';
+    }
+}
+?>
 </body>
 </html>

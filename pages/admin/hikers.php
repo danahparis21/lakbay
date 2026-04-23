@@ -559,6 +559,54 @@ function formatDate($dateStr) {
     @media (max-width: 960px) {
       .hikers-grid, .bookings-grid, .camping-grid { grid-template-columns: 1fr; }
     }
+    /* Replace your existing modal-overlay and modal styles with these */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,12,18,0.55);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;  /* Changed from flex-start to center */
+  justify-content: center;
+  padding: 20px;  /* Reduced padding */
+  overflow-y: auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.modal-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.modal {
+  background: white;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 640px;
+  margin: auto;  /* Add this for centering */
+  box-shadow: 0 32px 64px -16px rgba(0,0,0,0.22);
+  transform: translateY(14px);
+  transition: transform 0.25s ease;
+  overflow: hidden;
+}
+
+/* Specifically target logout modal to ensure it's properly centered */
+.modal-overlay:has(.logout-modal) {
+  align-items: center;
+  justify-content: center;
+}
+
+.modal.logout-modal {
+  max-width: 420px;
+  width: 90%;
+  margin: auto;
+}
+
+
   </style>
 </head>
 <body data-page="hikers">
@@ -593,18 +641,16 @@ function formatDate($dateStr) {
         <li class="nav-item" data-href="/pages/admin/analytics.php"><i class="fas fa-chart-simple"></i> Analytics</li>
       </ul>
     </div>
-    <div>
-      <form method="POST" action="/pages/modals/logout.php" style="margin:0;padding:0;display:block;">
-        <button class="logout-btn" type="submit" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
-          <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
-          Log Out
-        </button>
-      </form>
-      <div class="sidebar-footer">
-        <div class="status-dot"></div> 
-        SYSTEM LIVE · V3
-      </div>
-    </div>
+      <div>
+  <button class="logout-btn" onclick="showLogoutModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
+    <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
+    Log Out
+  </button>
+  <div class="sidebar-footer">
+    <div class="status-dot"></div> 
+    TEAM AURIX
+  </div>
+</div>
   </aside>
 
   <!-- MAIN -->
@@ -613,11 +659,17 @@ function formatDate($dateStr) {
       <div class="page-heading"><i class="fas fa-person-hiking"></i> Hikers</div>
       <div class="topbar-right">
         <div class="topbar-date" id="liveDate"></div>
-        <div class="topbar-user">
-          <div class="avatar"><?= htmlspecialchars($adminInitial) ?></div>
-          <?= htmlspecialchars($adminName) ?>
-          <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
-        </div>
+         <div class="topbar-user" style="cursor: pointer;">
+    <div class="avatar" id="topbarAvatar">
+        <?php if (!empty($_SESSION['user_avatar'])): ?>
+            <img src="<?= htmlspecialchars($_SESSION['user_avatar']) ?>" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+        <?php else: ?>
+            <?= htmlspecialchars($adminInitial) ?>
+        <?php endif; ?>
+    </div>
+    <?= htmlspecialchars($adminName) ?>
+    <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+</div>
       </div>
     </div>
 
@@ -1033,6 +1085,57 @@ setInterval(updateDate, 1000);
 renderHikers(hikersData);
 renderBookings(bookingsData);
 renderCamping(campingData);
+// Make topbar user clickable
+document.addEventListener('DOMContentLoaded', function() {
+    const topbarUser = document.querySelector('.topbar-user');
+    console.log('Setting up topbar click listener');
+    if (topbarUser) {
+        topbarUser.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Topbar clicked - opening modal');
+            if (typeof openProfileModal === 'function') {
+                openProfileModal();
+            } else {
+                console.error('openProfileModal function not found!');
+                alert('Modal function not loaded yet. Please refresh the page.');
+            }
+        });
+    }
+});
+
 </script>
+<!-- Include Profile Modal -->
+<?php 
+
+$modalPath = __DIR__ . '/profile-modal.php';
+if (file_exists($modalPath)) {
+    include_once $modalPath;
+    echo '<!-- Profile modal loaded from: ' . $modalPath . ' -->';
+} else {
+    echo '<!-- Profile modal NOT found at: ' . $modalPath . ' -->';
+    // Fallback: try alternative path
+    $altPath = 'admin/profile-modal.php';
+    if (file_exists($altPath)) {
+        include_once $altPath;
+        echo '<!-- Profile modal loaded from: ' . $altPath . ' -->';
+    }
+}
+?>
+<?php 
+$logoutModalPath = __DIR__ . '/../../includes/logout-modal.php';
+if (file_exists($logoutModalPath)) {
+    include_once $logoutModalPath;
+    echo '<!-- Logout modal loaded from: ' . $logoutModalPath . ' -->';
+} else {
+    // Try alternative path from pages directory
+    $altLogoutPath = '../includes/logout-modal.php';
+    if (file_exists($altLogoutPath)) {
+        include_once $altLogoutPath;
+        echo '<!-- Logout modal loaded from: ' . $altLogoutPath . ' -->';
+    } else {
+        echo '<!-- Logout modal NOT found -->';
+    }
+}
+?>
 </body>
 </html>

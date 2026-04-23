@@ -15,86 +15,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($pass, $user['password'])) {
-    session_start();
-    $_SESSION['user_id']   = $user['id'];
-    $_SESSION['user_name'] = $user['name'];
-    $_SESSION['user_role'] = $user['role'];
+            session_start();
+            $_SESSION['user_id']   = $user['id'];
+            $_SESSION['user_name'] = $user['name'];
+            $_SESSION['user_email'] = $user['email'];
+            $_SESSION['user_role'] = $user['role'];
+            $_SESSION['user_phone'] = $user['phone'] ?? '';
+            $_SESSION['user_avatar'] = $user['avatar'] ?? '';
+            $_SESSION['created_at'] = $user['created_at'];
+            
+            // Update last login timestamp
+            $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+            $updateStmt->execute([$user['id']]);
 
-    $map = [
-        'hiker'   => '../../pages/dashboard.php',
-        'guide'   => '../../pages/dashboard-guide.php',
-        'manager' => '../../pages/dashboard-manager.php',
-        'admin'   => '../../pages/dashboard-admin.php',
-    ];
-    $dest = $map[$user['role']] ?? '../../pages/dashboard.php';
+            $map = [
+                'hiker'   => '../../pages/dashboard.php',
+                'guide'   => '../../pages/dashboard-guide.php',
+                'manager' => '../../pages/dashboard-manager.php',
+                'admin'   => '../../pages/dashboard-admin.php',
+            ];
+            $dest = $map[$user['role']] ?? '../../pages/dashboard.php';
 
-    $roleLabels = [
-        'hiker'   => 'Hiker',
-        'guide'   => 'Tour Guide',
-        'manager' => 'Mountain Manager',
-        'admin'   => 'Tourism Admin',
-    ];
-    $roleMessages = [
-        'hiker'   => 'Preparing your trail exploration...',
-        'guide'   => 'Loading your guide dashboard and assigned trails...',
-        'manager' => 'Fetching your mountain management tools...',
-        'admin'   => 'Setting up your admin control panel...',
-    ];
+            $roleLabels = [
+                'hiker'   => 'Hiker',
+                'guide'   => 'Tour Guide',
+                'manager' => 'Mountain Manager',
+                'admin'   => 'Tourism Admin',
+            ];
+            $roleMessages = [
+                'hiker'   => 'Preparing your trail exploration...',
+                'guide'   => 'Loading your guide dashboard and assigned trails...',
+                'manager' => 'Fetching your mountain management tools...',
+                'admin'   => 'Setting up your admin control panel...',
+            ];
 
-    $firstName   = explode(' ', $user['name'])[0];
-    $roleLabel   = $roleLabels[$user['role']]   ?? 'User';
-    $roleMessage = $roleMessages[$user['role']] ?? 'Loading your dashboard...';
-    $roleClass   = 'role-' . $user['role'];
+            $firstName   = explode(' ', $user['name'])[0];
+            $roleLabel   = $roleLabels[$user['role']]   ?? 'User';
+            $roleMessage = $roleMessages[$user['role']] ?? 'Loading your dashboard...';
+            $roleClass   = 'role-' . $user['role'];
 
-    // Show popup then redirect
-    echo "
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset='UTF-8'>
-      <meta name='viewport' content='width=device-width, initial-scale=1'>
-      <title>Welcome — LAKBAY</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0;}
-        body{font-family:'Inter','Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#D4E1E7,#98BBD7,#254A5A);}
-        .popup{background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(8,37,53,0.18);padding:2.5rem 2rem;max-width:380px;width:90%;text-align:center;animation:popIn .4s cubic-bezier(.34,1.56,.64,1) both;}
-        @keyframes popIn{from{opacity:0;transform:scale(.85) translateY(20px);}to{opacity:1;transform:scale(1) translateY(0);}}
-        .avatar{width:72px;height:72px;border-radius:50%;background:#254A5A;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;animation:avatarPop .5s .15s cubic-bezier(.34,1.56,.64,1) both;}
-        @keyframes avatarPop{from{opacity:0;transform:scale(0);}to{opacity:1;transform:scale(1);}}
-        .avatar svg{width:34px;height:34px;stroke:#fff;fill:none;stroke-width:2;}
-        .role-badge{display:inline-block;padding:.3rem .85rem;border-radius:20px;font-size:.78rem;font-weight:600;margin-bottom:1rem;letter-spacing:.03em;}
-        .role-hiker{background:#E1F5EE;color:#0F6E56;}
-        .role-admin{background:#EEEDFE;color:#3C3489;}
-        .role-manager{background:#FAEEDA;color:#854F0B;}
-        .role-guide{background:#E6F1FB;color:#0C447C;}
-        h2{font-size:1.5rem;font-weight:600;color:#082535;margin-bottom:.35rem;}
-        h2 span{color:#254A5A;}
-        p{font-size:.9rem;color:#6b8a9a;margin-bottom:1.5rem;line-height:1.6;}
-        .progress-bar{height:4px;background:#D4E1E7;border-radius:4px;overflow:hidden;margin-bottom:1.25rem;}
-        .progress-fill{height:100%;background:#254A5A;border-radius:4px;animation:fill 2.5s linear forwards;}
-        @keyframes fill{from{width:0%;}to{width:100%;}}
-        .dots{display:flex;justify-content:center;gap:6px;}
-        .dot{width:7px;height:7px;border-radius:50%;background:#254A5A;opacity:.25;animation:pulse 1.2s ease-in-out infinite;}
-        .dot:nth-child(2){animation-delay:.2s;}
-        .dot:nth-child(3){animation-delay:.4s;}
-        @keyframes pulse{0%,100%{opacity:.25;}50%{opacity:1;}}
-      </style>
-    </head>
-    <body>
-      <div class='popup'>
-        <div class='avatar'>
-          <svg viewBox='0 0 24 24'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>
-        </div>
-        <span class='role-badge $roleClass'>$roleLabel</span>
-        <h2>Welcome back, <span>$firstName!</span></h2>
-        <p>$roleMessage</p>
-        <div class='progress-bar'><div class='progress-fill'></div></div>
-        <div class='dots'><div class='dot'></div><div class='dot'></div><div class='dot'></div></div>
-      </div>
-      <script>setTimeout(()=>{ window.location.href='$dest'; }, 2600);</script>
-    </body>
-    </html>";
-    exit;
+            // Show popup then redirect
+            echo "
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset='UTF-8'>
+              <meta name='viewport' content='width=device-width, initial-scale=1'>
+              <title>Welcome — LAKBAY</title>
+              <style>
+                *{box-sizing:border-box;margin:0;padding:0;}
+                body{font-family:'Inter','Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#D4E1E7,#98BBD7,#254A5A);}
+                .popup{background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(8,37,53,0.18);padding:2.5rem 2rem;max-width:380px;width:90%;text-align:center;animation:popIn .4s cubic-bezier(.34,1.56,.64,1) both;}
+                @keyframes popIn{from{opacity:0;transform:scale(.85) translateY(20px);}to{opacity:1;transform:scale(1) translateY(0);}}
+                .avatar{width:72px;height:72px;border-radius:50%;background:#254A5A;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;animation:avatarPop .5s .15s cubic-bezier(.34,1.56,.64,1) both;}
+                @keyframes avatarPop{from{opacity:0;transform:scale(0);}to{opacity:1;transform:scale(1);}}
+                .avatar svg{width:34px;height:34px;stroke:#fff;fill:none;stroke-width:2;}
+                .role-badge{display:inline-block;padding:.3rem .85rem;border-radius:20px;font-size:.78rem;font-weight:600;margin-bottom:1rem;letter-spacing:.03em;}
+                .role-hiker{background:#E1F5EE;color:#0F6E56;}
+                .role-admin{background:#EEEDFE;color:#3C3489;}
+                .role-manager{background:#FAEEDA;color:#854F0B;}
+                .role-guide{background:#E6F1FB;color:#0C447C;}
+                h2{font-size:1.5rem;font-weight:600;color:#082535;margin-bottom:.35rem;}
+                h2 span{color:#254A5A;}
+                p{font-size:.9rem;color:#6b8a9a;margin-bottom:1.5rem;line-height:1.6;}
+                .progress-bar{height:4px;background:#D4E1E7;border-radius:4px;overflow:hidden;margin-bottom:1.25rem;}
+                .progress-fill{height:100%;background:#254A5A;border-radius:4px;animation:fill 2.5s linear forwards;}
+                @keyframes fill{from{width:0%;}to{width:100%;}}
+                .dots{display:flex;justify-content:center;gap:6px;}
+                .dot{width:7px;height:7px;border-radius:50%;background:#254A5A;opacity:.25;animation:pulse 1.2s ease-in-out infinite;}
+                .dot:nth-child(2){animation-delay:.2s;}
+                .dot:nth-child(3){animation-delay:.4s;}
+                @keyframes pulse{0%,100%{opacity:.25;}50%{opacity:1;}}
+              </style>
+            </head>
+            <body>
+              <div class='popup'>
+                <div class='avatar'>
+                  <svg viewBox='0 0 24 24'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>
+                </div>
+                <span class='role-badge $roleClass'>$roleLabel</span>
+                <h2>Welcome back, <span>$firstName!</span></h2>
+                <p>$roleMessage</p>
+                <div class='progress-bar'><div class='progress-fill'></div></div>
+                <div class='dots'><div class='dot'></div><div class='dot'></div><div class='dot'></div></div>
+              </div>
+              <script>setTimeout(()=>{ window.location.href='$dest'; }, 2600);</script>
+            </body>
+            </html>";
+            exit;
 
         } else {
             $error = 'Invalid email or password.';
