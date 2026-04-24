@@ -1,3 +1,127 @@
+<?php
+// signup.php - Lakbay Signup Page with Backend Integration
+require_once __DIR__ . '/../config/db.php';
+
+$error = '';
+$success = false;
+$errors = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Get form data
+    $email = trim($_POST['email'] ?? '');
+    $username = trim($_POST['username'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $first_name = trim($_POST['first_name'] ?? '');
+    $last_name = trim($_POST['last_name'] ?? '');
+    $mobile = trim($_POST['mobile'] ?? '');
+    $region = trim($_POST['region'] ?? '');
+    $hiking_level = trim($_POST['hiking_level'] ?? '');
+    
+    // Validate email
+    if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors['email'] = 'Please enter a valid email address.';
+    } else {
+        // Check if email already exists
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        if ($stmt->fetch()) {
+            $errors['email'] = 'Email already registered. Please login instead.';
+        }
+    }
+    
+    // Validate username
+    if (empty($username)) {
+        $errors['username'] = 'Username is required.';
+    } elseif (strlen($username) < 3 || strlen($username) > 20) {
+        $errors['username'] = 'Username must be 3-20 characters.';
+    } elseif (!preg_match('/^[a-zA-Z0-9_]+$/', $username)) {
+        $errors['username'] = 'Username can only contain letters, numbers, and underscores.';
+    } else {
+        // Check if username already exists
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+        $stmt->execute([$username]);
+        if ($stmt->fetch()) {
+            $errors['username'] = 'Username already taken. Please choose another.';
+        }
+    }
+    
+    // Validate password
+    if (empty($password)) {
+        $errors['password'] = 'Password is required.';
+    } elseif (strlen($password) < 8) {
+        $errors['password'] = 'Password must be at least 8 characters.';
+    } elseif (!preg_match('/[A-Z]/', $password)) {
+        $errors['password'] = 'Password must contain at least one uppercase letter.';
+    } elseif (!preg_match('/[0-9]/', $password)) {
+        $errors['password'] = 'Password must contain at least one number.';
+    } elseif (!preg_match('/[^a-zA-Z0-9]/', $password)) {
+        $errors['password'] = 'Password must contain at least one special character.';
+    }
+    
+    // Validate name
+    if (empty($first_name)) {
+        $errors['first_name'] = 'First name is required.';
+    }
+    if (empty($last_name)) {
+        $errors['last_name'] = 'Last name is required.';
+    }
+    
+    // Validate mobile (optional but if provided, validate format)
+    if (!empty($mobile) && !preg_match('/^[0-9+\-\s()]+$/', $mobile)) {
+        $errors['mobile'] = 'Please enter a valid mobile number.';
+    }
+    
+    // Validate hiking level
+    $valid_levels = ['beginner', 'intermediate', 'advanced'];
+    if (empty($hiking_level) || !in_array($hiking_level, $valid_levels)) {
+        $errors['hiking_level'] = 'Please select your hiking level.';
+    }
+    
+    // If no errors, create the user
+    if (empty($errors)) {
+        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+        $full_name = $first_name . ' ' . $last_name;
+        
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO users (name, email, username, password, phone, home_region, hiking_level, role, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'hiker', NOW())
+            ");
+            
+            $stmt->execute([
+                $full_name,
+                $email,
+                $username,
+                $hashed_password,
+                $mobile ?: null,
+                $region ?: null,
+                $hiking_level
+            ]);
+            
+            $user_id = $pdo->lastInsertId();
+            
+            // Auto-login after signup
+            session_start();
+            $_SESSION['user_id'] = $user_id;
+            $_SESSION['user_name'] = $full_name;
+            $_SESSION['user_email'] = $email;
+            $_SESSION['user_role'] = 'hiker';
+            $_SESSION['user_phone'] = $mobile;
+            $_SESSION['username'] = $username;
+            
+            $success = true;
+            
+            // Redirect to hiker profile page
+            header('Location: ../hiker frontend/explore.php');
+            exit;
+            
+        } catch (PDOException $e) {
+            $error = 'Registration failed: ' . $e->getMessage();
+        }
+    }
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -470,7 +594,6 @@
     .alert { padding: 12px 16px; border-radius: 12px; font-size: 13px; margin-bottom: 18px; display: none; align-items: center; gap: 10px; }
     .alert.show { display: flex; }
     .alert-error { background: rgba(192,57,43,0.08); color: var(--danger); border: 1px solid rgba(192,57,43,0.2); }
-    .alert svg { width: 16px; height: 16px; stroke: currentColor; fill: none; flex-shrink: 0; }
 
     /* Mobile responsive */
     @media (max-width: 960px) {
@@ -546,182 +669,187 @@
         <span class="step-label" id="lbl3">Preferences</span>
       </div>
 
-      <div class="alert alert-error" id="signupAlert">
+      <?php if (!empty($errors) || $error): ?>
+      <div class="alert alert-error show" id="phpErrorAlert">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span id="signupAlertMsg">Please fix the errors above.</span>
+        <span><?= $error ?: 'Please correct the errors below.' ?></span>
       </div>
+      <?php endif; ?>
 
-      <!-- STEP 1: Account -->
-      <div class="step active" id="step1">
-        <p class="form-eyebrow">Step 1 of 3</p>
-        <h2 class="form-title">Create your<br>account</h2>
-        <p class="form-subtitle">Already a hiker? <a href="login.php">Sign in →</a></p>
+      <form method="POST" action="" id="signupForm">
+        <!-- STEP 1: Account -->
+        <div class="step active" id="step1">
+          <p class="form-eyebrow">Step 1 of 3</p>
+          <h2 class="form-title">Create your<br>account</h2>
+          <p class="form-subtitle">Already a hiker? <a href="login.php">Sign in →</a></p>
 
-        <div class="field-group">
-          <label class="field-label">Email address</label>
-          <div class="field-wrapper">
-            <svg class="field-icon" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            <input type="email" id="regEmail" class="field-input" placeholder="you@example.com" oninput="clearFieldErr('emailErr')">
+          <div class="field-group">
+            <label class="field-label">Email address</label>
+            <div class="field-wrapper">
+              <svg class="field-icon" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <input type="email" id="regEmail" name="email" class="field-input" placeholder="you@example.com" value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
+            </div>
+            <p class="field-error" id="emailErr"><?= isset($errors['email']) ? htmlspecialchars($errors['email']) : '' ?></p>
           </div>
-          <p class="field-error" id="emailErr">Please enter a valid email address.</p>
-        </div>
 
-        <div class="field-group">
-          <label class="field-label">Username</label>
-          <div class="field-wrapper">
-            <svg class="field-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <input type="text" id="regUsername" class="field-input" placeholder="trailblazer_ph" oninput="checkUsername(this.value)" maxlength="20">
-            <span class="username-status" id="usernameStatus"></span>
-          </div>
-          <p class="field-error" id="usernameErr">Username is required (3–20 chars, letters/numbers/_).</p>
-        </div>
-
-        <div class="field-group">
-          <label class="field-label">Password</label>
-          <div class="field-wrapper">
-            <svg class="field-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <input type="password" id="regPassword" class="field-input" placeholder="At least 8 characters" oninput="checkPwd(this.value)">
-            <button type="button" class="eye-toggle" onclick="togglePwd('regPassword', this)">
-              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-          </div>
-          <div class="pwd-strength-bar"><div class="pwd-strength-fill" id="pwdStrengthFill"></div></div>
-          <div class="pwd-rules">
-            <div class="pwd-rule" id="rule-len"><div class="pwd-rule-icon">✕</div>Min 8 characters</div>
-            <div class="pwd-rule" id="rule-upper"><div class="pwd-rule-icon">✕</div>1 uppercase letter</div>
-            <div class="pwd-rule" id="rule-num"><div class="pwd-rule-icon">✕</div>1 number</div>
-            <div class="pwd-rule" id="rule-special"><div class="pwd-rule-icon">✕</div>1 special character</div>
-          </div>
-          <p class="field-error" id="passErr">Password must meet all requirements.</p>
-        </div>
-
-        <div class="field-group">
-          <label class="field-label">Re-enter Password</label>
-          <div class="field-wrapper">
-            <svg class="field-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <input type="password" id="regConfirm" class="field-input" placeholder="Repeat your password" oninput="checkPasswordMatch()">
-            <button type="button" class="eye-toggle" onclick="togglePwd('regConfirm', this)">
-              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-          </div>
-          <p class="field-error" id="confirmErr">Passwords do not match.</p>
-        </div>
-
-        <button class="btn-next" onclick="goStep2()">Continue →</button>
-      </div>
-
-      <!-- STEP 2: Profile -->
-      <div class="step" id="step2">
-        <p class="form-eyebrow">Step 2 of 3</p>
-        <h2 class="form-title">About<br>yourself</h2>
-        <p class="form-subtitle">Tell us a bit so we can personalize your experience.</p>
-
-        <div class="field-row">
-          <div class="field-group" style="margin-bottom:0">
-            <label class="field-label">First Name</label>
+          <div class="field-group">
+            <label class="field-label">Username</label>
             <div class="field-wrapper">
               <svg class="field-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <input type="text" id="regFirst" class="field-input" placeholder="Maria" oninput="clearFieldErr('firstErr')">
+              <input type="text" id="regUsername" name="username" class="field-input" placeholder="trailblazer_ph" value="<?= htmlspecialchars($_POST['username'] ?? '') ?>" oninput="checkUsername(this.value)" maxlength="20">
+              <span class="username-status" id="usernameStatus"></span>
             </div>
-            <p class="field-error" id="firstErr">Required.</p>
+            <p class="field-error" id="usernameErr"><?= isset($errors['username']) ? htmlspecialchars($errors['username']) : 'Username is required (3–20 chars, letters/numbers/_).' ?></p>
           </div>
-          <div class="field-group" style="margin-bottom:0">
-            <label class="field-label">Last Name</label>
+
+          <div class="field-group">
+            <label class="field-label">Password</label>
             <div class="field-wrapper">
-              <svg class="field-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <input type="text" id="regLast" class="field-input" placeholder="Santos" oninput="clearFieldErr('lastErr')">
+              <svg class="field-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input type="password" id="regPassword" name="password" class="field-input" placeholder="At least 8 characters" oninput="checkPwd(this.value)">
+              <button type="button" class="eye-toggle" onclick="togglePwd('regPassword', this)">
+                <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
             </div>
-            <p class="field-error" id="lastErr">Required.</p>
+            <div class="pwd-strength-bar"><div class="pwd-strength-fill" id="pwdStrengthFill"></div></div>
+            <div class="pwd-rules">
+              <div class="pwd-rule" id="rule-len"><div class="pwd-rule-icon">✕</div>Min 8 characters</div>
+              <div class="pwd-rule" id="rule-upper"><div class="pwd-rule-icon">✕</div>1 uppercase letter</div>
+              <div class="pwd-rule" id="rule-num"><div class="pwd-rule-icon">✕</div>1 number</div>
+              <div class="pwd-rule" id="rule-special"><div class="pwd-rule-icon">✕</div>1 special character</div>
+            </div>
+            <p class="field-error" id="passErr"><?= isset($errors['password']) ? htmlspecialchars($errors['password']) : '' ?></p>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">Re-enter Password</label>
+            <div class="field-wrapper">
+              <svg class="field-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input type="password" id="regConfirm" class="field-input" placeholder="Repeat your password" oninput="checkPasswordMatch()">
+              <button type="button" class="eye-toggle" onclick="togglePwd('regConfirm', this)">
+                <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <p class="field-error" id="confirmErr">Passwords do not match.</p>
+          </div>
+
+          <button type="button" class="btn-next" onclick="goStep2()">Continue →</button>
+        </div>
+
+        <!-- STEP 2: Profile -->
+        <div class="step" id="step2">
+          <p class="form-eyebrow">Step 2 of 3</p>
+          <h2 class="form-title">About<br>yourself</h2>
+          <p class="form-subtitle">Tell us a bit so we can personalize your experience.</p>
+
+          <div class="field-row">
+            <div class="field-group" style="margin-bottom:0">
+              <label class="field-label">First Name</label>
+              <div class="field-wrapper">
+                <svg class="field-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <input type="text" id="regFirst" name="first_name" class="field-input" placeholder="Maria" value="<?= htmlspecialchars($_POST['first_name'] ?? '') ?>">
+              </div>
+              <p class="field-error" id="firstErr"><?= isset($errors['first_name']) ? htmlspecialchars($errors['first_name']) : '' ?></p>
+            </div>
+            <div class="field-group" style="margin-bottom:0">
+              <label class="field-label">Last Name</label>
+              <div class="field-wrapper">
+                <svg class="field-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <input type="text" id="regLast" name="last_name" class="field-input" placeholder="Santos" value="<?= htmlspecialchars($_POST['last_name'] ?? '') ?>">
+              </div>
+              <p class="field-error" id="lastErr"><?= isset($errors['last_name']) ? htmlspecialchars($errors['last_name']) : '' ?></p>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">Mobile number</label>
+            <div class="field-wrapper">
+              <svg class="field-icon" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.48 6.48l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              <input type="tel" id="regMobile" name="mobile" class="field-input" placeholder="+63 912 345 6789" value="<?= htmlspecialchars($_POST['mobile'] ?? '') ?>">
+            </div>
+            <p class="field-error" id="mobileErr"><?= isset($errors['mobile']) ? htmlspecialchars($errors['mobile']) : '' ?></p>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">Home Region</label>
+            <select id="regRegion" name="region" class="region-select">
+              <option value="">Select your region...</option>
+              <option value="Metro Manila (NCR)" <?= (($_POST['region'] ?? '') == 'Metro Manila (NCR)') ? 'selected' : '' ?>>Metro Manila (NCR)</option>
+              <option value="Ilocos Region (I)" <?= (($_POST['region'] ?? '') == 'Ilocos Region (I)') ? 'selected' : '' ?>>Ilocos Region (I)</option>
+              <option value="Cagayan Valley (II)" <?= (($_POST['region'] ?? '') == 'Cagayan Valley (II)') ? 'selected' : '' ?>>Cagayan Valley (II)</option>
+              <option value="Central Luzon (III)" <?= (($_POST['region'] ?? '') == 'Central Luzon (III)') ? 'selected' : '' ?>>Central Luzon (III)</option>
+              <option value="CALABARZON (IV-A)" <?= (($_POST['region'] ?? '') == 'CALABARZON (IV-A)') ? 'selected' : '' ?>>CALABARZON (IV-A)</option>
+              <option value="MIMAROPA (IV-B)" <?= (($_POST['region'] ?? '') == 'MIMAROPA (IV-B)') ? 'selected' : '' ?>>MIMAROPA (IV-B)</option>
+              <option value="Bicol Region (V)" <?= (($_POST['region'] ?? '') == 'Bicol Region (V)') ? 'selected' : '' ?>>Bicol Region (V)</option>
+              <option value="Western Visayas (VI)" <?= (($_POST['region'] ?? '') == 'Western Visayas (VI)') ? 'selected' : '' ?>>Western Visayas (VI)</option>
+              <option value="Central Visayas (VII)" <?= (($_POST['region'] ?? '') == 'Central Visayas (VII)') ? 'selected' : '' ?>>Central Visayas (VII)</option>
+              <option value="Eastern Visayas (VIII)" <?= (($_POST['region'] ?? '') == 'Eastern Visayas (VIII)') ? 'selected' : '' ?>>Eastern Visayas (VIII)</option>
+              <option value="Zamboanga Peninsula (IX)" <?= (($_POST['region'] ?? '') == 'Zamboanga Peninsula (IX)') ? 'selected' : '' ?>>Zamboanga Peninsula (IX)</option>
+              <option value="Northern Mindanao (X)" <?= (($_POST['region'] ?? '') == 'Northern Mindanao (X)') ? 'selected' : '' ?>>Northern Mindanao (X)</option>
+              <option value="Davao Region (XI)" <?= (($_POST['region'] ?? '') == 'Davao Region (XI)') ? 'selected' : '' ?>>Davao Region (XI)</option>
+              <option value="SOCCSKSARGEN (XII)" <?= (($_POST['region'] ?? '') == 'SOCCSKSARGEN (XII)') ? 'selected' : '' ?>>SOCCSKSARGEN (XII)</option>
+              <option value="Caraga (XIII)" <?= (($_POST['region'] ?? '') == 'Caraga (XIII)') ? 'selected' : '' ?>>Caraga (XIII)</option>
+              <option value="BARMM" <?= (($_POST['region'] ?? '') == 'BARMM') ? 'selected' : '' ?>>BARMM</option>
+              <option value="CAR (Cordillera)" <?= (($_POST['region'] ?? '') == 'CAR (Cordillera)') ? 'selected' : '' ?>>CAR (Cordillera)</option>
+            </select>
+          </div>
+
+          <div class="btn-row">
+            <button type="button" class="btn-back" onclick="goStep(1)">← Back</button>
+            <button type="button" class="btn-next" onclick="goStep3()">Continue →</button>
           </div>
         </div>
 
-        <div class="field-group">
-          <label class="field-label">Mobile number</label>
-          <div class="field-wrapper">
-            <svg class="field-icon" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.48 6.48l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-            <input type="tel" id="regMobile" class="field-input" placeholder="+63 912 345 6789" oninput="clearFieldErr('mobileErr')">
+        <!-- STEP 3: Preferences -->
+        <div class="step" id="step3">
+          <p class="form-eyebrow">Step 3 of 3</p>
+          <h2 class="form-title">Your hiking<br>level</h2>
+          <p class="form-subtitle">We'll match you with the right trails.</p>
+
+          <div class="field-group">
+            <label class="field-label">Experience Level</label>
+            <div class="level-grid">
+              <div class="level-card <?= (($_POST['hiking_level'] ?? '') == 'beginner') ? 'selected' : '' ?>" onclick="selectLevel('beginner', this)">
+                <div class="level-icon">
+                  <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-3-3m3 3 3-3M5 3h14M5 21h14"/><path d="M7 7h2M15 7h2M9 11h6"/></svg>
+                </div>
+                <span class="level-name">Beginner</span>
+                <span class="level-desc">0–5 hikes</span>
+              </div>
+              <div class="level-card <?= (($_POST['hiking_level'] ?? '') == 'intermediate') ? 'selected' : '' ?>" onclick="selectLevel('intermediate', this)">
+                <div class="level-icon">
+                  <svg viewBox="0 0 24 24"><path d="M12 3v6m0 0-3-3m3 3 3-3"/><path d="M12 21v-6m0 0 3 3m-3-3-3 3"/><path d="M5 12h14"/><circle cx="12" cy="12" r="9"/></svg>
+                </div>
+                <span class="level-name">Intermediate</span>
+                <span class="level-desc">6–20 hikes</span>
+              </div>
+              <div class="level-card <?= (($_POST['hiking_level'] ?? '') == 'advanced') ? 'selected' : '' ?>" onclick="selectLevel('advanced', this)">
+                <div class="level-icon">
+                  <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </div>
+                <span class="level-name">Advanced</span>
+                <span class="level-desc">20+ hikes</span>
+              </div>
+            </div>
+            <input type="hidden" name="hiking_level" id="hikingLevelInput" value="<?= htmlspecialchars($_POST['hiking_level'] ?? '') ?>">
+            <p class="field-error" id="levelErr"><?= isset($errors['hiking_level']) ? htmlspecialchars($errors['hiking_level']) : '' ?></p>
           </div>
-          <p class="field-error" id="mobileErr">Please enter a valid mobile number.</p>
-        </div>
 
-        <div class="field-group">
-          <label class="field-label">Home Region</label>
-          <select id="regRegion" class="region-select">
-            <option value="">Select your region...</option>
-            <option>Metro Manila (NCR)</option>
-            <option>Ilocos Region (I)</option>
-            <option>Cagayan Valley (II)</option>
-            <option>Central Luzon (III)</option>
-            <option>CALABARZON (IV-A)</option>
-            <option>MIMAROPA (IV-B)</option>
-            <option>Bicol Region (V)</option>
-            <option>Western Visayas (VI)</option>
-            <option>Central Visayas (VII)</option>
-            <option>Eastern Visayas (VIII)</option>
-            <option>Zamboanga Peninsula (IX)</option>
-            <option>Northern Mindanao (X)</option>
-            <option>Davao Region (XI)</option>
-            <option>SOCCSKSARGEN (XII)</option>
-            <option>Caraga (XIII)</option>
-            <option>BARMM</option>
-            <option>CAR (Cordillera)</option>
-          </select>
-        </div>
+          <label class="terms-check">
+            <input type="checkbox" id="termsCheck" name="terms" value="on" <?= isset($_POST['terms']) ? 'checked' : '' ?>>
+            <div class="custom-check"></div>
+            <span class="terms-text">I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>, and consent to receiving safety alerts.</span>
+          </label>
 
-        <div class="btn-row">
-          <button class="btn-back" onclick="goStep(1)">← Back</button>
-          <button class="btn-next" onclick="goStep3()">Continue →</button>
-        </div>
-      </div>
-
-      <!-- STEP 3: Preferences -->
-      <div class="step" id="step3">
-        <p class="form-eyebrow">Step 3 of 3</p>
-        <h2 class="form-title">Your hiking<br>level</h2>
-        <p class="form-subtitle">We'll match you with the right trails.</p>
-
-        <div class="field-group">
-          <label class="field-label">Experience Level</label>
-          <div class="level-grid">
-            <div class="level-card" onclick="selectLevel('beginner', this)">
-              <div class="level-icon">
-                <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-3-3m3 3 3-3M5 3h14M5 21h14"/><path d="M7 7h2M15 7h2M9 11h6"/></svg>
-              </div>
-              <span class="level-name">Beginner</span>
-              <span class="level-desc">0–5 hikes</span>
-            </div>
-            <div class="level-card" onclick="selectLevel('intermediate', this)">
-              <div class="level-icon">
-                <svg viewBox="0 0 24 24"><path d="M12 3v6m0 0-3-3m3 3 3-3"/><path d="M12 21v-6m0 0 3 3m-3-3-3 3"/><path d="M5 12h14"/><circle cx="12" cy="12" r="9"/></svg>
-              </div>
-              <span class="level-name">Intermediate</span>
-              <span class="level-desc">6–20 hikes</span>
-            </div>
-            <div class="level-card" onclick="selectLevel('advanced', this)">
-              <div class="level-icon">
-                <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              </div>
-              <span class="level-name">Advanced</span>
-              <span class="level-desc">20+ hikes</span>
-            </div>
+          <div class="btn-row">
+            <button type="button" class="btn-back" onclick="goStep(2)">← Back</button>
+            <button type="submit" class="btn-next" id="signupBtn">
+              <span class="btn-text">Create Account</span>
+              <div class="btn-loader" id="signupLoader"></div>
+            </button>
           </div>
-          <p class="field-error" id="levelErr">Please select your hiking level.</p>
         </div>
-
-        <label class="terms-check">
-          <input type="checkbox" id="termsCheck">
-          <div class="custom-check"></div>
-          <span class="terms-text">I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>, and consent to receiving safety alerts.</span>
-        </label>
-
-        <div class="btn-row">
-          <button class="btn-back" onclick="goStep(2)">← Back</button>
-          <button class="btn-next" onclick="handleSignup()" id="signupBtn">
-            <span class="btn-text">Create Account</span>
-            <div class="btn-loader" id="signupLoader"></div>
-          </button>
-        </div>
-      </div>
+      </form>
 
       <!-- SUCCESS -->
       <div class="success-screen" id="successScreen">
@@ -735,13 +863,13 @@
           </span>
         </h2>
         <p class="form-subtitle" style="text-align:center; margin-bottom:28px;">Your account is ready. Time to discover your next summit.</p>
-        <button class="btn-next" onclick="window.location.href='profile.php'">Go to my profile →</button>
+        <button class="btn-next" onclick="window.location.href='../pages/dashboard.php'">Go to my dashboard →</button>
       </div>
 
     </div>
   </div>
 
-  <!-- RIGHT VISUAL PANEL - Updated with Nasugbu mountains: Apayang, Batulao, Lantik, Talamitam -->
+  <!-- RIGHT VISUAL PANEL - Updated with Nasugbu mountains -->
   <div class="visual-panel">
     <div class="visual-bg"></div>
     <div class="visual-overlay"></div>
@@ -813,13 +941,26 @@
 </div>
 
 <script>
-  let selectedLevel = '';
+  let selectedLevel = '<?= htmlspecialchars($_POST['hiking_level'] ?? '') ?>';
   let pwdValid = false;
+  let usernameAvailable = false;
+
+  <?php if ($success): ?>
+  // Show success screen immediately
+  document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('step1').style.display = 'none';
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('step3').style.display = 'none';
+    document.querySelector('.progress-bar').style.display = 'none';
+    document.querySelector('.step-labels').style.display = 'none';
+    document.getElementById('signupForm').style.display = 'none';
+    document.getElementById('successScreen').classList.add('show');
+  });
+  <?php endif; ?>
 
   function goStep(n) {
     document.querySelectorAll('.step').forEach((s,i) => s.classList.toggle('active', i+1 === n));
     updateProgress(n);
-    document.getElementById('signupAlert').classList.remove('show');
   }
 
   function updateProgress(activeStep) {
@@ -841,11 +982,13 @@
     const confirmErr = document.getElementById('confirmErr');
     if (confirm.length > 0 && password !== confirm) {
       confirmErr.classList.add('show');
+      return false;
     } else if (confirm.length > 0 && password === confirm) {
       confirmErr.classList.remove('show');
-    } else {
-      confirmErr.classList.remove('show');
+      return true;
     }
+    confirmErr.classList.remove('show');
+    return true;
   }
 
   function goStep2() {
@@ -854,10 +997,12 @@
     const pass = document.getElementById('regPassword').value;
     const confirm = document.getElementById('regConfirm').value;
     let valid = true;
+    
     if(!email || !/\S+@\S+\.\S+/.test(email)) { showFieldErr('emailErr', 'Enter a valid email.'); valid = false; } else { clearFieldErr('emailErr'); }
-    if(!uname || uname.length < 3 || !/^[a-zA-Z0-9_]+$/.test(uname)) { showFieldErr('usernameErr', 'Username: 3–20 chars, letters/numbers/_ only.'); valid = false; } else { clearFieldErr('usernameErr'); }
+    if(!uname || uname.length < 3 || !/^[a-zA-Z0-9_]+$/.test(uname)) { showFieldErr('usernameErr', 'Username: 3–20 chars, letters/numbers/_ only.'); valid = false; } else if (!usernameAvailable) { showFieldErr('usernameErr', 'Please check username availability.'); valid = false; } else { clearFieldErr('usernameErr'); }
     if(!pwdValid) { showFieldErr('passErr', 'Password must meet all 4 requirements.'); valid = false; } else { clearFieldErr('passErr'); }
     if(pass !== confirm) { showFieldErr('confirmErr', 'Passwords do not match.'); valid = false; } else { clearFieldErr('confirmErr'); }
+    
     if(valid) goStep(2);
   }
 
@@ -866,50 +1011,57 @@
     const last = document.getElementById('regLast').value.trim();
     const mobile = document.getElementById('regMobile').value.trim();
     let valid = true;
+    
     if(!first) { showFieldErr('firstErr', 'First name is required.'); valid = false; } else { clearFieldErr('firstErr'); }
     if(!last) { showFieldErr('lastErr', 'Last name is required.'); valid = false; } else { clearFieldErr('lastErr'); }
-    if(!mobile || mobile.length < 8) { showFieldErr('mobileErr', 'Enter a valid mobile number.'); valid = false; } else { clearFieldErr('mobileErr'); }
+    if(mobile && mobile.length < 8) { showFieldErr('mobileErr', 'Enter a valid mobile number.'); valid = false; } else { clearFieldErr('mobileErr'); }
+    
     if(valid) goStep(3);
   }
 
-  function handleSignup() {
-    if(!selectedLevel) { showFieldErr('levelErr', 'Please select your hiking level.'); return; }
+  // Handle form submission
+  document.getElementById('signupForm').addEventListener('submit', function(e) {
+    if(!selectedLevel) { 
+      e.preventDefault();
+      showFieldErr('levelErr', 'Please select your hiking level.'); 
+      goStep(3);
+      return; 
+    }
     if(!document.getElementById('termsCheck').checked) {
+      e.preventDefault();
       showAlert('Please accept the Terms of Service to continue.');
       return;
     }
+    
+    // Update hidden hiking level input
+    document.getElementById('hikingLevelInput').value = selectedLevel;
+    
+    // Show loading state
     const btn = document.getElementById('signupBtn');
     btn.querySelector('.btn-text').style.display = 'none';
     btn.querySelector('.btn-loader').style.display = 'block';
     btn.disabled = true;
-    setTimeout(() => {
-      const profile = {
-        fullName: document.getElementById('regFirst').value.trim() + ' ' + document.getElementById('regLast').value.trim(),
-        email: document.getElementById('regEmail').value.trim(),
-        mobile: document.getElementById('regMobile').value.trim(),
-        username: document.getElementById('regUsername').value.trim(),
-        homeRegion: document.getElementById('regRegion').value,
-        hikingLevel: selectedLevel
-      };
-      localStorage.setItem('lakbay_profile', JSON.stringify(profile));
-      document.querySelectorAll('.step').forEach(s => s.style.display = 'none');
-      document.querySelector('.progress-bar').style.display = 'none';
-      document.querySelector('.step-labels').style.display = 'none';
-      document.getElementById('successScreen').classList.add('show');
-    }, 1500);
-  }
+  });
 
   function showAlert(msg) {
-    document.getElementById('signupAlertMsg').textContent = msg;
-    document.getElementById('signupAlert').classList.add('show');
-    document.getElementById('signupAlert').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const alertBox = document.getElementById('phpErrorAlert');
+    if(alertBox) {
+      alertBox.querySelector('span').textContent = msg;
+      alertBox.classList.add('show');
+      alertBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }
+  
   function showFieldErr(id, msg) {
     const el = document.getElementById(id);
     el.textContent = msg;
     el.classList.add('show');
   }
-  function clearFieldErr(id) { document.getElementById(id).classList.remove('show'); }
+  
+  function clearFieldErr(id) { 
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('show');
+  }
 
   function togglePwd(inputId, btn) {
     const input = document.getElementById(inputId);
@@ -949,19 +1101,47 @@
     clearFieldErr('usernameErr');
     const status = document.getElementById('usernameStatus');
     clearTimeout(usernameTimer);
-    if(!val) { status.className = 'username-status'; return; }
-    if(val.length < 3 || !/^[a-zA-Z0-9_]+$/.test(val)) { status.className = 'username-status'; return; }
+    if(!val || val.length < 3 || !/^[a-zA-Z0-9_]+$/.test(val)) { 
+      status.className = 'username-status'; 
+      usernameAvailable = false;
+      return; 
+    }
+    
     status.className = 'username-status checking';
     status.textContent = 'Checking…';
+    
     usernameTimer = setTimeout(() => {
-      const taken = ['admin','lakbay','hiking','test','user'];
-      if(taken.includes(val.toLowerCase())) {
-        status.className = 'username-status taken';
-        status.textContent = '✕ Taken';
-      } else {
-        status.className = 'username-status available';
-        status.textContent = '✓ Available';
-      }
+      // AJAX call to check username availability
+      fetch('check-username.php?username=' + encodeURIComponent(val))
+        .then(response => response.json())
+        .then(data => {
+          if(data.taken) {
+            status.className = 'username-status taken';
+            status.textContent = '✕ Taken';
+            usernameAvailable = false;
+            showFieldErr('usernameErr', 'Username already taken.');
+          } else {
+            status.className = 'username-status available';
+            status.textContent = '✓ Available';
+            usernameAvailable = true;
+            clearFieldErr('usernameErr');
+          }
+        })
+        .catch(() => {
+          // Fallback if check-username.php doesn't exist yet
+          const taken = ['admin','lakbay','hiking','test','user'];
+          if(taken.includes(val.toLowerCase())) {
+            status.className = 'username-status taken';
+            status.textContent = '✕ Taken';
+            usernameAvailable = false;
+            showFieldErr('usernameErr', 'Username already taken.');
+          } else {
+            status.className = 'username-status available';
+            status.textContent = '✓ Available';
+            usernameAvailable = true;
+            clearFieldErr('usernameErr');
+          }
+        });
     }, 600);
   }
 

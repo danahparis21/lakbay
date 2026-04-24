@@ -1,6 +1,52 @@
 <?php
-// login.php - Lakbay Login Page
+// login.php - Lakbay Login Page with Backend Integration
+require_once '../config/db.php';
+
+$error = '';
+$success_redirect = false;
+$redirect_url = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = trim($_POST['email'] ?? '');
+    $pass = trim($_POST['password'] ?? '');
+    
+    if ($email && $pass) {
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+        
+        if ($user && password_verify($pass, $user['password'])) {
+            session_start();
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_name'] = $user['name'];
+            $_SESSION['user_email'] = $user['email'];
+            $_SESSION['user_role'] = $user['role'];
+            $_SESSION['user_phone'] = $user['phone'] ?? '';
+            $_SESSION['user_avatar'] = $user['avatar'] ?? '';
+            $_SESSION['created_at'] = $user['created_at'];
+            
+            // Update last login timestamp
+            $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+            $updateStmt->execute([$user['id']]);
+            
+            // Determine redirect URL based on role
+            $roleMap = [
+                'hiker'   => '../hiker frontend/explore.php',
+                'guide'   => '../../pages/dashboard-guide.php',
+                'manager' => '../../pages/dashboard-manager.php',
+                'admin'   => '../../pages/dashboard-admin.php',
+            ];
+            $redirect_url = $roleMap[$user['role']] ?? '../hiker frontend/explore.php';
+            $success_redirect = true;
+        } else {
+            $error = 'Invalid email or password.';
+        }
+    } else {
+        $error = 'Please enter your email and password.';
+    }
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -422,7 +468,96 @@
     }
     .alert.show { display: flex; }
     .alert-error { background: rgba(192,57,43,0.08); color: var(--danger); border: 1px solid rgba(192,57,43,0.2); }
+    .alert-success { background: rgba(46,204,113,0.08); color: var(--success); border: 1px solid rgba(46,204,113,0.2); }
     .alert svg { width: 16px; height: 16px; stroke: currentColor; fill: none; flex-shrink: 0; }
+
+    /* Success popup styles */
+    .popup-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .popup-overlay.show { display: flex; }
+    .welcome-popup {
+      background: var(--white);
+      border-radius: 32px;
+      padding: 40px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+      animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.85) translateY(20px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .welcome-avatar {
+      width: 80px;
+      height: 80px;
+      background: var(--forest);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      animation: avatarPop 0.5s 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+    @keyframes avatarPop {
+      from { opacity: 0; transform: scale(0); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .welcome-avatar svg {
+      width: 40px;
+      height: 40px;
+      stroke: var(--white);
+      fill: none;
+      stroke-width: 2;
+    }
+    .role-badge {
+      display: inline-block;
+      padding: 4px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .role-hiker { background: #E1F5EE; color: #0F6E56; }
+    .role-admin { background: #EEEDFE; color: #3C3489; }
+    .role-manager { background: #FAEEDA; color: #854F0B; }
+    .role-guide { background: #E6F1FB; color: #0C447C; }
+    .welcome-popup h2 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      margin-bottom: 12px;
+      color: var(--forest);
+    }
+    .welcome-popup p {
+      font-size: 14px;
+      color: var(--stone);
+      margin-bottom: 20px;
+    }
+    .progress-bar {
+      height: 4px;
+      background: #D4E1E7;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 20px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--forest);
+      border-radius: 4px;
+      animation: fill 2.5s linear forwards;
+    }
+    @keyframes fill { from { width: 0%; } to { width: 100%; } }
 
     /* Mobile responsive */
     @media (max-width: 900px) {
@@ -451,6 +586,8 @@
       .social-btn:hover { background: rgba(255,255,255,0.14); }
       .divider-line { background: rgba(255,255,255,0.1); }
       .divider-text { color: rgba(255,255,255,0.3); }
+      .welcome-popup { background: var(--forest); color: var(--white); }
+      .welcome-popup h2, .welcome-popup p { color: var(--white); }
     }
 
     @media (max-width: 420px) {
@@ -517,35 +654,37 @@
         <span id="loginAlertMsg">Invalid credentials. Please try again.</span>
       </div>
 
-      <div class="field-group">
-        <label class="field-label" for="loginEmail">Email address</label>
-        <div class="field-wrapper">
-          <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-          <input type="email" id="loginEmail" class="field-input" placeholder="you@example.com" autocomplete="email">
+      <form method="POST" action="" id="loginForm">
+        <div class="field-group">
+          <label class="field-label" for="loginEmail">Email address</label>
+          <div class="field-wrapper">
+            <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <input type="email" id="loginEmail" name="email" class="field-input" placeholder="you@example.com" autocomplete="email" value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
+          </div>
+          <p class="field-error" id="emailError">Please enter a valid email.</p>
         </div>
-        <p class="field-error" id="emailError">Please enter a valid email.</p>
-      </div>
 
-      <div class="field-group">
-        <label class="field-label" for="loginPassword">Password</label>
-        <div class="field-wrapper">
-          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input type="password" id="loginPassword" class="field-input" placeholder="Enter your password" autocomplete="current-password">
-          <button type="button" class="eye-toggle" onclick="togglePwd('loginPassword', this)">
-            <svg viewBox="0 0 24 24" id="eyeLogin"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
+        <div class="field-group">
+          <label class="field-label" for="loginPassword">Password</label>
+          <div class="field-wrapper">
+            <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="loginPassword" name="password" class="field-input" placeholder="Enter your password" autocomplete="current-password">
+            <button type="button" class="eye-toggle" onclick="togglePwd('loginPassword', this)">
+              <svg viewBox="0 0 24 24" id="eyeLogin"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <p class="field-error" id="passError">Password is required.</p>
         </div>
-        <p class="field-error" id="passError">Password is required.</p>
-      </div>
 
-      <div class="forgot-row">
-        <a href="#" class="forgot-link">Forgot password?</a>
-      </div>
+        <div class="forgot-row">
+          <a href="forgot-password.php" class="forgot-link">Forgot password?</a>
+        </div>
 
-      <button class="btn-primary-full" onclick="handleLogin()" id="loginBtn">
-        <span class="btn-text">Sign In</span>
-        <div class="btn-loader" id="loginLoader"></div>
-      </button>
+        <button type="submit" class="btn-primary-full" id="loginBtn">
+          <span class="btn-text">Sign In</span>
+          <div class="btn-loader" id="loginLoader"></div>
+        </button>
+      </form>
 
       <div class="divider">
         <div class="divider-line"></div>
@@ -554,11 +693,11 @@
       </div>
 
       <div class="social-row">
-        <a href="#" class="social-btn">
+        <a href="#" class="social-btn" onclick="socialLogin('google')">
           <svg viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
           Google
         </a>
-        <a href="#" class="social-btn">
+        <a href="#" class="social-btn" onclick="socialLogin('facebook')">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
           Facebook
         </a>
@@ -568,14 +707,87 @@
   </div>
 </div>
 
+<!-- Welcome Popup (shown after successful login) -->
+<div class="popup-overlay" id="welcomePopup">
+  <div class="welcome-popup">
+    <div class="welcome-avatar">
+      <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </div>
+    <div id="roleBadge" class="role-badge"></div>
+    <h2>Welcome back, <span id="userName"></span>!</h2>
+    <p id="welcomeMessage"></p>
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+  </div>
+</div>
+
 <script>
+  // Handle PHP error display (if any)
+  <?php if ($error): ?>
+  document.addEventListener('DOMContentLoaded', function() {
+    showAlert('<?= addslashes($error) ?>', 'error');
+  });
+  <?php endif; ?>
+
+  <?php if ($success_redirect && $redirect_url): ?>
+  // Show welcome popup and redirect
+  document.addEventListener('DOMContentLoaded', function() {
+    <?php
+    $user = $user ?? null;
+    if ($user):
+      $roleLabels = [
+        'hiker' => 'Hiker',
+        'guide' => 'Tour Guide',
+        'manager' => 'Mountain Manager',
+        'admin' => 'Tourism Admin',
+      ];
+      $roleMessages = [
+        'hiker' => 'Preparing your trail exploration...',
+        'guide' => 'Loading your guide dashboard and assigned trails...',
+        'manager' => 'Fetching your mountain management tools...',
+        'admin' => 'Setting up your admin control panel...',
+      ];
+      $firstName = explode(' ', $user['name'])[0];
+      $roleLabel = $roleLabels[$user['role']] ?? 'User';
+      $roleMessage = $roleMessages[$user['role']] ?? 'Loading your dashboard...';
+      $roleClass = 'role-' . $user['role'];
+    ?>
+    document.getElementById('roleBadge').textContent = '<?= $roleLabel ?>';
+    document.getElementById('roleBadge').className = 'role-badge role-<?= $user['role'] ?>';
+    document.getElementById('userName').textContent = '<?= $firstName ?>';
+    document.getElementById('welcomeMessage').textContent = '<?= $roleMessage ?>';
+    document.getElementById('welcomePopup').classList.add('show');
+    
+    setTimeout(function() {
+      window.location.href = '<?= $redirect_url ?>';
+    }, 2600);
+    <?php endif; ?>
+  });
+  <?php endif; ?>
+
   function togglePwd(inputId, btn) {
     const input = document.getElementById(inputId);
     const isPass = input.type === 'password';
     input.type = isPass ? 'text' : 'password';
-    btn.querySelector('svg').innerHTML = isPass
-      ? '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
-      : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+    const svg = btn.querySelector('svg');
+    if (isPass) {
+      svg.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+    } else {
+      svg.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+    }
+  }
+
+  function showAlert(msg, type = 'error') {
+    const alertBox = document.getElementById('loginAlert');
+    const alertMsg = document.getElementById('loginAlertMsg');
+    alertMsg.textContent = msg;
+    alertBox.className = `alert alert-${type} show`;
+    setTimeout(() => {
+      alertBox.classList.remove('show');
+    }, 5000);
+  }
+
+  function clearError(id) {
+    document.getElementById(id).classList.remove('show');
   }
 
   function showError(id, msg) {
@@ -583,48 +795,43 @@
     el.textContent = msg;
     el.classList.add('show');
   }
-  function clearError(id) {
-    document.getElementById(id).classList.remove('show');
-  }
 
-  function handleLogin() {
+  // Client-side validation before form submission
+  document.getElementById('loginForm').addEventListener('submit', function(e) {
     const email = document.getElementById('loginEmail').value.trim();
     const pass = document.getElementById('loginPassword').value;
-    const btn = document.getElementById('loginBtn');
-    const loader = document.getElementById('loginLoader');
     let valid = true;
 
     clearError('emailError');
     clearError('passError');
     document.getElementById('loginAlert').classList.remove('show');
 
-    if(!email || !/\S+@\S+\.\S+/.test(email)) { showError('emailError', 'Please enter a valid email address.'); valid = false; }
-    if(!pass) { showError('passError', 'Password is required.'); valid = false; }
-    if(!valid) return;
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      showError('emailError', 'Please enter a valid email address.');
+      valid = false;
+    }
+    if (!pass) {
+      showError('passError', 'Password is required.');
+      valid = false;
+    }
 
+    if (!valid) {
+      e.preventDefault();
+      return false;
+    }
+
+    // Show loading state
+    const btn = document.getElementById('loginBtn');
+    const loader = document.getElementById('loginLoader');
     btn.classList.add('loading');
     btn.querySelector('.btn-text').style.display = 'none';
     loader.style.display = 'block';
-
-    setTimeout(() => {
-      btn.classList.remove('loading');
-      btn.querySelector('.btn-text').style.display = 'block';
-      loader.style.display = 'none';
-      // In production: verify credentials from server
-      const savedUser = JSON.parse(localStorage.getItem('lakbay_profile') || '{}');
-      if(savedUser.email === email) {
-        window.location.href = 'profile.php';
-      } else {
-        document.getElementById('loginAlert').classList.add('show');
-        document.getElementById('loginAlertMsg').textContent = 'No account found with that email. Try signing up!';
-      }
-    }, 1200);
-  }
-
-  // Enter key support
-  document.addEventListener('keydown', (e) => {
-    if(e.key === 'Enter') handleLogin();
   });
+
+  function socialLogin(provider) {
+    showAlert(`${provider} login coming soon!`, 'error');
+  }
 </script>
+
 </body>
 </html>

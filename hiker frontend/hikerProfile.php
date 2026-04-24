@@ -30,7 +30,9 @@
       --radius-sm: 12px;
       --shadow: 0 8px 32px rgba(16,6,0,0.12);
       --shadow-lg: 0 20px 60px rgba(16,6,0,0.2);
+      --nav-h: 74px;
     }
+    @media(max-width:768px){ :root { --nav-h: 0px; } }
 
     /* Mobile Back Button */
     .mobile-back-bar {
@@ -73,7 +75,7 @@
     .profile-layout {
       display: flex;
       min-height: calc(100vh - var(--nav-h) - 40px);
-      margin-top: calc(var(--nav-h) + 20px);
+      margin-top: var(--nav-h);
       gap: 28px;
       max-width: 1300px;
       margin-left: auto;
@@ -588,27 +590,35 @@
 
 <!-- DESKTOP NAV -->
 <nav class="desktop-nav">
-  <a href="explore.php" class="brand">
+  <a href="../index.php" class="brand">
     <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#100600" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#100600" opacity=".35"/></svg>
     LAKBAY
   </a>
   <div class="tabs">
-    <a href="explore.php" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Explore</a>
-    <a href="bookings.php" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings</a>
-    <a href="quiz.php" class="tab-link quiz-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Quiz</a>
-    <a href="messages.php" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages</a>
+    <a href="explore.php" class="tab-link">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Explore
+    </a>
+    <a href="bookings.php" class="tab-link">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings
+    </a>
+    <a href="quiz.php" class="tab-link">
+      <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Quiz
+    </a>
+    <a href="messages.php" class="tab-link">
+      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages
+    </a>
   </div>
-  <a href="profile.php" class="user-btn" id="profileBtn">J</a>
+  <a href="hikerProfile.php" class="user-btn active">J</a>
 </nav>
 
-<!-- MOBILE BOTTOM NAV -->
+<!-- MOBILE NAV -->
 <nav class="mobile-nav">
   <div class="mobile-nav-inner">
-    <a href="explore.php" class="mob-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span>Explore</span></a>
-    <a href="bookings.php" class="mob-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Bookings</span></a>
-    <a href="quiz.php" class="mob-nav-item quiz-center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>Quiz</span></a>
-    <a href="messages.php" class="mob-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Messages</span></a>
-    <a href="profile.php" class="mob-nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></a>
+    <a href="explore.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span>Explore</span></a>
+    <a href="bookings.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Bookings</span></a>
+    <a href="quiz.php" class="mob-nav-item quiz-center"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></a>
+    <a href="messages.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Messages</span></a>
+    <a href="hikerProfile.php" class="mob-nav-item active"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></a>
   </div>
 </nav>
 
@@ -972,17 +982,30 @@
   }
 
   // Go back to previous page
-  function goBack() {
+function goBack() {
+  // Try to use browser history first
+  if (document.referrer && document.referrer.includes(window.location.hostname)) {
     window.history.back();
+  } else {
+    // If no valid referrer, go to explore page
+    window.location.href = "explore.php";
   }
-
+}
   // Logout to lakbayLanding.php
-  function performLogout() {
-    showToast("Logged out successfully!");
-    setTimeout(() => {
-      window.location.href = "lakbayLanding.php";
-    }, 800);
-  }
+function performLogout() {
+  // Clear all user data from localStorage
+  localStorage.removeItem('lakbay_profile');
+  localStorage.removeItem('lakbay_history');
+  localStorage.removeItem('lakbay_saved');
+  localStorage.removeItem('lakbay_prefs');
+  localStorage.removeItem('lakbay_profilePic');
+  
+  showToast("Logged out successfully!");
+  setTimeout(() => {
+    // Redirect to login page (2 levels up from hiker frontend folder)
+    window.location.href = "../login and signup/login.php";
+  }, 800);
+}
 
   // Toggle listeners
   document.getElementById('locationToggle').addEventListener('change', (e) => {

@@ -168,8 +168,8 @@
 
 <!-- DESKTOP NAV -->
 <nav class="desktop-nav">
-  <a href="explore.php" class="brand">
-    <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#1a2e1a" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#1a2e1a" opacity=".35"/></svg>
+  <a href="../index.php" class="brand">
+    <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#100600" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#100600" opacity=".35"/></svg>
     LAKBAY
   </a>
   <div class="tabs">
@@ -181,7 +181,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
       Bookings
     </a>
-    <a href="quiz.php" class="tab-link quiz-tab">
+    <a href="quiz.php" class="tab-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
       Quiz
     </a>
@@ -190,7 +190,7 @@
       Messages
     </a>
   </div>
-  <a href="hikerProfile.php class="user-btn">J</a>
+  <a href="hikerProfile.php" class="user-btn">J</a>
 </nav>
 
 <!-- MOBILE NAV -->
@@ -206,12 +206,13 @@
     </a>
     <a href="quiz.php" class="mob-nav-item quiz-center">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      <span>Quiz</span>
     </a>
     <a href="messages.php" class="mob-nav-item active">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       <span>Messages</span>
     </a>
-    <a href="profile.php" class="mob-nav-item">
+    <a href="hikerProfile.php" class="mob-nav-item">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       <span>Profile</span>
     </a>

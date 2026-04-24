@@ -1,5 +1,461 @@
 <?php
-// bookings.php - Lakbay Bookings (Improved)
+// hiker frontend/bookings.php - LAKBAY Bookings Page (Database Connected)
+require_once __DIR__ . '/../config/db.php';
+
+session_start();
+
+// Fetch current user details if logged in
+$currentUser = null;
+$userInitial = 'J';
+$currentUserId = null;
+$user_name = 'Guest';
+
+if (isset($_SESSION['user_id'])) {
+    $currentUserId = $_SESSION['user_id'];
+    
+    // Use PDO from db.php
+    if (isset($pdo) && $pdo) {
+        $stmt = $pdo->prepare("SELECT id, name, email, avatar, hiking_level, home_region FROM users WHERE id = ?");
+        $stmt->execute([$currentUserId]);
+        $currentUser = $stmt->fetch();
+        
+        if ($currentUser) {
+            $user_name = $currentUser['name'];
+            $nameParts = explode(' ', trim($currentUser['name']));
+            $userInitial = '';
+            foreach ($nameParts as $part) {
+                if (!empty($part)) {
+                    $userInitial .= strtoupper(substr($part, 0, 1));
+                }
+            }
+            $userInitial = substr($userInitial, 0, 2);
+        }
+    }
+}
+
+// --- Helper function to get mountains from database ---
+function getMountainsFromDB($pdo) {
+    $mountains = [];
+    try {
+        $stmt = $pdo->query("SELECT id, name, location, difficulty, image, fee, elevation FROM mountains WHERE status = 'Open' ORDER BY name");
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            // Map database fields to match the JavaScript expected format
+            $mountains[] = [
+                'id' => $row['id'],
+                'name' => $row['name'],
+                'location' => $row['location'],
+                'difficulty' => strtolower($row['difficulty']),
+                'image' => $row['image'] ?? 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60',
+                'fees' => [
+                    'regFee' => intval($row['fee'] ?? 150),
+                    'envFee' => 120,
+                    'guideDay' => 900,
+                    'guideON' => 1600,
+                    'campFee' => 50,
+                    'parkDay' => 100,
+                    'parkON' => 150
+                ]
+            ];
+        }
+    } catch (PDOException $e) {
+        // Fallback to default mountains if query fails
+    }
+    
+    // If no mountains in DB, return default ones
+    if (empty($mountains)) {
+        return [
+            ['id'=>1,'name'=>'Mt. Batulao','location'=>'Nasugbu, Batangas','difficulty'=>'moderate','image'=>'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60','fees'=>['regFee'=>150,'envFee'=>120,'guideDay'=>900,'guideON'=>1600,'campFee'=>50,'parkDay'=>100,'parkON'=>150]],
+            ['id'=>2,'name'=>'Mt. Talamitam','location'=>'Nasugbu, Batangas','difficulty'=>'easy','image'=>'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=200&q=60','fees'=>['regFee'=>100,'envFee'=>0,'guideDay'=>700,'guideON'=>1100,'campFee'=>0,'parkDay'=>80,'parkON'=>80]],
+            ['id'=>3,'name'=>'Mt. Apayang','location'=>'Batangas','difficulty'=>'hard','image'=>'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200&q=60','fees'=>['regFee'=>200,'envFee'=>0,'guideDay'=>1200,'guideON'=>2000,'campFee'=>100,'parkDay'=>0,'parkON'=>0]],
+            ['id'=>4,'name'=>'Mt. Lantik','location'=>'Alfonso, Cavite','difficulty'=>'moderate','image'=>'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=200&q=60','fees'=>['regFee'=>130,'envFee'=>100,'guideDay'=>900,'guideON'=>1500,'campFee'=>0,'parkDay'=>100,'parkON'=>100]]
+        ];
+    }
+    return $mountains;
+}
+
+// --- Helper function to get guides from database ---
+function getGuidesFromDB($pdo) {
+    $guides = [];
+    try {
+        $stmt = $pdo->query("
+            SELECT g.*, u.name as guide_name, u.avatar 
+            FROM guides g 
+            JOIN users u ON g.user_id = u.id 
+            WHERE g.is_available = 1
+            ORDER BY g.rating DESC
+        ");
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            // Get mountains this guide is assigned to
+            $guideMountains = [];
+            $stmt2 = $pdo->prepare("SELECT mountain_id FROM guide_mountains WHERE guide_id = ?");
+            $stmt2->execute([$row['user_id']]);
+            while ($m = $stmt2->fetch(PDO::FETCH_ASSOC)) {
+                $guideMountains[] = $m['mountain_id'];
+            }
+            
+            $guides[] = [
+                'id' => $row['user_id'],
+                'name' => $row['guide_name'],
+                'initials' => substr(preg_replace('/[^A-Z]/', '', $row['guide_name']), 0, 2),
+                'mountains' => $guideMountains,
+                'rating' => floatval($row['rating']),
+                'available' => 'Daily',
+                'phone' => $row['phone'] ?? ''
+            ];
+        }
+    } catch (PDOException $e) {
+        // Fallback
+    }
+    
+    // Fallback guides
+    if (empty($guides)) {
+        return [
+            ['id'=>1,'name'=>'John Dela Cruz','initials'=>'JD','mountains'=>[1,3],'rating'=>4.9,'available'=>'Mon–Sat','phone'=>'+63 912 345 6789'],
+            ['id'=>2,'name'=>'Maya Reyes','initials'=>'MR','mountains'=>[1,2],'rating'=>4.8,'available'=>'Daily','phone'=>'+63 923 456 7890'],
+            ['id'=>3,'name'=>'Rico Cabanlit','initials'=>'RC','mountains'=>[4],'rating'=>5.0,'available'=>'Daily','phone'=>'+63 934 567 8901'],
+            ['id'=>4,'name'=>'Elena Llorente','initials'=>'EL','mountains'=>[1],'rating'=>4.7,'available'=>'Wed–Sun','phone'=>'+63 945 678 9012']
+        ];
+    }
+    return $guides;
+}
+
+// --- Get user's bookings from database to populate the JavaScript bookings array ---
+function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
+    $bookings = [];
+    
+    if (!$currentUserId) return $bookings;
+    
+    try {
+        // Get regular bookings (hikes)
+        $stmt = $pdo->prepare("
+            SELECT 
+                b.id, b.booking_number, b.mountain_id, b.guide_id,
+                b.hike_date as date, b.hike_type as type, b.status,
+                b.number_of_hikers as pax, b.total_amount as totalFee,
+                b.special_requests as notes, b.created_at,
+                b.camping as camping,
+                m.name as mountain,
+                u.name as guideName,
+                SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2) as guideInitials
+            FROM bookings b
+            JOIN mountains m ON b.mountain_id = m.id
+            JOIN guides g ON b.guide_id = g.user_id
+            JOIN users u ON g.user_id = u.id
+            WHERE b.user_id = ?
+            ORDER BY b.created_at DESC
+        ");
+        $stmt->execute([$currentUserId]);
+        
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            // Get hikers for this booking
+            $hikers = [];
+            $stmt2 = $pdo->prepare("SELECT hiker_name FROM booking_hikers WHERE booking_id = ?");
+            $stmt2->execute([$row['id']]);
+            while ($h = $stmt2->fetch(PDO::FETCH_ASSOC)) {
+                $hikers[] = $h['hiker_name'];
+            }
+            
+            // Get nudges count
+            $stmt2 = $pdo->prepare("SELECT COUNT(*) as nudge_count, MAX(created_at) as last_nudge FROM booking_nudges WHERE booking_id = ?");
+            $stmt2->execute([$row['id']]);
+            $nudgeData = $stmt2->fetch(PDO::FETCH_ASSOC);
+            
+            // Generate a simple ID for JavaScript (using BK prefix)
+            $bookingId = 'BK' . str_pad($row['id'], 3, '0', STR_PAD_LEFT);
+            
+            $bookings[] = [
+                'id' => $bookingId,
+                'mountainId' => $row['mountain_id'],
+                'mountain' => $row['mountain'],
+                'date' => $row['date'],
+                'time' => '06:00', // Default time
+                'type' => $row['type'] == 'overnight' ? 'overnight' : ($row['type'] == 'late' ? 'late' : 'day'),
+                'status' => $row['status'],
+                'guideId' => $row['guide_id'],
+                'guideName' => $row['guideName'],
+                'guideInitials' => $row['guideInitials'] ?: substr($row['guideName'], 0, 2),
+                'pax' => $row['pax'],
+                'hikers' => $hikers,
+                'totalFee' => floatval($row['totalFee']),
+                'createdAt' => strtotime($row['created_at']) * 1000,
+                'nudges' => intval($nudgeData['nudge_count'] ?? 0),
+                'lastNudge' => $nudgeData['last_nudge'] ? strtotime($nudgeData['last_nudge']) * 1000 : 0,
+                'camping' => $row['camping'] == 1,
+                'notes' => $row['notes'] ?? ''
+            ];
+        }
+        
+        // Get joined hikes (where user is in booking_hikers)
+        $stmt = $pdo->prepare("
+            SELECT 
+                b.id, b.booking_number, b.mountain_id, b.guide_id,
+                b.hike_date as date, b.hike_type as type, 'joined' as status,
+                b.number_of_hikers as pax, b.total_amount as totalFee,
+                m.name as mountain,
+                u.name as guideName,
+                bh.hiker_name as joinedAs
+            FROM booking_hikers bh
+            JOIN bookings b ON bh.booking_id = b.id
+            JOIN mountains m ON b.mountain_id = m.id
+            JOIN guides g ON b.guide_id = g.user_id
+            JOIN users u ON g.user_id = u.id
+            WHERE bh.hiker_name = ? AND b.user_id != ?
+        ");
+        $stmt->execute([$currentUserName, $currentUserId]);
+        
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $bookingId = 'BKJ' . str_pad($row['id'], 3, '0', STR_PAD_LEFT);
+            $bookings[] = [
+                'id' => $bookingId,
+                'mountainId' => $row['mountain_id'],
+                'mountain' => $row['mountain'],
+                'date' => $row['date'],
+                'time' => '06:00',
+                'type' => $row['type'] == 'overnight' ? 'overnight' : 'day',
+                'status' => 'joined',
+                'guideId' => $row['guide_id'],
+                'guideName' => $row['guideName'],
+                'guideInitials' => substr($row['guideName'], 0, 2),
+                'pax' => $row['pax'],
+                'hikers' => [],
+                'totalFee' => 0,
+                'createdAt' => time() * 1000,
+                'nudges' => 0,
+                'lastNudge' => 0,
+                'camping' => false,
+                'notes' => '',
+                'joinedFromId' => 'BK' . str_pad($row['id'], 3, '0', STR_PAD_LEFT)
+            ];
+        }
+        
+    } catch (PDOException $e) {
+        // If error, return empty array
+    }
+    
+    return $bookings;
+}
+
+// Get data from database
+$dbMountains = getMountainsFromDB($pdo);
+$dbGuides = getGuidesFromDB($pdo);
+$dbUserBookings = getUserBookingsFromDB($pdo, $currentUserId, $user_name);
+
+// Handle AJAX Actions (Cancel, Nudge, Replace Guide, etc.)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+    header('Content-Type: application/json');
+    $action = $_POST['action'] ?? '';
+    
+    if ($action === 'save_booking') {
+        // Save a new booking to database
+        $bookingData = json_decode($_POST['data'] ?? '', true);
+        
+        if ($bookingData && $currentUserId) {
+            // Determine if this is overnight/camping
+            $isCamping = ($bookingData['type'] === 'overnight');
+            
+            // Generate booking number
+            $year = date('Y');
+            $prefix = $isCamping ? 'CK' : 'BK';
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE booking_number LIKE ?");
+            $stmt->execute([$prefix . '-' . $year . '%']);
+            $count = $stmt->fetchColumn() + 1;
+            $bookingNumber = $prefix . '-' . $year . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
+            
+            // Get mountain fee
+            $stmt = $pdo->prepare("SELECT fee FROM mountains WHERE id = ?");
+            $stmt->execute([$bookingData['mountainId']]);
+            $mountain = $stmt->fetch();
+            $feePerPerson = $mountain['fee'] ?? 500;
+            
+            // Calculate total (simplified)
+            $totalAmount = $feePerPerson * $bookingData['pax'];
+            
+            // Insert into bookings table
+            $stmt = $pdo->prepare("
+    INSERT INTO bookings (
+        booking_number, user_id, mountain_id, guide_id,
+        booking_date, hike_date, hike_type, number_of_hikers,
+        total_amount, downpayment_amount, payment_status, status,
+        special_requests, created_at, updated_at
+    ) VALUES (
+        ?, ?, ?, ?,
+        NOW(), ?, ?, ?,
+        ?, 0, 'pending', 'pending',
+        ?, NOW(), NOW()
+    )
+");
+            
+            
+            $dbBookingId = $pdo->lastInsertId();
+            
+            // Insert hikers into booking_hikers
+            foreach ($bookingData['hikers'] as $hikerName) {
+                if (!empty($hikerName)) {
+                    $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
+                    $stmt->execute([$dbBookingId, $hikerName]);
+                }
+            }
+            
+            echo json_encode(['success' => true, 'message' => 'Booking saved to database!', 'booking_id' => $bookingNumber]);
+            exit;
+        }
+        
+        echo json_encode(['success' => false, 'message' => 'Failed to save booking']);
+        exit;
+    }
+    
+    if ($action === 'cancel_booking') {
+        $bookingId = $_POST['booking_id'] ?? '';
+        // Extract numeric ID from BK001 format
+        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+        
+        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = NOW() WHERE id = ? AND user_id = ?");
+        $stmt->execute([$numericId, $currentUserId]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['success' => true, 'message' => 'Booking cancelled successfully']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Booking not found or already cancelled']);
+        }
+        exit;
+    }
+    
+    if ($action === 'nudge_guide') {
+        $bookingId = $_POST['booking_id'] ?? '';
+        $guideId = $_POST['guide_id'] ?? '';
+        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+        
+        // Check nudge limit
+        $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM booking_nudges WHERE booking_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 20 MINUTE)");
+        $stmt->execute([$numericId]);
+        $recentNudges = $stmt->fetch();
+        
+        if ($recentNudges['count'] >= 1) {
+            echo json_encode(['success' => false, 'message' => 'Please wait 20 minutes before nudging again']);
+            exit;
+        }
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM booking_nudges WHERE booking_id = ?");
+        $stmt->execute([$numericId]);
+        $totalNudges = $stmt->fetch();
+        
+        if ($totalNudges['total'] >= 10) {
+            echo json_encode(['success' => false, 'message' => 'Maximum nudges reached. Please replace your guide.']);
+            exit;
+        }
+        
+        $stmt = $pdo->prepare("INSERT INTO booking_nudges (booking_id, user_id, guide_id, created_at) VALUES (?, ?, ?, NOW())");
+        $stmt->execute([$numericId, $currentUserId, $guideId]);
+        
+        echo json_encode(['success' => true, 'message' => 'Nudge sent to guide!']);
+        exit;
+    }
+    
+    if ($action === 'replace_guide') {
+        $bookingId = $_POST['booking_id'] ?? '';
+        $newGuideId = $_POST['new_guide_id'] ?? '';
+        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+        
+        $stmt = $pdo->prepare("UPDATE bookings SET guide_id = ?, updated_at = NOW() WHERE id = ? AND user_id = ?");
+        $stmt->execute([$newGuideId, $numericId, $currentUserId]);
+        
+        echo json_encode(['success' => true, 'message' => 'Guide replaced successfully']);
+        exit;
+    }
+    
+    if ($action === 'update_booking') {
+        $bookingId = $_POST['booking_id'] ?? '';
+        $newDate = $_POST['date'] ?? '';
+        $newTime = $_POST['time'] ?? '';
+        $notes = $_POST['notes'] ?? '';
+        $hikers = json_decode($_POST['hikers'] ?? '[]', true);
+        
+        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+        
+        $stmt = $pdo->prepare("UPDATE bookings SET hike_date = ?, special_requests = ?, updated_at = NOW() WHERE id = ? AND user_id = ?");
+        $stmt->execute([$newDate, $notes, $numericId, $currentUserId]);
+        
+        // Update hikers
+        $stmt = $pdo->prepare("DELETE FROM booking_hikers WHERE booking_id = ?");
+        $stmt->execute([$numericId]);
+        
+        foreach ($hikers as $hikerName) {
+            if (!empty($hikerName)) {
+                $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
+                $stmt->execute([$numericId, $hikerName]);
+            }
+        }
+        
+        echo json_encode(['success' => true, 'message' => 'Booking updated!']);
+        exit;
+    }
+    
+    if ($action === 'get_available_guides') {
+        $bookingId = $_POST['booking_id'] ?? '';
+        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+        
+        $stmt = $pdo->prepare("SELECT mountain_id, guide_id FROM bookings WHERE id = ?");
+        $stmt->execute([$numericId]);
+        $booking = $stmt->fetch();
+        
+        if ($booking) {
+            $stmt = $pdo->prepare("
+                SELECT u.id, u.name, g.rating, g.years_experience
+                FROM guides g
+                JOIN users u ON g.user_id = u.id
+                JOIN guide_mountains gm ON g.user_id = gm.guide_id
+                WHERE gm.mountain_id = ? AND g.user_id != ? AND g.is_available = 1
+            ");
+            $stmt->execute([$booking['mountain_id'], $booking['guide_id']]);
+            $guides = $stmt->fetchAll();
+            echo json_encode(['success' => true, 'guides' => $guides]);
+        } else {
+            echo json_encode(['success' => false, 'guides' => []]);
+        }
+        exit;
+    }
+    
+    if ($action === 'join_hike') {
+        $bookingId = $_POST['booking_id'] ?? '';
+        $bookingNumber = $_POST['booking_number'] ?? '';
+        
+        // Find the booking by booking_number
+        $stmt = $pdo->prepare("SELECT id FROM bookings WHERE booking_number = ?");
+        $stmt->execute([$bookingNumber]);
+        $booking = $stmt->fetch();
+        
+        if ($booking) {
+            // Check if already joined
+            $stmt = $pdo->prepare("SELECT id FROM booking_hikers WHERE booking_id = ? AND hiker_name = ?");
+            $stmt->execute([$booking['id'], $user_name]);
+            
+            if (!$stmt->fetch()) {
+                $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
+                $stmt->execute([$booking['id'], $user_name]);
+                
+                // Update number of hikers
+                $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers + 1 WHERE id = ?");
+                $stmt->execute([$booking['id']]);
+                
+                echo json_encode(['success' => true, 'message' => 'You joined the hike!']);
+                exit;
+            }
+        }
+        
+        echo json_encode(['success' => false, 'message' => 'Could not join hike']);
+        exit;
+    }
+    
+    echo json_encode(['success' => false, 'message' => 'Unknown action']);
+    exit;
+}
+
+// Get data for JavaScript
+$mountainsJSON = json_encode($dbMountains);
+$guidesJSON = json_encode($dbGuides);
+$userBookingsJSON = json_encode($dbUserBookings);
+$currentUserNameJS = json_encode($user_name);
+$currentUserIdJS = json_encode($currentUserId);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -38,53 +494,60 @@ body {
 /* ── NAV ── */
 .desktop-nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-  background: rgba(250,248,243,0.92); backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(16,6,0,0.08);
-  height: 64px; display: flex; align-items: center;
-  padding: 0 32px; gap: 32px;
+  background: rgba(250,248,243,0.88); backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(16,6,0,0.06);
+  height: 74px; display: flex; align-items: center;
+  padding: 0 48px; gap: 40px;
+  transition: all 0.35s cubic-bezier(0.2, 0.9, 0.4, 1.1);
 }
+.desktop-nav:hover { background: rgba(250,248,243,0.96); backdrop-filter: blur(24px); }
 .brand {
-  font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700;
-  color: var(--forest); text-decoration: none; display: flex; align-items: center; gap: 8px;
+  font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700;
+  color: #100600; text-decoration: none; display: flex; align-items: center; gap: 8px;
+  transition: all 0.35s;
 }
-.brand svg { width: 28px; height: 28px; }
-.tabs { display: flex; gap: 4px; flex: 1; justify-content: center; }
+.brand:hover { transform: scale(1.02); color: var(--gold); }
+.brand svg { width: 32px; height: 32px; }
+.tabs { display: flex; gap: 8px; flex: 1; justify-content: center; }
 .tab-link {
-  display: flex; align-items: center; gap: 6px; padding: 8px 16px;
-  border-radius: 50px; font-size: 13px; font-weight: 600; color: var(--stone);
-  text-decoration: none; transition: all 0.2s;
+  display: flex; align-items: center; gap: 8px; padding: 10px 24px;
+  border-radius: 60px; font-size: 14px; font-weight: 600; color: var(--stone);
+  text-decoration: none; transition: all 0.35s;
 }
-.tab-link:hover { background: var(--sky); color: var(--forest); }
-.tab-link.active { background: var(--forest); color: var(--cream); }
-.tab-link svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
+.tab-link:hover { background: rgba(198,164,59,0.12); color: #100600; transform: translateY(-2px); }
+.tab-link.active { background: #100600; color: #faf8f3; box-shadow: 0 4px 12px rgba(16,6,0,0.2); }
+.tab-link svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
 .user-btn {
-  width: 36px; height: 36px; border-radius: 50%; background: var(--forest);
-  color: var(--cream); font-weight: 700; font-size: 13px;
+  width: 44px; height: 44px; border-radius: 50%; background: #100600;
+  color: #faf8f3; font-weight: 700; font-size: 15px;
   display: flex; align-items: center; justify-content: center; text-decoration: none;
+  transition: all 0.35s;
 }
+.user-btn:hover { transform: scale(1.05); background: var(--gold); color: #100600; }
 .mobile-nav { display: none; }
 @media (max-width: 768px) {
   .desktop-nav { display: none; }
   .mobile-nav {
     display: block; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-    background: rgba(250,248,243,0.96); backdrop-filter: blur(16px);
-    border-top: 1px solid rgba(16,6,0,0.08);
+    background: rgba(250,248,243,0.96); backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(16,6,0,0.06);
   }
   .mobile-nav-inner {
     display: flex; align-items: center; justify-content: space-around;
-    padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+    padding: 10px 0 max(10px, env(safe-area-inset-bottom));
   }
   .mob-nav-item {
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
     font-size: 10px; font-weight: 600; color: var(--stone);
-    text-decoration: none; padding: 4px 12px;
+    text-decoration: none; padding: 6px 12px;
+    transition: all 0.35s;
   }
-  .mob-nav-item.active { color: var(--forest); }
-  .mob-nav-item svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.8; fill: none; }
+  .mob-nav-item.active { color: #100600; transform: translateY(-2px); }
+  .mob-nav-item svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 1.8; fill: none; }
   .mob-nav-item.quiz-center {
-    width: 52px; height: 52px; border-radius: 50%; background: var(--forest);
-    color: var(--cream); padding: 0; display: flex; align-items: center; justify-content: center;
-    margin-top: -16px; box-shadow: 0 4px 16px rgba(26,46,26,0.3);
+    width: 56px; height: 56px; border-radius: 50%; background: #100600;
+    color: #faf8f3; padding: 0; display: flex; align-items: center; justify-content: center;
+    margin-top: -20px; box-shadow: 0 4px 16px rgba(16,6,0,0.3);
   }
 }
 
@@ -192,7 +655,7 @@ body {
 .inp:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,168,76,0.1); }
 
 /* ── BOOKINGS LAYOUT ── */
-.bookings-layout { padding: 80px 0 80px; }
+.bookings-layout { padding: 90px 0 80px; }
 .bookings-header {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 28px; flex-wrap: wrap; gap: 16px;
@@ -522,8 +985,8 @@ body {
 
 <!-- DESKTOP NAV -->
 <nav class="desktop-nav">
-  <a href="explore.php" class="brand">
-    <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#1a2e1a" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#1a2e1a" opacity=".35"/></svg>
+  <a href="../index.php" class="brand">
+    <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#100600" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#100600" opacity=".35"/></svg>
     LAKBAY
   </a>
   <div class="tabs">
@@ -548,9 +1011,9 @@ body {
   <div class="mobile-nav-inner">
     <a href="explore.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span>Explore</span></a>
     <a href="bookings.php" class="mob-nav-item active"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Bookings</span></a>
-    <a href="quiz.php" class="mob-nav-item quiz-center"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></a>
+    <a href="quiz.php" class="mob-nav-item quiz-center"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>Quiz</span></a>
     <a href="messages.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Messages</span></a>
-    <a href="profile.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></a>
+    <a href="hikerProfile.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></a>
   </div>
 </nav>
 
@@ -718,35 +1181,18 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
-// ── DATA ──
-const mountains = [
-  {id:1,name:"Mt. Batulao",location:"Nasugbu, Batangas",difficulty:"moderate",image:"https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60",fees:{regFee:150,envFee:120,guideDay:900,guideON:1600,campFee:50,parkDay:100,parkON:150}},
-  {id:2,name:"Mt. Talamitam",location:"Nasugbu, Batangas",difficulty:"easy",image:"https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=200&q=60",fees:{regFee:100,envFee:0,guideDay:700,guideON:1100,campFee:0,parkDay:80,parkON:80}},
-  {id:3,name:"Mt. Apayang",location:"Batangas",difficulty:"hard",image:"https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200&q=60",fees:{regFee:200,envFee:0,guideDay:1200,guideON:2000,campFee:100,parkDay:0,parkON:0}},
-  {id:4,name:"Mt. Lantik",location:"Alfonso, Cavite",difficulty:"moderate",image:"https://images.unsplash.com/photo-1501854140801-50d01698950b?w=200&q=60",fees:{regFee:130,envFee:100,guideDay:900,guideON:1500,campFee:0,parkDay:100,parkON:100}}
-];
-const guides = [
-  {id:1,name:"John Dela Cruz",initials:"JD",mountains:[1,3],rating:4.9,available:"Mon–Sat",phone:"+63 912 345 6789"},
-  {id:2,name:"Maya Reyes",initials:"MR",mountains:[1,2],rating:4.8,available:"Daily",phone:"+63 923 456 7890"},
-  {id:3,name:"Rico Cabanlit",initials:"RC",mountains:[4],rating:5.0,available:"Daily",phone:"+63 934 567 8901"},
-  {id:4,name:"Elena Llorente",initials:"EL",mountains:[1],rating:4.7,available:"Wed–Sun",phone:"+63 945 678 9012"}
-];
 
-const DUMMY_BOOKINGS = [
-  {id:"BK001",mountainId:1,mountain:"Mt. Batulao",date:"2025-06-10",time:"06:00",type:"day",status:"pending",guideId:1,guideName:"John Dela Cruz",guideInitials:"JD",pax:3,hikers:["Carlo Mendoza","Ana Santos","Liza Reyes"],totalFee:3870,createdAt:Date.now()-7200000,nudges:2,lastNudge:Date.now()-1800000,camping:false,notes:"Bring extra water — dry season trail."},
-  {id:"BK002",mountainId:2,mountain:"Mt. Talamitam",date:"2025-06-15",time:"14:00",type:"late",status:"confirmed",guideId:2,guideName:"Maya Reyes",guideInitials:"MR",pax:2,hikers:["Ben Torres","Clara Lim"],totalFee:1500,createdAt:Date.now()-86400000,nudges:0,lastNudge:0,camping:false,notes:"Perfect sunset hike."},
-  {id:"BK003",mountainId:4,mountain:"Mt. Lantik",date:"2025-06-20",time:"05:30",type:"overnight",status:"confirmed",guideId:3,guideName:"Rico Cabanlit",guideInitials:"RC",pax:4,hikers:["Diana Cruz","Nico Bautista","Sam Villanueva","Pat Ocampo"],totalFee:5200,createdAt:Date.now()-172800000,nudges:0,lastNudge:0,camping:true,notes:"Camp at summit ridge. Bring -5°C sleeping bag."},
-  {id:"BK004",mountainId:1,mountain:"Mt. Batulao",date:"2025-06-25",time:"07:00",type:"day",status:"pending",guideId:4,guideName:"Elena Llorente",guideInitials:"EL",pax:1,hikers:["Marco Reyes"],totalFee:1170,createdAt:Date.now()-300000,nudges:0,lastNudge:0,camping:false,notes:"Solo hike, trail A."},
-  {id:"BK005",mountainId:3,mountain:"Mt. Apayang",date:"2025-07-01",time:"05:00",type:"overnight",status:"confirmed",guideId:1,guideName:"John Dela Cruz",guideInitials:"JD",pax:5,hikers:["Rica Santos","Jon Cruz","Mel Aquino","Toni Blas","Kim Reyes"],totalFee:8200,createdAt:Date.now()-259200000,nudges:0,lastNudge:0,camping:true,notes:"Advanced trail. Physical fitness required."},
-  {id:"BK006",mountainId:2,mountain:"Mt. Talamitam",date:"2025-07-05",time:"15:00",type:"late",status:"pending",guideId:2,guideName:"Maya Reyes",guideInitials:"MR",pax:2,hikers:["Luis Garcia","Mia Torres"],totalFee:1500,createdAt:Date.now()-600000,nudges:1,lastNudge:Date.now()-2400000,camping:false,notes:"Sunset view hike."},
-  {id:"BK007",mountainId:4,mountain:"Mt. Lantik",date:"2025-07-10",time:"06:00",type:"day",status:"confirmed",guideId:3,guideName:"Rico Cabanlit",guideInitials:"RC",pax:6,hikers:["Grace Lim","Chris Tan","Bea Sy","Joel Gomez","Leah Flores","Ray Perez"],totalFee:5980,createdAt:Date.now()-345600000,nudges:0,lastNudge:0,camping:false,notes:"Group of 6, bring packed lunch."},
-  {id:"BK008",mountainId:1,mountain:"Mt. Batulao",date:"2025-04-01",time:"06:00",type:"day",status:"completed",guideId:1,guideName:"John Dela Cruz",guideInitials:"JD",pax:2,hikers:["Ana Cruz","Bob Reyes"],totalFee:2820,createdAt:Date.now()-2592000000,nudges:0,lastNudge:0,camping:false,notes:""},
-  {id:"BK009",mountainId:2,mountain:"Mt. Talamitam",date:"2025-03-15",time:"13:00",type:"late",status:"cancelled",guideId:2,guideName:"Maya Reyes",guideInitials:"MR",pax:1,hikers:["Tony Sta Ana"],totalFee:800,createdAt:Date.now()-3456000000,nudges:0,lastNudge:0,camping:false,notes:""},
-  {id:"BK010",mountainId:3,mountain:"Mt. Apayang",date:"2025-07-20",time:"04:00",type:"overnight",status:"pending",guideId:1,guideName:"John Dela Cruz",guideInitials:"JD",pax:3,hikers:["Nadia Villanueva","Mark Ocampo","Sean Ong"],totalFee:6600,createdAt:Date.now()-180000,nudges:0,lastNudge:0,camping:true,notes:"Technical trail with ropes."}
-];
+<?php
+// Output database data as JavaScript variables
+echo "const mountains = " . json_encode($dbMountains) . ";\n";
+echo "const guides = " . json_encode($dbGuides) . ";\n";
+echo "const currentUserName = " . json_encode($user_name) . ";\n";
+echo "const currentUserId = " . json_encode($currentUserId) . ";\n";
+echo "let bookings = " . json_encode($dbUserBookings) . ";\n";
+echo "let nextId = Math.max(...bookings.map(b => parseInt(b.id?.replace('BK', '')) || 0), 10) + 1;\n";
+?>
 
-let bookings = [];
-let nextId = 11;
+
 
 function loadBookings() {
   const saved = localStorage.getItem('lakbay_bk_v3');
@@ -1266,25 +1712,43 @@ function copyBookingId() {
 function closeSuccess() { document.getElementById('successModal').classList.remove('open'); }
 function closeJoinSuccess() { document.getElementById('joinSuccessModal').classList.remove('open'); }
 
-// ── RENDER BOOKING CARDS ──
 function renderBookings() {
-  const cc = document.getElementById('currentBookings');
-  const hc = document.getElementById('historyBookings');
-  const now = Date.now(), FIVE_H = 18000000, TWENTY_M = 1200000, MAX_N = 10;
-  const current = bookings.filter(b=>b.status!=='completed'&&b.status!=='cancelled');
-  const history = bookings.filter(b=>b.status==='completed'||b.status==='cancelled');
-  cc.innerHTML = current.length ? current.map(b=>bookingCard(b,now,FIVE_H,TWENTY_M,MAX_N)).join('') : emptyState();
-  hc.innerHTML = history.length ? history.map(b=>bookingCard(b,now,FIVE_H,TWENTY_M,MAX_N)).join('') : `<div class="empty-state" style="grid-column:1/-1;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><p>No booking history yet</p></div>`;
+    const cc = document.getElementById('currentBookings');
+    const hc = document.getElementById('historyBookings');
+    const now = Date.now(), FIVE_H = 18000000, TWENTY_M = 1200000, MAX_N = 10;
+    
+    // Current = pending, confirmed, active, joined (excluding cancelled/completed)
+    const current = bookings.filter(b => {
+        const status = b.status;
+        return status !== 'cancelled' && status !== 'completed' && status !== 'finished';
+    });
+    
+    // History = cancelled, completed, finished
+    const history = bookings.filter(b => {
+        const status = b.status;
+        return status === 'cancelled' || status === 'completed' || status === 'finished';
+    });
+    
+    cc.innerHTML = current.length ? 
+        current.map(b => bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N)).join('') : 
+        emptyState();
+    
+    hc.innerHTML = history.length ? 
+        history.map(b => bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N)).join('') : 
+        `<div class="empty-state" style="grid-column:1/-1;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><p>No booking history yet</p></div>`;
 }
-
 function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
-  const ts=now-b.createdAt, canReplace=b.status==='pending'&&ts>=FIVE_H;
-  const canNudge=b.status==='pending'&&ts<FIVE_H&&b.nudges<MAX_N&&(now-b.lastNudge)>=TWENTY_M;
-  const rem=Math.max(0,FIVE_H-ts), hL=Math.floor(rem/3600000), mL=Math.floor((rem%3600000)/60000);
-  const showTimer=b.status==='pending'&&ts<FIVE_H;
-  const typeMap={day:'Day (12am–3pm)',late:'Late (4pm–12am)',overnight:'Overnight'};
-  const joinedBadge = b.joinedFromId ? `<span class="joined-badge">Joined</span>` : '';
-  const isJoined = !!b.joinedFromId;
+  const ts = now - b.createdAt;
+  const canReplace = b.status === 'pending' && ts >= FIVE_H;
+  const isJoined = !!b.joinedFromId;  // <-- MOVE THIS HERE - BEFORE using it!
+  const canNudge = b.status === 'pending' && !isJoined && ts < FIVE_H && b.nudges < MAX_N && (now - b.lastNudge) >= TWENTY_M;
+  const rem = Math.max(0, FIVE_H - ts);
+  const hL = Math.floor(rem / 3600000);
+  const mL = Math.floor((rem % 3600000) / 60000);
+  const showTimer = b.status === 'pending' && ts < FIVE_H;
+  const typeMap = {day:'Day (12am–3pm)', late:'Late (4pm–12am)', overnight:'Overnight'};
+  const joinedBadge = isJoined ? `<span class="joined-badge">Joined</span>` : '';
+  
   return `
     <div class="booking-card">
       <div class="booking-card-header">
@@ -1292,48 +1756,57 @@ function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
           <div class="booking-card-title">${b.mountain}${joinedBadge}</div>
           <div class="booking-card-date">
             <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            ${b.date}${b.time?' · '+b.time:''} · ${typeMap[b.type]||b.type}
+            ${b.date}${b.time ? ' · ' + b.time : ''} · ${typeMap[b.type] || b.type}
           </div>
         </div>
-        <span class="badge status-${b.status}" style="white-space:nowrap;">${{pending:'Pending',confirmed:'Confirmed',completed:'Completed',cancelled:'Cancelled',joined:'Joined'}[b.status]||b.status}</span>
+        <span class="badge status-${b.status}" style="white-space:nowrap;">${{pending:'Pending', confirmed:'Confirmed', completed:'Completed', cancelled:'Cancelled', joined:'Joined'}[b.status] || b.status}</span>
       </div>
       <div class="booking-card-guide">
         <div class="guide-av-sm">${b.guideInitials}</div>
         <div style="flex:1;">
           <div style="font-weight:700;font-size:13px;color:var(--forest);">${b.guideName}</div>
           <div style="font-size:11px;color:var(--stone);">
-            ${b.pax} hiker(s) · #${b.id}${isJoined?' · via '+b.joinedFromId:''}
+            ${b.pax} hiker(s) · #${b.id}${isJoined ? ' · via ' + b.joinedFromId : ''}
           </div>
         </div>
       </div>
-      ${!isJoined?`<div class="fee-total">₱${b.totalFee.toLocaleString()} <span style="font-size:11px;font-weight:400;color:var(--stone);">pay after hike</span></div>`:`<div style="font-size:12px;color:var(--stone);margin-top:4px;">Fees managed by organizer</div>`}
-      ${showTimer?`<div class="countdown-timer"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Guide response: ${hL}h ${mL}m remaining</div>`:''}
-      ${b.nudges>0?`<div class="nudge-count"><svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" fill="none"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Nudges: ${b.nudges}/${MAX_N}</div>`:''}
+      ${!isJoined ? `<div class="fee-total">₱${b.totalFee.toLocaleString()} <span style="font-size:11px;font-weight:400;color:var(--stone);">pay after hike</span></div>` : `<div style="font-size:12px;color:var(--stone);margin-top:4px;">Fees managed by organizer</div>`}
+      ${showTimer ? `<div class="countdown-timer"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Guide response: ${hL}h ${mL}m remaining</div>` : ''}
+      ${b.nudges > 0 ? `<div class="nudge-count"><svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" fill="none"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Nudges: ${b.nudges}/${MAX_N}</div>` : ''}
       <div class="booking-actions">
         <a href="messages.php?guide=${b.guideId}" class="btn btn-outline btn-sm">
           <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Message Guide
         </a>
-        ${isJoined?`
+        ${isJoined ? `
           <button class="btn btn-outline btn-sm" onclick="viewJoinedHike('${b.id}')">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/></svg> View Details
           </button>
           <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}','leave')">
             <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Leave Hike
           </button>
-        `:`
-          ${b.status==='pending'?`
-            ${canNudge?`<button class="btn btn-outline btn-sm" onclick="nudgeGuide('${b.id}')"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Nudge (${b.nudges+1}/${MAX_N})</button>`:''}
-            <button class="btn btn-outline btn-sm" onclick="editBooking('${b.id}')">
-              <svg viewBox="0 0 24 24"><path d="M17 3l4 4-7 7H10v-4l7-7z"/><path d="M4 20h16"/></svg> Edit
-            </button>
-            ${canReplace?`<button class="btn btn-outline btn-sm" onclick="openReplaceGuide('${b.id}')"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Replace Guide</button>`:''}
-            <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">
-              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel
-            </button>
-          `:''}
-        `}
+        ` : (b.status === 'pending' ? `
+          ${canNudge ? `<button class="btn btn-outline btn-sm" onclick="nudgeGuide('${b.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            Nudge (${b.nudges + 1}/${MAX_N})
+          </button>` : ''}
+          <button class="btn btn-outline btn-sm" onclick="editBooking('${b.id}')">
+            <svg viewBox="0 0 24 24"><path d="M17 3l4 4-7 7H10v-4l7-7z"/><path d="M4 20h16"/></svg> Edit
+          </button>
+          ${canReplace ? `<button class="btn btn-outline btn-sm" onclick="openReplaceGuide('${b.id}')">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Replace Guide
+          </button>` : ''}
+          <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel
+          </button>
+        ` : '')}
       </div>
-    </div>`;
+    </div>
+  `;
+}
+
+function updateNudgeDisplay() {
+    // This will refresh just the nudge counts without full re-render
+    renderBookings();
 }
 
 // ── VIEW JOINED HIKE DETAILS ──
@@ -1370,17 +1843,6 @@ function viewJoinedHike(bookingId) {
   document.getElementById('viewJoinedModal').classList.add('open');
 }
 
-// ── NUDGE / REPLACE / EDIT / CANCEL ──
-function nudgeGuide(bookingId) {
-  const b=bookings.find(x=>x.id===bookingId);
-  if(!b||b.status!=='pending') return;
-  const now=Date.now(), FIVE_H=18000000, TWENTY_M=1200000, MAX_N=10;
-  if(now-b.createdAt>=FIVE_H){showToast('Response period expired — you can replace the guide.');renderBookings();return;}
-  if(b.nudges>=MAX_N){showToast('Max nudges reached. Replace your guide.');return;}
-  if(now-b.lastNudge<TWENTY_M){showToast(`Wait ${Math.ceil((TWENTY_M-(now-b.lastNudge))/60000)} more min before nudging.`);return;}
-  b.nudges++; b.lastNudge=now; saveBookings(); renderBookings();
-  showToast(`Nudge sent to ${b.guideName}!`);
-}
 
 let replaceBookingId=null, replaceGuideSelected=null;
 function openReplaceGuide(bookingId) {
@@ -1553,13 +2015,31 @@ function saveBookingEdit() {
 function closeEditModal(){document.getElementById('editBookingModal').classList.remove('open');}
 
 function cancelBooking(bookingId, mode) {
-  const label=mode==='leave'?'leave this hike':'cancel this booking';
-  if(confirm(`Are you sure you want to ${label}?`)){
-    const b=bookings.find(x=>x.id===bookingId);
-    if(b){b.status='cancelled';saveBookings();renderBookings();showToast(mode==='leave'?'Left the hike':'Booking cancelled');}
-  }
+    const label = mode === 'leave' ? 'leave this hike' : 'cancel this booking';
+    if (!confirm(`⚠️ Are you sure you want to ${label}?`)) return;
+    
+    showToast('Processing cancellation...');
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: `action=cancel_booking&booking_id=${bookingId}`
+    }).then(response => response.json()).then(result => {
+        if (result.success) {
+            const b = bookings.find(x => x.id === bookingId);
+            if (b) {
+                b.status = 'cancelled';
+                showToast(mode === 'leave' ? '✓ You left the hike' : '✓ Booking cancelled');
+                renderBookings(); // This will move it to history
+            }
+        } else {
+            showToast(result.message || 'Failed to cancel booking. Please try again.');
+        }
+    }).catch(err => {
+        console.error(err);
+        showToast('Network error. Please try again.');
+    });
 }
-
 function switchTab(tab,el){
   document.querySelectorAll('.page-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
@@ -1585,6 +2065,251 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
   });
 });
 
+
+// Save the original functions
+const originalCreateBooking = createBooking;
+const originalNudgeGuide = nudgeGuide;
+const originalCancelBooking = cancelBooking;
+const originalConfirmReplaceGuide = confirmReplaceGuide;
+const originalSaveBookingEdit = saveBookingEdit;
+const originalConfirmJoinHike = confirmJoinHike;
+const originalOpenReplaceGuide = openReplaceGuide;
+// Override createBooking to save to database
+createBooking = function() {
+    const m = flowState.mtn, f = m.fees, pax = flowState.hikers.length;
+    const isON = flowState.type === 'overnight';
+    const total = f.regFee * pax + (f.envFee ? f.envFee * pax : 0) + (isON ? f.guideON : f.guideDay) + ((isON && flowState.camping && f.campFee) ? f.campFee * pax : 0);
+    
+    const nb = {
+        mountainId: m.id,
+        mountain: m.name,
+        date: flowState.date,
+        time: flowState.time || (flowState.type === 'day' ? '08:00' : (flowState.type === 'late' ? '16:00' : '12:00')),
+        type: flowState.type,
+        guideId: flowState.guide.id,
+        guideName: flowState.guide.name,
+        guideInitials: flowState.guide.initials,
+        pax: pax,
+        hikers: [...flowState.hikers],
+        totalFee: total,
+        notes: flowState.notes || '',
+        camping: flowState.camping || false
+    };
+    
+    showToast('Creating booking...');
+    
+    // Save to database via AJAX
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: 'action=save_booking&data=' + encodeURIComponent(JSON.stringify(nb))
+    })
+    .then(async response => {
+        const text = await response.text();
+        console.log('Raw response:', text);
+        try {
+            return JSON.parse(text);
+        } catch(e) {
+            console.error('JSON parse error:', e);
+            throw new Error('Server returned invalid JSON. Check PHP errors.');
+        }
+    })
+    .then(result => {
+        if (result.success) {
+            // Add the booking to local array with a generated ID for display
+            const newId = 'BK' + String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+            nb.id = newId;
+            nb.createdAt = Date.now();
+            nb.nudges = 0;
+            nb.lastNudge = 0;
+            nb.status = 'pending';
+            bookings.unshift(nb);
+            closeBookingModal();
+            
+            document.getElementById('successBookingId').textContent = result.booking_id || newId;
+            document.getElementById('successTitle').textContent = 'Booking Created!';
+            document.getElementById('successDesc').textContent = 'Your booking has been saved. The guide will review your request.';
+            
+            const typeNames = {day:'Day Hike (12am–3pm)', late:'Late Hike (4pm–12am)', overnight:'Overnight'};
+            document.getElementById('successSummary').innerHTML = `
+                <div class="summary-row"><span class="sr-label">Mountain</span><span class="sr-val">${nb.mountain}</span></div>
+                <div class="summary-row"><span class="sr-label">Date & Time</span><span class="sr-val">${nb.date} at ${nb.time}</span></div>
+                <div class="summary-row"><span class="sr-label">Type</span><span class="sr-val">${typeNames[nb.type]}</span></div>
+                <div class="summary-row"><span class="sr-label">Hikers (${pax})</span><span class="sr-val">${nb.hikers.join(', ')}</span></div>
+                <div class="summary-row"><span class="sr-label">Guide</span><span class="sr-val">${nb.guideName}</span></div>
+                <div class="summary-row"><span class="sr-label">Total</span><span class="sr-val">₱${nb.totalFee.toLocaleString()}</span></div>`;
+            
+            document.getElementById('successModal').classList.add('open');
+            renderBookings();
+            showToast(result.message);
+        } else {
+            showToast(result.message || 'Failed to save booking');
+            // Fallback to original behavior
+            originalCreateBooking();
+        }
+    })
+    .catch(err => {
+        console.error('Fetch error:', err);
+        showToast('Error saving to database. Saving locally instead.');
+        // Fallback to original behavior
+        originalCreateBooking();
+    });
+};
+function nudgeGuide(bookingId) {
+    const b = bookings.find(x => x.id === bookingId);
+    if (!b || b.status !== 'pending') {
+        showToast('Only pending bookings can be nudged');
+        return;
+    }
+    
+    const now = Date.now(), FIVE_H = 18000000, TWENTY_M = 1200000, MAX_N = 10;
+    
+    // Check if response period expired (5 hours)
+    if (now - b.createdAt >= FIVE_H) {
+        showToast('Response period expired — you can replace the guide.');
+        renderBookings();
+        return;
+    }
+    
+    // Check max nudges
+    if (b.nudges >= MAX_N) {
+        showToast('Max nudges reached. Please replace your guide.');
+        return;
+    }
+    
+    // Check cooldown (20 minutes)
+    if (now - b.lastNudge < TWENTY_M && b.lastNudge > 0) {
+        const minutesLeft = Math.ceil((TWENTY_M - (now - b.lastNudge)) / 60000);
+        showToast(`Please wait ${minutesLeft} more minute(s) before nudging again.`);
+        return;
+    }
+    
+    showToast(`Sending nudge to ${b.guideName}...`);
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: `action=nudge_guide&booking_id=${bookingId}&guide_id=${b.guideId}`
+    }).then(response => response.json()).then(result => {
+        if (result.success) {
+            b.nudges++;
+            b.lastNudge = now;
+            renderBookings();
+            showToast(`🔔 Nudge sent to ${b.guideName}! They will receive a notification.`);
+        } else {
+            showToast(result.message);
+        }
+    }).catch(err => {
+        console.error(err);
+        showToast('Network error. Could not send nudge.');
+    });
+}
+// Override saveBookingEdit
+saveBookingEdit = function() {
+    const b = bookings.find(x => x.id === editBookingId);
+    if (!b) return;
+    
+    const newDate = document.getElementById('editDate')?.value;
+    const newTime = document.getElementById('editTime')?.value;
+    const notes = document.getElementById('editNotes')?.value || '';
+    
+    if (!newDate) {
+        showToast('Please select a date');
+        return;
+    }
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: `action=update_booking&booking_id=${editBookingId}&date=${newDate}&time=${newTime}&notes=${encodeURIComponent(notes)}&hikers=${encodeURIComponent(JSON.stringify(b.hikers))}`
+    }).then(response => response.json()).then(result => {
+        if (result.success) {
+            b.date = newDate;
+            b.time = newTime;
+            b.notes = notes;
+            const m = mountains.find(x => x.id === b.mountainId);
+            if (m) {
+                const isON = b.type === 'overnight';
+                const f = m.fees;
+                b.totalFee = f.regFee * b.pax + (f.envFee || 0) + (isON ? f.guideON : f.guideDay) + ((isON && b.camping && f.campFee) ? f.campFee * b.pax : 0);
+            }
+            renderBookings();
+            closeEditModal();
+            showToast('Booking updated!');
+        } else {
+            showToast(result.message);
+        }
+    }).catch(() => originalSaveBookingEdit());
+};
+
+// Override confirmJoinHike
+confirmJoinHike = function() {
+    if (!foundHike) {
+        showToast('No hike selected');
+        return;
+    }
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: `action=join_hike&booking_number=${foundHike.id}`
+    }).then(response => response.json()).then(result => {
+        if (result.success) {
+            originalConfirmJoinHike();
+        } else {
+            showToast(result.message);
+        }
+    }).catch(() => originalConfirmJoinHike());
+};
+
+// Override confirmReplaceGuide
+confirmReplaceGuide = function() {
+    if (!replaceGuideSelected) {
+        showToast('Select a guide first');
+        return;
+    }
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: `action=replace_guide&booking_id=${replaceBookingId}&new_guide_id=${replaceGuideSelected}`
+    }).then(response => response.json()).then(result => {
+        if (result.success) {
+            originalConfirmReplaceGuide();
+        } else {
+            showToast(result.message);
+        }
+    }).catch(() => originalConfirmReplaceGuide());
+};
+
+// Override openReplaceGuide
+openReplaceGuide = function(bookingId) {
+    replaceBookingId = bookingId;
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: `action=get_available_guides&booking_id=${bookingId}`
+    }).then(response => response.json()).then(result => {
+        if (result.success && result.guides.length > 0) {
+            document.getElementById('replaceGuideList').innerHTML = result.guides.map(g => `
+                <div class="guide-replace-option" onclick="selectReplaceGuide(${g.id})" data-gid="${g.id}">
+                    <div class="guide-av-sm">${g.name.charAt(0)}</div>
+                    <div><div class="guide-select-name">${g.name}</div><div class="guide-select-meta">★ ${g.rating} · ${g.years_experience} years</div></div>
+                </div>
+            `).join('');
+            document.getElementById('replaceGuideModal').classList.add('open');
+        } else {
+            document.getElementById('replaceGuideList').innerHTML = '<div class="info-note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>No other guides available for this mountain.</div>';
+            document.getElementById('replaceGuideModal').classList.add('open');
+        }
+    }).catch(() => originalOpenReplaceGuide(bookingId));
+};
+
+// Initial load
 loadBookings();
 renderBookings();
 setInterval(renderBookings, 60000);

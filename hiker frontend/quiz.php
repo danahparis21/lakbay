@@ -28,7 +28,9 @@
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
   --radius-sm: 20px;
   --btn-special: #100600;
+  --nav-h: 74px;
 }
+@media(max-width:768px){ :root { --nav-h: 0px; } }
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -37,59 +39,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Shared navigation (unchanged from original structure) */
-/* ── NAV ── */
-.desktop-nav {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-  background: rgba(250,248,243,0.92); backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(16,6,0,0.08);
-  height: 64px; display: flex; align-items: center;
-  padding: 0 32px; gap: 32px;
-}
-.brand {
-  font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700;
-  color: var(--forest); text-decoration: none; display: flex; align-items: center; gap: 8px;
-}
-.brand svg { width: 28px; height: 28px; }
-.tabs { display: flex; gap: 4px; flex: 1; justify-content: center; }
-.tab-link {
-  display: flex; align-items: center; gap: 6px; padding: 8px 16px;
-  border-radius: 50px; font-size: 13px; font-weight: 600; color: var(--stone);
-  text-decoration: none; transition: all 0.2s;
-}
-.tab-link:hover { background: var(--sky); color: var(--forest); }
-.tab-link.active { background: var(--forest); color: var(--cream); }
-.tab-link svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
-.user-btn {
-  width: 36px; height: 36px; border-radius: 50%; background: var(--forest);
-  color: var(--cream); font-weight: 700; font-size: 13px;
-  display: flex; align-items: center; justify-content: center; text-decoration: none;
-}
-.mobile-nav { display: none; }
-@media (max-width: 768px) {
-  .desktop-nav { display: none; }
-  .mobile-nav {
-    display: block; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-    background: rgba(250,248,243,0.96); backdrop-filter: blur(16px);
-    border-top: 1px solid rgba(16,6,0,0.08);
-  }
-  .mobile-nav-inner {
-    display: flex; align-items: center; justify-content: space-around;
-    padding: 8px 0 max(8px, env(safe-area-inset-bottom));
-  }
-  .mob-nav-item {
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-    font-size: 10px; font-weight: 600; color: var(--stone);
-    text-decoration: none; padding: 4px 12px;
-  }
-  .mob-nav-item.active { color: var(--forest); }
-  .mob-nav-item svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.8; fill: none; }
-  .mob-nav-item.quiz-center {
-    width: 52px; height: 52px; border-radius: 50%; background: var(--forest);
-    color: var(--cream); padding: 0; display: flex; align-items: center; justify-content: center;
-    margin-top: -16px; box-shadow: 0 4px 16px rgba(26,46,26,0.3);
-  }
-}
+/* Shared navigation styles from shared.css */
 
 /* QUIZ HERO — BACKGROUND IMAGE + GLASS MORPHISM (preserves original text but adds glass) */
 .quiz-hero {
@@ -97,6 +47,7 @@ body {
   padding: 60px 0 80px;
   position: relative;
   overflow: hidden;
+  margin-top: var(--nav-h);
 }
 .quiz-hero::before {
   content: '';
@@ -359,55 +310,37 @@ body {
 </head>
 <body>
 
-<!-- DESKTOP NAV (ORIGINAL, UNCHANGED) -->
+<!-- DESKTOP NAV -->
 <nav class="desktop-nav">
-  <a href="explore.php" class="brand">
-    <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#1a2e1a" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#1a2e1a" opacity=".35"/></svg>
+  <a href="../index.php" class="brand">
+    <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#100600" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#100600" opacity=".35"/></svg>
     LAKBAY
   </a>
   <div class="tabs">
     <a href="explore.php" class="tab-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      Explore
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Explore
     </a>
     <a href="bookings.php" class="tab-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-      Bookings
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings
     </a>
-    <a href="quiz.php" class="tab-link quiz-tab active">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-      Quiz
+    <a href="quiz.php" class="tab-link active">
+      <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Quiz
     </a>
     <a href="messages.php" class="tab-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      Messages
+      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages
     </a>
   </div>
   <a href="hikerProfile.php" class="user-btn">J</a>
 </nav>
 
-<!-- MOBILE NAV (ORIGINAL) -->
+<!-- MOBILE NAV -->
 <nav class="mobile-nav">
   <div class="mobile-nav-inner">
-    <a href="explore.php" class="mob-nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <span>Explore</span>
-    </a>
-    <a href="bookings.php" class="mob-nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-      <span>Bookings</span>
-    </a>
-    <a href="quiz.php" class="mob-nav-item quiz-center active">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-    </a>
-    <a href="messages.php" class="mob-nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      <span>Messages</span>
-    </a>
-    <a href="profile.php" class="mob-nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <span>Profile</span>
-    </a>
+    <a href="explore.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span>Explore</span></a>
+    <a href="bookings.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Bookings</span></a>
+    <a href="quiz.php" class="mob-nav-item quiz-center active"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></a>
+    <a href="messages.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Messages</span></a>
+    <a href="hikerProfile.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></a>
   </div>
 </nav>
 
