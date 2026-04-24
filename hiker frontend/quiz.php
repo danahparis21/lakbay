@@ -1,3 +1,131 @@
+<?php
+// hiker frontend/quiz.php - LAKBAY Skill Assessment Quiz
+require_once __DIR__ . '/../config/db.php';
+
+session_start();
+
+// Redirect if not logged in
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
+$currentUserId = $_SESSION['user_id'];
+$currentUser = null;
+$userInitial = 'J';
+
+// Fetch current user details
+$stmt = $pdo->prepare("SELECT id, name, email, avatar, hiking_level, home_region FROM users WHERE id = ?");
+$stmt->execute([$currentUserId]);
+$currentUser = $stmt->fetch();
+
+if ($currentUser) {
+    $nameParts = explode(' ', trim($currentUser['name']));
+    $userInitial = '';
+    foreach ($nameParts as $part) {
+        if (!empty($part)) {
+            $userInitial .= strtoupper(substr($part, 0, 1));
+        }
+    }
+    $userInitial = substr($userInitial, 0, 2);
+}
+
+// --- Mountains from Database ---
+// Check if mountains table exists and has data
+try {
+    $stmt = $pdo->query("SELECT COUNT(*) FROM mountains");
+    $mountainCount = $stmt->fetchColumn();
+    
+    if ($mountainCount == 0) {
+        // Insert sample mountains if none exist
+        $pdo->exec("
+            INSERT INTO mountains (name, description, rating, location, image, jumpOff, duration, fee, elevation, crowdLevel, weatherAdvisory, peakTimes, rules, envReminders, hazards, status, difficulty) VALUES
+            ('Mt. Batulao', 'Known for its iconic rolling hills and stunning panoramic views of Taal Volcano. Perfect for beginners and intermediate hikers.', 4.7, 'Nasugbu, Batangas', 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80', 'Barangay Evercrest, Nasugbu', '4-5 hours', 500, '811 MASL', 'High', 'Clear skies expected. Temperature: 24-28°C.', 'Weekends 6AM-9AM', '[\"Register at barangay hall\",\"No littering\"]', '[\"Bring water\",\"Pack out trash\"]', '[\"Slippery when wet\"]', 'Open', 'Easy'),
+            ('Mt. Talamitam', 'A gentle peak with scenic grassland summit. Great for beginners and family hikes.', 4.5, 'Nasugbu, Batangas', 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&q=80', 'Barangay Kaysuyo, Nasugbu', '3-4 hours', 500, '630 MASL', 'Medium', 'Sunny with scattered clouds', 'November to May is peak season', '[\"Register at jump-off\"]', '[\"Pack your trash\"]', '[\"Steep sections\"]', 'Open', 'Moderate'),
+            ('Mt. Pulag', 'Highest peak in Luzon, famous for its sea of clouds and stunning sunrise.', 4.9, 'Kabayan, Benguet', 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=600&q=80', 'Ambangeg Trail', '5-6 hours', 1500, '2922 MASL', 'Very High', 'Cold temperatures, occasional rain', 'Peak season Dec-May', '[\"Register at DENR\",\"Hire local guide\"]', '[\"Bring warm clothes\",\"Leave no trace\"]', '[\"Altitude sickness risk\"]', 'Open', 'Hard')
+        ");
+        // Refresh count after insert
+        $mountainCount = 3;
+    }
+} catch (PDOException $e) {
+    // Table might not exist - create it
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS mountains (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            rating DECIMAL(3,2),
+            location VARCHAR(255),
+            image VARCHAR(500),
+            jumpOff VARCHAR(255),
+            duration VARCHAR(100),
+            fee DECIMAL(10,2),
+            elevation VARCHAR(50),
+            crowdLevel VARCHAR(50),
+            weatherAdvisory TEXT,
+            peakTimes TEXT,
+            rules JSON,
+            envReminders JSON,
+            hazards JSON,
+            status VARCHAR(50),
+            difficulty VARCHAR(50)
+        )
+    ");
+}
+
+// Fetch mountains from database
+$stmt = $pdo->query("SELECT * FROM mountains WHERE status = 'Open' ORDER BY rating DESC");
+$dbMountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Map difficulty to level scores
+$difficultyScoreMap = [
+    'Easy' => [0, 1],
+    'Moderate' => [1, 2],
+    'Hard' => [2, 3],
+    'Expert' => [3],
+];
+
+// Prepare mountains array for JavaScript
+$mountainsFromDb = [];
+foreach ($dbMountains as $mountain) {
+    $difficulty = $mountain['difficulty'] ?? 'Moderate';
+    $mountainsFromDb[] = [
+        'name' => $mountain['name'],
+        'diff' => strtolower($difficulty),
+        'elevation' => $mountain['elevation'] ?? 'N/A',
+        'time' => $mountain['duration'] ?? '3-4 hrs',
+        'img' => $mountain['image'] ?? 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=500&q=80',
+        'score' => $difficultyScoreMap[$difficulty] ?? [1, 2]
+    ];
+}
+
+// Handle AJAX request to save quiz results and update hiking level
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    header('Content-Type: application/json');
+    $data = json_decode(file_get_contents('php://input'), true);
+    
+    if (isset($data['level']) && isset($data['totalScore']) && isset($data['maxScore'])) {
+        $newLevel = $data['level'];
+        $totalScore = (int)$data['totalScore'];
+        $maxScore = (int)$data['maxScore'];
+        
+        try {
+            // Update user's hiking_level based on quiz result
+            $stmt = $pdo->prepare("UPDATE users SET hiking_level = ? WHERE id = ?");
+            $stmt->execute([$newLevel, $currentUserId]);
+            
+            $_SESSION['hiking_level'] = $newLevel;
+            
+            echo json_encode(['success' => true, 'message' => 'Profile updated with new hiking level!']);
+        } catch (PDOException $e) {
+            echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        }
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Invalid data']);
+    }
+    exit;
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,7 +134,7 @@
 <title>LAKBAY — Quiz</title>
 <link rel="stylesheet" href="shared.css">
 <style>
-/* ── QUIZ PAGE (ORIGINAL NAV/HEADER PRESERVED, STYLES EXTENDED) ── */
+/* ── QUIZ PAGE STYLES ── */
 * {
   margin: 0;
   padding: 0;
@@ -39,9 +167,153 @@ body {
   overflow-x: hidden;
 }
 
-/* Shared navigation styles from shared.css */
+/* MODAL STYLES */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 0;
+  padding: 0;
+}
 
-/* QUIZ HERO — BACKGROUND IMAGE + GLASS MORPHISM (preserves original text but adds glass) */
+.modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-content {
+  background: linear-gradient(145deg, #1e2a1a, #0a1a0a);
+  border-radius: 40px;
+  max-width: 680px; /* Match the quiz container width */
+  width: 92%;
+  padding: 56px 40px;
+  text-align: center;
+  border: 1px solid rgba(198, 164, 59, 0.3);
+  box-shadow: 0 40px 120px rgba(0,0,0,0.8);
+  transform: translateY(40px) scale(0.95);
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  margin: auto;
+}
+
+.modal-overlay.active .modal-content {
+  transform: translateY(0) scale(1);
+}
+
+.modal-icon {
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(198, 164, 59, 0.1);
+  border-radius: 50%;
+  color: var(--gold);
+}
+
+.modal-icon svg, .result-modal-icon svg {
+  width: 80px !important;
+  height: 80px !important;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.modal-icon svg {
+  animation: float 3s ease-in-out infinite;
+}
+
+.modal-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--gold);
+  margin-bottom: 12px;
+  letter-spacing: -0.5px;
+}
+
+.modal-subtitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 20px;
+  opacity: 0.9;
+}
+
+.modal-desc {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.7;
+  margin-bottom: 36px;
+}
+
+.modal-btn {
+  background: linear-gradient(135deg, var(--gold), #d4af37);
+  border: none;
+  padding: 16px 40px;
+  border-radius: 50px;
+  font-weight: 700;
+  font-size: 18px;
+  color: #0a1a0a;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 10px 20px rgba(198, 164, 59, 0.2);
+}
+
+.modal-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 15px 30px rgba(198, 164, 59, 0.4);
+}
+
+.result-modal-icon {
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.result-modal-icon svg {
+  width: 80px;
+  height: 80px;
+  stroke: var(--gold);
+}
+
+.result-level-name {
+  font-size: 36px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #fff, var(--gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes popIn {
+  0% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* QUIZ HERO */
 .quiz-hero {
   background: url('https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1600&q=80') center/cover no-repeat;
   padding: 60px 0 80px;
@@ -62,15 +334,33 @@ body {
   max-width: 1280px;
   margin: 0 auto;
   padding: 0 24px;
+  display: flex;
+  justify-content: flex-start;
+}
+@media (max-width: 768px) {
+  .quiz-hero .container {
+    justify-content: center;
+  }
 }
 .hero-glass-card {
   max-width: 650px;
+  width: 100%;
   background: rgba(255, 255, 245, 0.18);
   backdrop-filter: blur(14px);
   border-radius: 48px;
   border: 1px solid rgba(255,245,210,0.45);
   padding: 36px 40px;
   box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  text-align: left;
+}
+@media (max-width: 768px) {
+  .hero-glass-card {
+    text-align: center;
+    margin: 0 auto;
+  }
+  .quiz-hero-sub {
+    margin: 0 auto;
+  }
 }
 .quiz-hero-label {
   font-size: 11px;
@@ -101,7 +391,7 @@ body {
   .quiz-hero { padding: 60px 0 80px; }
 }
 
-/* QUIZ CONTAINER — glass morphism card */
+/* QUIZ CONTAINER */
 .quiz-container {
   max-width: 680px;
   margin: -40px auto 0;
@@ -170,7 +460,7 @@ body {
 }
 @media(max-width:480px){ .quiz-nav { padding: 16px 20px 24px; } }
 
-/* BUTTONS — REPLACE GREEN WITH #100600 */
+/* BUTTONS */
 .btn {
   border: none;
   font-weight: 600;
@@ -209,7 +499,7 @@ body {
   font-size: 13px;
 }
 
-/* RESULTS glass / badge */
+/* RESULTS */
 .result-hero {
   background: linear-gradient(135deg, #1e2a1a, #0f2a0f);
   padding: 40px;
@@ -302,9 +592,6 @@ body {
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .container { max-width: 1280px; margin: 0 auto; padding: 0 24px; width: 100%; }
 
-/* Utility icon colors for option icons */
-.icon-mtn, .icon-leaf, .icon-clock, .icon-foot, .icon-fire, .icon-rock, .icon-sun, .icon-tent { stroke: currentColor; stroke-width: 1.8; fill: none; }
-.selected .opt-icon svg { stroke: var(--cream); }
 .quiz-option.selected .opt-icon svg { stroke: var(--cream); }
 </style>
 </head>
@@ -317,20 +604,12 @@ body {
     LAKBAY
   </a>
   <div class="tabs">
-    <a href="explore.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Explore
-    </a>
-    <a href="bookings.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings
-    </a>
-    <a href="quiz.php" class="tab-link active">
-      <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Quiz
-    </a>
-    <a href="messages.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages
-    </a>
+    <a href="explore.php" class="tab-link"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Explore</a>
+    <a href="bookings.php" class="tab-link"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings</a>
+    <a href="quiz.php" class="tab-link active"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Quiz</a>
+    <a href="messages.php" class="tab-link"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages</a>
   </div>
-  <a href="hikerProfile.php" class="user-btn">J</a>
+  <a href="hikerProfile.php" class="user-btn"><?php echo htmlspecialchars($userInitial); ?></a>
 </nav>
 
 <!-- MOBILE NAV -->
@@ -344,14 +623,24 @@ body {
   </div>
 </nav>
 
-<!-- HERO with enhanced background image + glass morphism -->
+<!-- INTRO MODAL -->
+<div class="modal-overlay" id="introModal">
+  <div class="modal-content">
+    <div class="modal-icon">
+      <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.2"><path d="M12 2L2 7L12 12L22 7L12 2Z"/><path d="M2 17L12 22L22 17"/><path d="M2 12L12 17L22 12"/><path d="M12 2V12"/></svg>
+    </div>
+    <div class="modal-title">Welcome to Lakbay Quiz!</div>
+    <div class="modal-subtitle">Find Your Perfect Mountain Match</div>
+    <div class="modal-desc">This quick assessment will help us understand your hiking experience, fitness level, and preferences. Answer 6 questions honestly to get personalized mountain recommendations and discover your hiking level!</div>
+    <button class="modal-btn" onclick="startQuiz()">Begin Quiz →</button>
+  </div>
+</div>
+
+<!-- HERO -->
 <div class="quiz-hero" id="quizHero">
   <div class="container">
     <div class="hero-glass-card">
-      <div class="quiz-hero-label">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        Skill Assessment
-      </div>
+      <div class="quiz-hero-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Skill Assessment</div>
       <div class="quiz-hero-title">Find Your Perfect Mountain</div>
       <div class="quiz-hero-sub">Answer 6 quick questions and we'll match you with trails suited to your experience, fitness, and goals.</div>
     </div>
@@ -359,11 +648,9 @@ body {
 </div>
 
 <!-- QUIZ CARD -->
-<div class="quiz-container" id="quizContainer">
+<div class="quiz-container" id="quizContainer" style="display: none;">
   <div class="quiz-card" id="quizCard">
-    <div class="quiz-progress-bar">
-      <div class="quiz-progress-fill" id="quizProgress" style="width:0%"></div>
-    </div>
+    <div class="quiz-progress-bar"><div class="quiz-progress-fill" id="quizProgress" style="width:0%"></div></div>
     <div class="quiz-inner" id="quizInner"></div>
     <div class="quiz-nav" id="quizNav">
       <button class="btn btn-outline" id="quizBack" onclick="prevQ()" style="visibility:hidden;">← Back</button>
@@ -376,16 +663,25 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
-// SVG icon mapping (replaces all emojis)
+// Mountains from PHP database
+const mountainsFromDb = <?php echo json_encode($mountainsFromDb); ?>;
+
+// Fallback mountains if database empty
+const fallbackMountains = [
+  {name:"Mt. Talamitam",diff:"easy",elevation:"630m",time:"3–4 hrs",img:"https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=500&q=80",score:[0,1]},
+  {name:"Mt. Batulao",diff:"moderate",elevation:"811m",time:"4–5 hrs",img:"https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=500&q=80",score:[1,2]},
+  {name:"Mt. Pulag",diff:"hard",elevation:"2922m",time:"5–6 hrs",img:"https://images.unsplash.com/photo-1519681393784-d120267933ba?w=500&q=80",score:[2,3]}
+];
+
+const mountains = mountainsFromDb.length > 0 ? mountainsFromDb : fallbackMountains;
+
 const iconMap = {
-  // Question icons
   mountainQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L12 4L20 20H4Z" stroke="currentColor" fill="none"/><path d="M12 4L8 12L12 16L16 12L12 4Z" stroke="currentColor" fill="none"/></svg>',
   clockQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
   fitnessQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L15 9H22L16 14L19 22L12 17.5L5 22L8 14L2 9H9L12 2Z"/></svg>',
   terrainQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 20L7 10L12 15L17 7L22 20H2Z"/><circle cx="7" cy="10" r="2"/><circle cx="17" cy="7" r="2"/></svg>',
   hikeTypeQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7L12 12L22 7L12 2Z"/><path d="M2 17L12 22L22 17"/><path d="M2 12L12 17L22 12"/></svg>',
   weatherQ: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2V4M4 12H2M6.5 6.5L5 5M17.5 6.5L19 5M22 12H20M18.5 17.5L20 19M5.5 17.5L4 19M12 20V22M16 12C16 14.209 14.209 16 12 16C9.791 16 8 14.209 8 12C8 9.791 9.791 8 12 8C14.209 8 16 9.791 16 12Z"/></svg>',
-  // Option icons
   seedling: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 8V20M12 8C10 8 7 6 7 3C9 3 12 5 12 8Z"/><path d="M12 8C14 8 17 6 17 3C15 3 12 5 12 8Z"/><path d="M4 20H20"/></svg>',
   boot: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 16H6V12L8 8H16L18 12V16Z"/><path d="M6 16L4 20M18 16L20 20"/></svg>',
   climbing: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2L8 10L4 16L12 22L20 16L16 10L12 2Z"/><path d="M12 2L12 10L8 16"/></svg>',
@@ -410,7 +706,8 @@ const iconMap = {
   shield: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2L3 6V12C3 17.5 12 22 12 22C12 22 21 17.5 21 12V6L12 2Z"/><path d="M12 8V12M12 16H12.01"/></svg>',
   leaf: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12 2C9 8 4 12 4 16C4 18 8 20 12 20C16 20 20 18 20 16C20 12 15 8 12 2Z"/><path d="M12 20V22"/></svg>',
   mountainBadge: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 20L12 4L20 20H4Z"/><circle cx="12" cy="16" r="1.5"/></svg>',
-  bookmarkIcon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>'
+  bookmarkIcon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+  trophy: '<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#c6a43b" stroke-width="1.5"><path d="M6 9H4C2.89543 9 2 9.89543 2 11V13C2 14.1046 2.89543 15 4 15H6"/><path d="M18 9H20C21.1046 9 22 9.89543 22 11V13C22 14.1046 21.1046 15 20 15H18"/><path d="M7 2H17V9C17 11.7614 14.7614 14 12 14C9.23858 14 7 11.7614 7 9V2Z"/><path d="M12 14V20"/><path d="M8 20H16"/><path d="M12 4V8"/></svg>'
 };
 
 const questions = [
@@ -428,13 +725,6 @@ const questions = [
     opts: [{icon:iconMap.fog,text:"I haven't experienced this yet",score:0},{icon:iconMap.wind,text:"Mild discomfort but manageable",score:1},{icon:iconMap.sunrise,text:"Generally fine, I adapt quickly",score:2},{icon:iconMap.shield,text:"No issues at all — I'm experienced",score:3}] }
 ];
 
-const mountains = [
-  {name:"Mt. Talamitam",diff:"easy",elevation:"630m",time:"3–4 hrs",img:"https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=500&q=80",score:[0,1]},
-  {name:"Mt. Batulao",diff:"moderate",elevation:"811m",time:"4–5 hrs",img:"https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=500&q=80",score:[1,2]},
-  {name:"Mt. Lantik",diff:"moderate",elevation:"710m",time:"4–5 hrs",img:"https://images.unsplash.com/photo-1501854140801-50d01698950b?w=500&q=80",score:[1,2]},
-  {name:"Mt. Apayang",diff:"hard",elevation:"980m",time:"6–7 hrs",img:"https://images.unsplash.com/photo-1519681393784-d120267933ba?w=500&q=80",score:[2,3]}
-];
-
 const levels = {
   beginner: {icon:iconMap.seedling,name:"Beginner Explorer",desc:"You're just starting your hiking journey! We recommend gentle, scenic trails with easy terrain. Great views ahead!"},
   intermediate:{icon:iconMap.leaf,name:"Intermediate Adventurer",desc:"You have some experience and decent fitness. Moderate trails with varied terrain and rewarding summits await you."},
@@ -444,6 +734,14 @@ const levels = {
 let currentQ = 0;
 let answers = [];
 let scores = [];
+
+function startQuiz() {
+  document.getElementById('introModal').classList.remove('active');
+  document.getElementById('quizContainer').style.display = 'block';
+  renderQ(0);
+  // Scroll to quiz
+  document.getElementById('quizContainer').scrollIntoView({ behavior: 'smooth' });
+}
 
 function renderQ(i) {
   const q = questions[i];
@@ -491,17 +789,68 @@ function prevQ() {
   renderQ(currentQ);
 }
 
-function showResults() {
+async function saveResultsToDatabase(levelKey, totalScore, maxScore) {
+  try {
+    const response = await fetch(window.location.href, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json','X-Requested-With': 'XMLHttpRequest'},
+      body: JSON.stringify({level: levelKey,totalScore: totalScore,maxScore: maxScore})
+    });
+    const data = await response.json();
+    if (data.success) showToast(data.message);
+    else showToast('Error saving results: ' + data.message);
+  } catch (error) {
+    console.error('Error:', error);
+    showToast('Could not save results to profile.');
+  }
+}
+
+function showResultModal(levelKey, levelName, totalScore, maxScore) {
+  const modalHtml = `
+    <div class="modal-overlay" id="resultModal">
+      <div class="modal-content">
+        <div class="result-modal-icon">${levels[levelKey].icon}</div>
+        <div class="result-level-name">${levelName}</div>
+        <div class="modal-desc" style="font-size: 18px; margin-top: 10px;">${levels[levelKey].desc}</div>
+        <button class="modal-btn" onclick="closeResultModalAndShowRecommendations()">See Your Recommendations →</button>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  
+  const modal = document.getElementById('resultModal');
+  
+  // Close on click outside
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeResultModalAndShowRecommendations();
+  });
+
+  setTimeout(() => {
+    if(modal) modal.classList.add('active');
+  }, 50);
+}
+
+function closeResultModalAndShowRecommendations() {
+  const modal = document.getElementById('resultModal');
+  if(modal) modal.remove();
+  displayRecommendations();
+}
+
+function displayRecommendations() {
   const total = scores.reduce((a,b)=>a+b,0);
   const max = questions.length * 3;
   const pct = total/max;
   let levelKey = pct < 0.33 ? 'beginner' : pct < 0.67 ? 'intermediate' : 'advanced';
   const lvl = levels[levelKey];
+  
   let recommendations = mountains.filter(m => {
     if(levelKey==='beginner') return m.score.includes(0)||m.score.includes(1);
     if(levelKey==='intermediate') return m.score.includes(1)||m.score.includes(2);
     return m.score.includes(2)||m.score.includes(3);
   });
+  
+  if(recommendations.length === 0) recommendations = mountains.slice(0,3);
+  
   const recHtml = recommendations.map(m => `
     <div class="rec-card" onclick="window.location='explore.php'">
       <div class="rec-card-img" style="background-image:url('${m.img}')">
@@ -521,7 +870,7 @@ function showResults() {
     <div class="result-hero">
       <div class="result-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Results Ready</div>
       <div class="result-title"><span class="level-icon">${lvl.icon}</span> ${lvl.name}</div>
-      <div class="result-sub">Score: ${total}/${max} · ${Math.round(pct*100)}% proficiency</div>
+      
     </div>
     <div class="result-body">
       <div class="result-level">
@@ -534,7 +883,7 @@ function showResults() {
       <div style="font-size:12px;font-weight:600;color:var(--sage);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L12 4L20 20H4Z"/></svg> Recommended for You</div>
       <div class="rec-grid">${recHtml}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="save-btn" onclick="saveResults('${levelKey}')">${iconMap.bookmarkIcon} Save recommendations</button>
+        <button class="save-btn" onclick="saveResults('${levelKey}', ${total}, ${max})">${iconMap.bookmarkIcon} Save to Profile & Update Level</button>
         <button class="btn btn-outline btn-sm" onclick="location.reload()">Retake Quiz</button>
         <a href="explore.php" class="btn btn-primary btn-sm">Explore All →</a>
       </div>
@@ -542,9 +891,19 @@ function showResults() {
   `;
 }
 
-function saveResults(level) {
-  localStorage.setItem('quizLevel', level);
-  showToast('Recommendations saved to your profile! 🔖');
+function showResults() {
+  const total = scores.reduce((a,b)=>a+b,0);
+  const max = questions.length * 3;
+  const pct = total/max;
+  let levelKey = pct < 0.33 ? 'beginner' : pct < 0.67 ? 'intermediate' : 'advanced';
+  let levelName = levels[levelKey].name;
+  
+  // Show celebratory modal
+  showResultModal(levelKey, levelName, total, max);
+}
+
+function saveResults(levelKey, totalScore, maxScore) {
+  saveResultsToDatabase(levelKey, totalScore, maxScore);
 }
 
 function showToast(msg) {
@@ -553,7 +912,16 @@ function showToast(msg) {
   setTimeout(()=>t.classList.remove('show'),2800);
 }
 
-renderQ(0);
+// Show intro modal on page load
+window.addEventListener('DOMContentLoaded', () => {
+  const introModal = document.getElementById('introModal');
+  introModal.classList.add('active');
+  
+  // Close on click outside
+  introModal.addEventListener('click', (e) => {
+    if (e.target === introModal) startQuiz();
+  });
+});
 </script>
 </body>
 </html>

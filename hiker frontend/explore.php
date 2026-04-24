@@ -1622,7 +1622,13 @@ function gTab(name,el){
   document.getElementById('gtp-'+name).classList.add('active');
 }
 function openMtnFromGuide(id){ closeGuideModal(); const m=mountains.find(x=>x.id===id); if(m) openMtnModal(m); }
-function msgGuide(){ if(!activeGuide) return; localStorage.setItem('messageGuide',JSON.stringify({id:activeGuide.user_id,name:activeGuide.name})); window.location.href='messages.php'; }
+
+function msgGuide(){ 
+    if(!activeGuide) return; 
+    // Pass guide ID and name as URL parameters to messages.php
+    window.location.href = 'messages.php?guide=' + activeGuide.user_id + '&guide_name=' + encodeURIComponent(activeGuide.name); 
+}
+
 function bookGuide(){ if(!activeGuide) return; localStorage.setItem('bookingGuide',JSON.stringify(activeGuide)); window.location.href='bookings.php?guide_id='+activeGuide.id; }
 
 // Backdrop close

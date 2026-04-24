@@ -1,7 +1,343 @@
 <?php
-// profile.php - Lakbay User Profile
-// Features: Profile picture upload, mobile back button, mountain cards for saved mountains, logout to landing page
+// hiker frontend/hikerProfile.php - LAKBAY User Profile
+// Fetches real data from database: user details, bookings, saved mountains
+
+require_once __DIR__ . '/../config/db.php';
+session_start();
+
+// Redirect if not logged in
+if (!isset($_SESSION['user_id'])) {
+    header('Location: ../login and signup/login.php');
+    exit;
+}
+
+$currentUserId = $_SESSION['user_id'];
+$currentUser = null;
+$userInitial = '';
+
+// Fetch current user details from users table
+$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->execute([$currentUserId]);
+$currentUser = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$currentUser) {
+    session_destroy();
+    header('Location: ../login and signup/login.php');
+    exit;
+}
+
+// Generate user initials for avatar
+$nameParts = explode(' ', trim($currentUser['name']));
+$userInitial = '';
+foreach ($nameParts as $part) {
+    if (!empty($part)) {
+        $userInitial .= strtoupper(substr($part, 0, 1));
+    }
+}
+$userInitial = substr($userInitial, 0, 2);
+
+// Fetch hiking history (day hikes + camping bookings combined)
+$historyItems = [];
+
+// Day hike bookings
+$stmt = $pdo->prepare("
+    SELECT b.*, m.name as mountain_name, m.location, m.image, 'day_hike' as booking_type 
+    FROM bookings b
+    JOIN mountains m ON b.mountain_id = m.id
+    WHERE b.user_id = ? 
+    ORDER BY b.hike_date DESC
+");
+$stmt->execute([$currentUserId]);
+$dayHikes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+foreach ($dayHikes as $hike) {
+    $historyItems[] = [
+        'id' => $hike['id'],
+        'booking_number' => $hike['booking_number'],
+        'mountain_name' => $hike['mountain_name'],
+        'location' => $hike['location'],
+        'date' => $hike['hike_date'],
+        'type' => 'Day Hike',
+        'status' => $hike['status'],
+        'booking_type' => 'day_hike',
+        'image' => $hike['image']
+    ];
+}
+
+// Camping bookings
+$stmt = $pdo->prepare("
+    SELECT c.*, m.name as mountain_name, m.location, m.image 
+    FROM camping_bookings c
+    JOIN mountains m ON c.mountain_id = m.id
+    WHERE c.user_id = ? 
+    ORDER BY c.start_date DESC
+");
+$stmt->execute([$currentUserId]);
+$campingHikes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+foreach ($campingHikes as $camping) {
+    $nights = $camping['number_of_nights'] ?? 1;
+    $historyItems[] = [
+        'id' => $camping['id'],
+        'booking_number' => $camping['booking_number'],
+        'mountain_name' => $camping['mountain_name'],
+        'location' => $camping['location'],
+        'date' => $camping['start_date'],
+        'type' => $nights . ' Night Camping',
+        'status' => $camping['status'],
+        'booking_type' => 'camping',
+        'image' => $camping['image']
+    ];
+}
+
+// Sort by date (newest first)
+usort($historyItems, function($a, $b) {
+    return strtotime($b['date']) - strtotime($a['date']);
+});
+
+// Fetch saved mountains
+$stmt = $pdo->prepare("
+    SELECT s.*, m.name, m.location, m.elevation, m.duration, m.rating, m.image, m.difficulty
+    FROM saved_mountains s
+    JOIN mountains m ON s.mountain_id = m.id
+    WHERE s.user_id = ?
+    ORDER BY s.created_at DESC
+");
+$stmt->execute([$currentUserId]);
+$savedMountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch all mountains for "add saved" modal
+$stmtAllMountains = $pdo->query("SELECT * FROM mountains WHERE status = 'Open' ORDER BY name");
+$allMountains = $stmtAllMountains->fetchAll(PDO::FETCH_ASSOC);
+
+// Calculate total hikes count (completed + active + cancelled)
+$totalHikes = count($historyItems);
+
+// Calculate completed hikes count
+$completedHikes = 0;
+foreach ($historyItems as $item) {
+    if ($item['status'] === 'completed' || $item['status'] === 'active') {
+        $completedHikes++;
+    }
+}
+
+// Badges count (based on achievements)
+$badgeCount = 0;
+if ($completedHikes >= 1) $badgeCount++;
+if ($completedHikes >= 5) $badgeCount++;
+if ($completedHikes >= 10) $badgeCount++;
+if ($currentUser['hiking_level'] !== 'beginner') $badgeCount++;
+if (count($savedMountains) >= 3) $badgeCount++;
+
+// Handle avatar upload
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
+    $uploadDir = __DIR__ . '/../uploads/avatars/';
+    if (!file_exists($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+    
+    $fileExt = pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION);
+    $fileName = 'user_' . $currentUserId . '_' . time() . '.' . $fileExt;
+    $uploadPath = $uploadDir . $fileName;
+    
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (in_array($_FILES['avatar']['type'], $allowedTypes) && $_FILES['avatar']['error'] === 0) {
+        if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
+            $avatarPath = '/uploads/avatars/' . $fileName;
+            $stmt = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
+            $stmt->execute([$avatarPath, $currentUserId]);
+            $currentUser['avatar'] = $avatarPath;
+            $_SESSION['user_avatar'] = $avatarPath;
+        }
+    }
+}
+
+// Handle profile update (name, email, phone, home_region)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_profile') {
+    $name = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    $home_region = trim($_POST['home_region'] ?? '');
+    
+    $errors = [];
+    
+    if (empty($name)) {
+        $errors[] = 'Name is required.';
+    }
+    if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Valid email is required.';
+    }
+    
+    // Check if email is taken by another user
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+    $stmt->execute([$email, $currentUserId]);
+    if ($stmt->fetch()) {
+        $errors[] = 'Email already in use by another account.';
+    }
+    
+    if (empty($errors)) {
+        $stmt = $pdo->prepare("UPDATE users SET name = ?, email = ?, phone = ?, home_region = ? WHERE id = ?");
+        $stmt->execute([$name, $email, $phone ?: null, $home_region ?: null, $currentUserId]);
+        $currentUser['name'] = $name;
+        $currentUser['email'] = $email;
+        $currentUser['phone'] = $phone;
+        $currentUser['home_region'] = $home_region;
+        $_SESSION['user_name'] = $name;
+        $_SESSION['user_email'] = $email;
+        $successMessage = "Profile updated successfully!";
+    }
+}
+
+// Handle change password
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'change_password') {
+    $current_password = $_POST['current_password'] ?? '';
+    $new_password = $_POST['new_password'] ?? '';
+    $confirm_password = $_POST['confirm_password'] ?? '';
+    
+    $passwordErrors = [];
+    
+    // Verify current password
+    if (!password_verify($current_password, $currentUser['password'])) {
+        $passwordErrors[] = 'Current password is incorrect.';
+    }
+    
+    // Validate new password
+    if (empty($new_password)) {
+        $passwordErrors[] = 'New password is required.';
+    } elseif (strlen($new_password) < 8) {
+        $passwordErrors[] = 'Password must be at least 8 characters.';
+    } elseif (!preg_match('/[A-Z]/', $new_password)) {
+        $passwordErrors[] = 'Password must contain at least one uppercase letter.';
+    } elseif (!preg_match('/[0-9]/', $new_password)) {
+        $passwordErrors[] = 'Password must contain at least one number.';
+    } elseif (!preg_match('/[^a-zA-Z0-9]/', $new_password)) {
+        $passwordErrors[] = 'Password must contain at least one special character.';
+    } elseif ($new_password !== $confirm_password) {
+        $passwordErrors[] = 'New passwords do not match.';
+    }
+    
+    if (empty($passwordErrors)) {
+        $hashedPassword = password_hash($new_password, PASSWORD_DEFAULT);
+        $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+        $stmt->execute([$hashedPassword, $currentUserId]);
+        $passwordSuccess = "Password changed successfully!";
+    }
+}
+
+// Handle add saved mountain
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_saved') {
+    $mountain_id = (int)($_POST['mountain_id'] ?? 0);
+    
+    // Check if already saved
+    $stmt = $pdo->prepare("SELECT id FROM saved_mountains WHERE user_id = ? AND mountain_id = ?");
+    $stmt->execute([$currentUserId, $mountain_id]);
+    if (!$stmt->fetch()) {
+        $stmt = $pdo->prepare("INSERT INTO saved_mountains (user_id, mountain_id, created_at) VALUES (?, ?, NOW())");
+        $stmt->execute([$currentUserId, $mountain_id]);
+        // Refresh saved mountains list
+        $stmt = $pdo->prepare("
+            SELECT s.*, m.name, m.location, m.elevation, m.duration, m.rating, m.image, m.difficulty
+            FROM saved_mountains s
+            JOIN mountains m ON s.mountain_id = m.id
+            WHERE s.user_id = ?
+            ORDER BY s.created_at DESC
+        ");
+        $stmt->execute([$currentUserId]);
+        $savedMountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
+
+// Handle remove saved mountain
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'remove_saved') {
+    $saved_id = (int)($_POST['saved_id'] ?? 0);
+    $stmt = $pdo->prepare("DELETE FROM saved_mountains WHERE id = ? AND user_id = ?");
+    $stmt->execute([$saved_id, $currentUserId]);
+    
+    // Refresh saved mountains list
+    $stmt = $pdo->prepare("
+        SELECT s.*, m.name, m.location, m.elevation, m.duration, m.rating, m.image, m.difficulty
+        FROM saved_mountains s
+        JOIN mountains m ON s.mountain_id = m.id
+        WHERE s.user_id = ?
+        ORDER BY s.created_at DESC
+    ");
+    $stmt->execute([$currentUserId]);
+    $savedMountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Handle remove hike from history (cancel booking)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'cancel_booking') {
+    $booking_id = (int)($_POST['booking_id'] ?? 0);
+    $booking_type = $_POST['booking_type'] ?? '';
+    
+    if ($booking_type === 'day_hike') {
+        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ? AND user_id = ?");
+        $stmt->execute([$booking_id, $currentUserId]);
+    } elseif ($booking_type === 'camping') {
+        $stmt = $pdo->prepare("UPDATE camping_bookings SET status = 'cancelled' WHERE id = ? AND user_id = ?");
+        $stmt->execute([$booking_id, $currentUserId]);
+    }
+    
+    // Refresh history
+    $historyItems = [];
+    
+    // Refetch day hikes
+    $stmt = $pdo->prepare("
+        SELECT b.*, m.name as mountain_name, m.location, m.image, 'day_hike' as booking_type 
+        FROM bookings b
+        JOIN mountains m ON b.mountain_id = m.id
+        WHERE b.user_id = ? 
+        ORDER BY b.hike_date DESC
+    ");
+    $stmt->execute([$currentUserId]);
+    $dayHikes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    foreach ($dayHikes as $hike) {
+        $historyItems[] = [
+            'id' => $hike['id'],
+            'booking_number' => $hike['booking_number'],
+            'mountain_name' => $hike['mountain_name'],
+            'location' => $hike['location'],
+            'date' => $hike['hike_date'],
+            'type' => 'Day Hike',
+            'status' => $hike['status'],
+            'booking_type' => 'day_hike',
+            'image' => $hike['image']
+        ];
+    }
+    
+    // Refetch camping bookings
+    $stmt = $pdo->prepare("
+        SELECT c.*, m.name as mountain_name, m.location, m.image 
+        FROM camping_bookings c
+        JOIN mountains m ON c.mountain_id = m.id
+        WHERE c.user_id = ? 
+        ORDER BY c.start_date DESC
+    ");
+    $stmt->execute([$currentUserId]);
+    $campingHikes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    foreach ($campingHikes as $camping) {
+        $nights = $camping['number_of_nights'] ?? 1;
+        $historyItems[] = [
+            'id' => $camping['id'],
+            'booking_number' => $camping['booking_number'],
+            'mountain_name' => $camping['mountain_name'],
+            'location' => $camping['location'],
+            'date' => $camping['start_date'],
+            'type' => $nights . ' Night Camping',
+            'status' => $camping['status'],
+            'booking_type' => 'camping',
+            'image' => $camping['image']
+        ];
+    }
+    
+    usort($historyItems, function($a, $b) {
+        return strtotime($b['date']) - strtotime($a['date']);
+    });
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,7 +346,6 @@
   <title>LAKBAY — My Profile</title>
   <link rel="stylesheet" href="shared.css">
   <style>
-    /* Override root colors for #100600 theme */
     :root {
       --forest: #100600;
       --moss: #2a1a0a;
@@ -22,10 +357,11 @@
       --sky: #f0ece8;
       --white: #ffffff;
       --danger: #c0392b;
+      --danger-light: rgba(192,57,43,0.1);
+      --success: #27ae60;
       --gold: #c9a84c;
       --glass: rgba(16,6,0,0.08);
       --glass-border: rgba(16,6,0,0.1);
-      --glass-dark: rgba(16,6,0,0.5);
       --radius: 20px;
       --radius-sm: 12px;
       --shadow: 0 8px 32px rgba(16,6,0,0.12);
@@ -34,7 +370,6 @@
     }
     @media(max-width:768px){ :root { --nav-h: 0px; } }
 
-    /* Mobile Back Button */
     .mobile-back-bar {
       display: none;
       position: fixed;
@@ -71,7 +406,6 @@
       margin: 0;
     }
 
-    /* Profile Page Layout - Sidebar + Main */
     .profile-layout {
       display: flex;
       min-height: calc(100vh - var(--nav-h) - 40px);
@@ -83,7 +417,6 @@
       padding: 0 24px;
     }
 
-    /* Sidebar Navigation */
     .profile-sidebar {
       width: 280px;
       flex-shrink: 0;
@@ -210,10 +543,10 @@
       color: var(--danger);
     }
 
-    /* Main Content Area */
     .profile-main {
       flex: 1;
       min-width: 0;
+      padding-top: 20px; /* Aligns with sidebar's top offset */
     }
     .profile-section {
       background: var(--white);
@@ -239,6 +572,8 @@
       margin-bottom: 24px;
       padding-bottom: 12px;
       border-bottom: 2px solid rgba(16,6,0,0.06);
+      flex-wrap: wrap;
+      gap: 12px;
     }
     .section-header h2 {
       font-family: 'Playfair Display', serif;
@@ -255,20 +590,34 @@
       stroke: var(--gold);
       stroke-width: 1.8;
     }
+    .section-header-actions {
+      display: flex;
+      gap: 10px;
+    }
 
-    /* Stats Cards */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-bottom: 28px;
+      gap: 20px;
+      margin-bottom: 32px;
+      align-items: stretch;
     }
     .stat-card {
-      background: rgba(16,6,0,0.03);
-      border-radius: var(--radius-sm);
-      padding: 20px;
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 24px 20px;
       text-align: center;
-      transition: 0.2s;
+      transition: all 0.3s ease;
+      border: 1px solid rgba(16,6,0,0.08);
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(16,6,0,0.15);
+      border-color: var(--gold);
     }
     .stat-number {
       font-family: 'DM Mono', monospace;
@@ -283,7 +632,6 @@
       letter-spacing: 0.5px;
     }
 
-    /* Info rows - one feature per row on mobile */
     .info-row {
       display: flex;
       padding: 14px 0;
@@ -300,8 +648,16 @@
       color: var(--forest);
       font-size: 14px;
     }
+    .info-value.important {
+      color: var(--danger);
+      font-weight: 600;
+    }
+    .info-value small {
+      font-size: 10px;
+      color: var(--stone);
+      display: block;
+    }
 
-    /* Mountain Cards for Saved Mountains */
     .saved-mtn-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -313,7 +669,7 @@
       border: 1px solid rgba(16,6,0,0.1);
       overflow: hidden;
       transition: transform 0.2s, box-shadow 0.2s;
-      cursor: pointer;
+      position: relative;
       box-shadow: var(--shadow);
     }
     .saved-mtn-card:hover {
@@ -336,6 +692,17 @@
       top: 10px;
       left: 10px;
     }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 50px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-easy { background: #27ae60; color: white; }
+    .badge-moderate { background: #f39c12; color: white; }
+    .badge-hard { background: #e74c3c; color: white; }
     .saved-mtn-body {
       padding: 14px;
     }
@@ -357,7 +724,7 @@
     .saved-mtn-stats {
       display: flex;
       gap: 12px;
-      margin-bottom: 12px;
+      flex-wrap: wrap;
     }
     .saved-mtn-stat {
       font-size: 11px;
@@ -377,15 +744,27 @@
       cursor: pointer;
       backdrop-filter: blur(4px);
       transition: 0.2s;
+      z-index: 5;
     }
     .saved-mtn-remove:hover { background: var(--danger); }
     .saved-mtn-remove svg { width: 14px; height: 14px; stroke: white; }
 
-    /* History list items */
     .history-list {
       display: flex;
       flex-direction: column;
       gap: 12px;
+      max-height: 420px;
+      overflow-y: auto;
+      padding-right: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--gold) transparent;
+    }
+    .history-list::-webkit-scrollbar {
+      width: 4px;
+    }
+    .history-list::-webkit-scrollbar-thumb {
+      background-color: var(--gold);
+      border-radius: 10px;
     }
     .history-item {
       display: flex;
@@ -395,8 +774,13 @@
       background: rgba(16,6,0,0.02);
       border-radius: var(--radius-sm);
       transition: 0.2s;
+      flex-wrap: wrap;
+      gap: 12px;
     }
     .history-item:hover { background: rgba(16,6,0,0.05); }
+    .history-info {
+      flex: 1;
+    }
     .history-info h4 {
       font-size: 15px;
       font-weight: 600;
@@ -407,8 +791,17 @@
       font-size: 11px;
       color: var(--stone);
     }
+    .history-status {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 50px;
+    }
+    .status-active { background: #27ae60; color: white; }
+    .status-completed { background: #3498db; color: white; }
+    .status-cancelled { background: #95a5a6; color: white; }
+    .status-pending { background: #f39c12; color: white; }
 
-    /* Settings rows */
     .setting-row {
       display: flex;
       align-items: center;
@@ -428,7 +821,6 @@
       color: var(--stone);
     }
 
-    /* Toggle Switch */
     .toggle-switch {
       position: relative;
       display: inline-block;
@@ -465,7 +857,6 @@
     input:checked + .slider { background-color: var(--gold); }
     input:checked + .slider:before { transform: translateX(22px); }
 
-    /* Buttons */
     .btn-outline-small {
       background: transparent;
       border: 1.5px solid var(--forest);
@@ -480,6 +871,21 @@
     .btn-outline-small:hover {
       background: var(--forest);
       color: var(--cream);
+    }
+    .btn-outline-danger {
+      background: transparent;
+      border: 1.5px solid var(--danger);
+      border-radius: 50px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--danger);
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-outline-danger:hover {
+      background: var(--danger);
+      color: white;
     }
     .empty-state {
       text-align: center;
@@ -498,7 +904,134 @@
     }
     .btn-icon:hover { background: rgba(192,57,43,0.1); }
 
-    /* Modal */
+    .modal-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(16,6,0,0.6);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      visibility: hidden;
+      opacity: 0;
+      transition: 0.2s;
+    }
+    .modal-bg.open {
+      visibility: visible;
+      opacity: 1;
+    }
+    .modal {
+      background: var(--white);
+      border-radius: var(--radius);
+      width: 90%;
+      max-width: 480px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-lg);
+    }
+    .modal-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid rgba(16,6,0,0.08);
+    }
+    .modal-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--forest);
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--stone);
+      transition: 0.2s;
+    }
+    .modal-close:hover { color: var(--danger); }
+    .modal-body {
+      padding: 24px;
+    }
+    .inp {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid rgba(16,6,0,0.15);
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      transition: 0.2s;
+    }
+    .inp:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+    .inp-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--forest);
+      margin-bottom: 6px;
+    }
+    .btn {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 50px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+      font-family: inherit;
+    }
+    .btn-primary {
+      background: var(--forest);
+      color: var(--cream);
+    }
+    .btn-primary:hover {
+      background: var(--bark);
+      transform: translateY(-1px);
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1.5px solid var(--forest);
+      color: var(--forest);
+    }
+    .btn-outline:hover {
+      background: var(--forest);
+      color: var(--cream);
+    }
+    .btn-full {
+      width: 100%;
+    }
+    .confirm-buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .confirm-buttons .btn { flex: 1; }
+    .error-message {
+      color: var(--danger);
+      font-size: 12px;
+      margin-top: 6px;
+    }
+    .success-message {
+      color: var(--success);
+      font-size: 12px;
+      margin-top: 6px;
+    }
+    .password-requirements {
+      font-size: 11px;
+      color: var(--stone);
+      margin-top: 8px;
+      padding-left: 12px;
+    }
+    .password-requirements li {
+      margin-bottom: 4px;
+    }
+
     .mtn-option-list {
       max-height: 300px;
       overflow-y: auto;
@@ -515,29 +1048,37 @@
     .mtn-option:hover { background: rgba(16,6,0,0.04); }
     .mtn-option-name { font-weight: 600; color: var(--forest); }
     .mtn-option-loc { font-size: 11px; color: var(--stone); }
-    .confirm-buttons {
-      display: flex;
-      gap: 12px;
-      margin-top: 24px;
-    }
-    .confirm-buttons .btn { flex: 1; }
 
-    /* Mobile Responsive */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--forest);
+      color: var(--cream);
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-size: 13px;
+      z-index: 1100;
+      transition: 0.3s;
+      opacity: 0;
+      white-space: nowrap;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
     @media (max-width: 768px) {
       .mobile-back-bar { display: flex; }
       .desktop-nav { display: none; }
       .profile-layout { 
         flex-direction: column; 
-        margin-top: 60px; 
-        padding: 0 16px;
+        padding-top: 80px; 
+        padding-bottom: 120px; 
         gap: 20px;
       }
-      .profile-sidebar { 
-        width: 100%; 
-        position: static; 
-        top: auto;
-        padding: 20px 0;
-      }
+      .profile-sidebar { width: 100%; }
       .sidebar-nav { 
         flex-direction: row; 
         flex-wrap: wrap; 
@@ -555,26 +1096,18 @@
         border-left-color: transparent; 
         border-bottom-color: var(--gold); 
       }
-      .sidebar-logout { 
-        margin-top: 0; 
-        padding-top: 0; 
-        border-top: none;
-      }
-      .stats-grid { 
-        grid-template-columns: repeat(3, 1fr); 
-        gap: 10px;
-      }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .stats-grid > div:last-child { grid-column: span 2; }
       .stat-card { padding: 12px; }
       .stat-number { font-size: 24px; }
       .profile-section { padding: 20px; }
-      .section-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+      .section-header { flex-direction: column; align-items: flex-start; }
       .section-header h2 { font-size: 18px; }
-      /* One feature per row for personal info */
       .info-row { flex-direction: column; gap: 4px; }
       .info-label { width: 100%; font-size: 11px; }
       .info-value { font-size: 14px; }
-      /* Saved mountains grid */
       .saved-mtn-grid { grid-template-columns: 1fr; }
+      .toast { white-space: normal; text-align: center; max-width: 90%; }
     }
   </style>
 </head>
@@ -608,7 +1141,7 @@
       <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages
     </a>
   </div>
-  <a href="hikerProfile.php" class="user-btn active">J</a>
+  <a href="hikerProfile.php" class="user-btn active"><?php echo htmlspecialchars($userInitial); ?></a>
 </nav>
 
 <!-- MOBILE NAV -->
@@ -628,16 +1161,20 @@
   <aside class="profile-sidebar">
     <div class="sidebar-avatar">
       <div class="avatar-wrapper">
-        <div class="avatar-circle" id="avatarDisplay">
-          <span id="avatarInitial">J</span>
+        <div class="avatar-circle" id="avatarDisplay" style="<?php echo $currentUser['avatar'] ? 'background-image: url(' . htmlspecialchars($currentUser['avatar']) . '); background-size: cover; background-position: center;' : ''; ?>">
+          <?php if (!$currentUser['avatar']): ?>
+          <span id="avatarInitial"><?php echo htmlspecialchars($userInitial); ?></span>
+          <?php endif; ?>
         </div>
-        <div class="camera-icon" onclick="document.getElementById('profilePicInput').click()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        </div>
-        <input type="file" id="profilePicInput" accept="image/*" style="display:none" onchange="uploadProfilePicture(this)">
+        <form method="POST" enctype="multipart/form-data" id="avatarForm">
+          <div class="camera-icon" onclick="document.getElementById('profilePicInput').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </div>
+          <input type="file" id="profilePicInput" name="avatar" accept="image/*" style="display:none" onchange="this.form.submit()">
+        </form>
       </div>
-      <div class="sidebar-name" id="sidebarName">Jamie Rivera</div>
-      <div class="sidebar-email" id="sidebarEmail">jamie@lakbay.ph</div>
+      <div class="sidebar-name"><?php echo htmlspecialchars($currentUser['name']); ?></div>
+      <div class="sidebar-email"><?php echo htmlspecialchars($currentUser['email']); ?></div>
     </div>
     <nav class="sidebar-nav">
       <div class="sidebar-link active" data-section="personal">
@@ -656,9 +1193,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
         Location & Tracking
       </div>
-      <div class="sidebar-link" data-section="notifications">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        Notifications
+      <div class="sidebar-link" data-section="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Account Settings
       </div>
       <div class="sidebar-logout">
         <div class="sidebar-link" id="logoutBtn">
@@ -673,39 +1210,112 @@
   <main class="profile-main">
     <!-- Stats Cards -->
     <div class="stats-grid">
-      <div class="stat-card"><div class="stat-number" id="totalHikesStat">0</div><div class="stat-label">Total Hikes</div></div>
-      <div class="stat-card"><div class="stat-number" id="totalSavedStat">0</div><div class="stat-label">Saved Peaks</div></div>
-      <div class="stat-card"><div class="stat-number" id="badgeCountStat">4</div><div class="stat-label">Badges Earned</div></div>
+      <div class="stat-card"><div class="stat-number"><?php echo $totalHikes; ?></div><div class="stat-label">Total Hikes</div></div>
+      <div class="stat-card"><div class="stat-number"><?php echo count($savedMountains); ?></div><div class="stat-label">Saved Peaks</div></div>
+      <div class="stat-card"><div class="stat-number"><?php echo $badgeCount; ?></div><div class="stat-label">Badges Earned</div></div>
     </div>
 
     <!-- Section 1: Personal Information -->
     <div id="section-personal" class="profile-section active-section">
       <div class="section-header">
         <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Personal Information</h2>
-        <button class="btn-outline-small" onclick="openEditModal()">Edit Profile</button>
+        <div class="section-header-actions">
+          <button class="btn-outline-small" onclick="openEditModal()">Edit Profile</button>
+          <button class="btn-outline-small" onclick="openChangePasswordModal()">Change Password</button>
+        </div>
       </div>
-      <div id="personalInfoDisplay"></div>
+      <div id="personalInfoDisplay">
+        <div class="info-row"><div class="info-label">Full Name</div><div class="info-value"><?php echo htmlspecialchars($currentUser['name']); ?></div></div>
+        <div class="info-row"><div class="info-label">Email</div><div class="info-value"><?php echo htmlspecialchars($currentUser['email']); ?></div></div>
+        <div class="info-row"><div class="info-label">Phone</div>
+          <div class="info-value <?php echo empty($currentUser['phone']) ? 'important' : ''; ?>">
+            <?php echo !empty($currentUser['phone']) ? htmlspecialchars($currentUser['phone']) : 'No phone number added yet — important for emergency contacts'; ?>
+            <?php if (empty($currentUser['phone'])): ?>
+              <small>Please add your mobile number for safety purposes</small>
+            <?php endif; ?>
+          </div>
+        </div>
+        <div class="info-row"><div class="info-label">Home Region</div><div class="info-value"><?php echo !empty($currentUser['home_region']) ? htmlspecialchars($currentUser['home_region']) : '—'; ?></div></div>
+        <div class="info-row"><div class="info-label">Hiking Level</div><div class="info-value"><?php echo ucfirst(htmlspecialchars($currentUser['hiking_level'] ?? 'Not specified')); ?></div></div>
+        <div class="info-row"><div class="info-label">Member Since</div><div class="info-value"><?php echo date('F j, Y', strtotime($currentUser['created_at'])); ?></div></div>
+        <?php if (!empty($currentUser['last_login'])): ?>
+        <div class="info-row"><div class="info-label">Last Login</div><div class="info-value"><?php echo date('M j, Y g:i A', strtotime($currentUser['last_login'])); ?></div></div>
+        <?php endif; ?>
+      </div>
     </div>
 
     <!-- Section 2: Hiking History -->
     <div id="section-history" class="profile-section">
       <div class="section-header">
         <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v4l3 3M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/></svg>Hiking History</h2>
-        <button class="btn-outline-small" onclick="openAddHistoryModal()">+ Record Hike</button>
       </div>
-      <div id="historyList" class="history-list"></div>
+      <div id="historyList" class="history-list">
+        <?php if (empty($historyItems)): ?>
+          <div class="empty-state">No hikes recorded yet. Make your first booking!</div>
+        <?php else: ?>
+          <?php foreach ($historyItems as $item): ?>
+            <div class="history-item">
+              <div class="history-info">
+                <h4><?php echo htmlspecialchars($item['mountain_name']); ?></h4>
+                <p><?php echo date('F j, Y', strtotime($item['date'])); ?> · <?php echo htmlspecialchars($item['type']); ?></p>
+                <p><small><?php echo htmlspecialchars($item['location']); ?></small></p>
+              </div>
+              <div>
+                <span class="history-status status-<?php echo $item['status']; ?>"><?php echo ucfirst($item['status']); ?></span>
+              </div>
+              <?php if ($item['status'] === 'active' || $item['status'] === 'pending'): ?>
+              <form method="POST" style="margin:0;" onsubmit="return confirm('Cancel this booking?');">
+                <input type="hidden" name="action" value="cancel_booking">
+                <input type="hidden" name="booking_id" value="<?php echo $item['id']; ?>">
+                <input type="hidden" name="booking_type" value="<?php echo $item['booking_type']; ?>">
+                <button type="submit" class="btn-outline-danger" style="padding: 4px 12px; font-size: 11px;">Cancel</button>
+              </form>
+              <?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
     </div>
 
-    <!-- Section 3: Saved Mountains (with mountain cards) -->
+    <!-- Section 3: Saved Mountains -->
     <div id="section-saved" class="profile-section">
       <div class="section-header">
         <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Saved Mountains</h2>
         <button class="btn-outline-small" onclick="openAddSavedModal()">+ Add from Explore</button>
       </div>
-      <div id="savedList" class="saved-mtn-grid"></div>
+      <div id="savedList" class="saved-mtn-grid">
+        <?php if (empty($savedMountains)): ?>
+          <div class="empty-state">No saved mountains. Favorite some peaks!</div>
+        <?php else: ?>
+          <?php foreach ($savedMountains as $mountain): ?>
+            <div class="saved-mtn-card">
+              <div class="saved-mtn-img" style="background-image: url('<?php echo htmlspecialchars($mountain['image'] ?? 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80'); ?>')">
+                <div class="saved-mtn-img-overlay"></div>
+                <div class="saved-mtn-badge"><span class="badge badge-<?php echo strtolower($mountain['difficulty'] ?? 'moderate'); ?>"><?php echo htmlspecialchars($mountain['difficulty'] ?? 'Moderate'); ?></span></div>
+                <form method="POST" class="saved-mtn-remove" onsubmit="return confirm('Remove from saved?');" style="margin:0;">
+                  <input type="hidden" name="action" value="remove_saved">
+                  <input type="hidden" name="saved_id" value="<?php echo $mountain['id']; ?>">
+                  <button type="submit" style="background:transparent; border:none; cursor:pointer; width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
+                </form>
+              </div>
+              <div class="saved-mtn-body">
+                <div class="saved-mtn-name"><?php echo htmlspecialchars($mountain['name']); ?></div>
+                <div class="saved-mtn-loc"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><?php echo htmlspecialchars($mountain['location'] ?? 'Unknown'); ?></div>
+                <div class="saved-mtn-stats">
+                  <span class="saved-mtn-stat">⛰ <?php echo htmlspecialchars($mountain['elevation'] ?? 'N/A'); ?></span>
+                  <span class="saved-mtn-stat">⏱ <?php echo htmlspecialchars($mountain['duration'] ?? 'N/A'); ?></span>
+                  <span class="saved-mtn-stat">★ <?php echo htmlspecialchars($mountain['rating'] ?? 'N/A'); ?></span>
+                </div>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
     </div>
 
-    <!-- Section 4: Location Permission -->
+    <!-- Section 4: Location & Tracking -->
     <div id="section-location" class="profile-section">
       <div class="section-header">
         <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Location & Tracking</h2>
@@ -720,241 +1330,176 @@
       <div id="locationStatusMsg" style="font-size: 12px; color: var(--sage); margin-top: 16px; padding: 12px; background: rgba(16,6,0,0.03); border-radius: 10px;"></div>
     </div>
 
-    <!-- Section 5: Notifications & Alerts -->
-    <div id="section-notifications" class="profile-section">
+    <!-- Section 5: Account Settings -->
+    <div id="section-settings" class="profile-section">
       <div class="section-header">
-        <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Notifications & Alerts</h2>
+        <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Account Settings</h2>
       </div>
       <div class="setting-row">
-        <div class="setting-info"><h4>Weather alerts for saved mountains</h4><p>Receive push when weather conditions change.</p></div>
-        <label class="toggle-switch"><input type="checkbox" id="weatherAlertToggle"><span class="slider"></span></label>
+        <div class="setting-info"><h4>Change Password</h4><p>Update your account password</p></div>
+        <button class="btn-outline-small" onclick="openChangePasswordModal()">Change</button>
       </div>
       <div class="setting-row">
-        <div class="setting-info"><h4>Crowd level alerts</h4><p>Notify me when popular mountains become highly crowded.</p></div>
-        <label class="toggle-switch"><input type="checkbox" id="crowdAlertToggle"><span class="slider"></span></label>
+        <div class="setting-info"><h4>Two-Factor Authentication</h4><p>Add an extra layer of security to your account</p></div>
+        <label class="toggle-switch"><input type="checkbox" id="twoFactorToggle" <?php echo $currentUser['two_factor_enabled'] ? 'checked' : ''; ?>><span class="slider"></span></label>
       </div>
       <div class="setting-row">
-        <div class="setting-info"><h4>Booking reminders</h4><p>Remind me 24h before a guided hike.</p></div>
-        <label class="toggle-switch"><input type="checkbox" id="bookingReminderToggle"><span class="slider"></span></label>
-      </div>
-      <div class="setting-row">
-        <div class="setting-info"><h4>Newsletter & trail tips</h4><p>Weekly mountain inspiration and safety tips.</p></div>
-        <label class="toggle-switch"><input type="checkbox" id="newsletterToggle"><span class="slider"></span></label>
+        <div class="setting-info"><h4>Delete Account</h4><p>Permanently delete your account and all data</p></div>
+        <button class="btn-outline-danger" onclick="confirmDeleteAccount()">Delete Account</button>
       </div>
     </div>
   </main>
 </div>
 
 <!-- MODALS -->
-<div class="modal-bg" id="editProfileModal"><div class="modal"><div class="modal-hdr"><div class="modal-title">Edit Profile</div><button class="modal-close" onclick="closeModal('editProfileModal')">✕</button></div><div class="modal-body"><div class="inp-label">Full Name</div><input type="text" id="editName" class="inp"><div class="inp-label" style="margin-top:16px;">Email</div><input type="email" id="editEmail" class="inp"><div class="inp-label" style="margin-top:16px;">Phone</div><input type="text" id="editPhone" class="inp"><div class="inp-label" style="margin-top:16px;">Home Region</div><input type="text" id="editRegion" class="inp"><button class="btn btn-primary btn-full" style="margin-top:24px;" onclick="savePersonalInfo()">Save Changes</button></div></div></div>
 
-<div class="modal-bg" id="addHistoryModal"><div class="modal"><div class="modal-hdr"><div class="modal-title">Record a Hike</div><button class="modal-close" onclick="closeModal('addHistoryModal')">✕</button></div><div class="modal-body"><div class="inp-label">Mountain</div><select id="historyMtnSelect" class="inp"></select><div class="inp-label" style="margin-top:12px;">Date hiked</div><input type="date" id="historyDate" class="inp"><div class="inp-label" style="margin-top:12px;">Notes</div><input type="text" id="historyNotes" class="inp" placeholder="Great experience!"><button class="btn btn-primary btn-full" style="margin-top:24px;" onclick="addHikeEntry()">Add to History</button></div></div></div>
+<!-- Edit Profile Modal -->
+<div class="modal-bg" id="editProfileModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title">Edit Profile</div>
+      <button class="modal-close" onclick="closeModal('editProfileModal')">✕</button>
+    </div>
+    <form method="POST" action="">
+      <div class="modal-body">
+        <input type="hidden" name="action" value="update_profile">
+        <div class="inp-label">Full Name</div>
+        <input type="text" name="name" class="inp" value="<?php echo htmlspecialchars($currentUser['name']); ?>" required>
+        <div class="inp-label" style="margin-top:16px;">Email</div>
+        <input type="email" name="email" class="inp" value="<?php echo htmlspecialchars($currentUser['email']); ?>" required>
+        <div class="inp-label" style="margin-top:16px;">Phone <span style="color: var(--danger);">*</span></div>
+        <input type="text" name="phone" class="inp" value="<?php echo htmlspecialchars($currentUser['phone'] ?? ''); ?>" placeholder="e.g., +639123456789">
+        <small style="color: var(--danger); display: block; margin-top: 4px;">Required for emergency contact</small>
+        <div class="inp-label" style="margin-top:16px;">Home Region</div>
+        <input type="text" name="home_region" class="inp" value="<?php echo htmlspecialchars($currentUser['home_region'] ?? ''); ?>" placeholder="e.g., Cavite, Philippines">
+        <button type="submit" class="btn btn-primary btn-full" style="margin-top:24px;">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
 
-<div class="modal-bg" id="addSavedModal"><div class="modal"><div class="modal-hdr"><div class="modal-title">Save a Mountain</div><button class="modal-close" onclick="closeModal('addSavedModal')">✕</button></div><div class="modal-body"><div class="mtn-option-list" id="savedMtnList"></div></div></div></div>
+<!-- Change Password Modal -->
+<div class="modal-bg" id="changePasswordModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title">Change Password</div>
+      <button class="modal-close" onclick="closeModal('changePasswordModal')">✕</button>
+    </div>
+    <form method="POST" action="" onsubmit="return validatePasswordForm()">
+      <div class="modal-body">
+        <input type="hidden" name="action" value="change_password">
+        <div class="inp-label">Current Password</div>
+        <input type="password" name="current_password" id="current_password" class="inp" required>
+        <div class="inp-label" style="margin-top:16px;">New Password</div>
+        <input type="password" name="new_password" id="new_password" class="inp" required>
+        <ul class="password-requirements" id="passwordReqs">
+          <li>✓ At least 8 characters</li>
+          <li>✓ One uppercase letter (A-Z)</li>
+          <li>✓ One number (0-9)</li>
+          <li>✓ One special character (!@#$%^&*)</li>
+        </ul>
+        <div class="inp-label" style="margin-top:16px;">Confirm New Password</div>
+        <input type="password" name="confirm_password" id="confirm_password" class="inp" required>
+        <div id="passwordError" class="error-message"></div>
+        <?php if (isset($passwordSuccess)): ?>
+          <div class="success-message"><?php echo $passwordSuccess; ?></div>
+        <?php endif; ?>
+        <button type="submit" class="btn btn-primary btn-full" style="margin-top:24px;">Update Password</button>
+      </div>
+    </form>
+  </div>
+</div>
 
-<div class="modal-bg" id="logoutModal"><div class="modal" style="max-width: 380px;"><div class="modal-hdr"><div class="modal-title">Confirm Logout</div><button class="modal-close" onclick="closeModal('logoutModal')">✕</button></div><div class="modal-body"><p style="margin-bottom: 8px;">Are you sure you want to logout?</p><p style="font-size: 12px; color: var(--stone);">Your profile data will remain saved locally.</p><div class="confirm-buttons"><button class="btn btn-outline" onclick="closeModal('logoutModal')">Cancel</button><button class="btn btn-primary" onclick="performLogout()">Logout</button></div></div></div></div>
+<!-- Add Saved Mountain Modal -->
+<div class="modal-bg" id="addSavedModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title">Save a Mountain</div>
+      <button class="modal-close" onclick="closeModal('addSavedModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="mtn-option-list">
+        <?php foreach ($allMountains as $mountain): ?>
+          <?php 
+            $alreadySaved = false;
+            foreach ($savedMountains as $saved) {
+                if ($saved['mountain_id'] == $mountain['id']) {
+                    $alreadySaved = true;
+                    break;
+                }
+            }
+          ?>
+          <?php if (!$alreadySaved): ?>
+          <form method="POST" class="mtn-option" style="margin:0;">
+            <input type="hidden" name="action" value="add_saved">
+            <input type="hidden" name="mountain_id" value="<?php echo $mountain['id']; ?>">
+            <div>
+              <div class="mtn-option-name"><?php echo htmlspecialchars($mountain['name']); ?></div>
+              <div class="mtn-option-loc"><?php echo htmlspecialchars($mountain['location'] ?? ''); ?></div>
+            </div>
+            <button type="submit" class="btn-outline-small" style="padding: 4px 12px;">+ Save</button>
+          </form>
+          <?php else: ?>
+          <div class="mtn-option" style="opacity: 0.6;">
+            <div>
+              <div class="mtn-option-name"><?php echo htmlspecialchars($mountain['name']); ?></div>
+              <div class="mtn-option-loc">Already saved</div>
+            </div>
+          </div>
+          <?php endif; ?>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Account Modal -->
+<div class="modal-bg" id="deleteAccountModal">
+  <div class="modal" style="max-width: 400px;">
+    <div class="modal-hdr">
+      <div class="modal-title">Delete Account</div>
+      <button class="modal-close" onclick="closeModal('deleteAccountModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom: 12px;">Are you absolutely sure?</p>
+      <p style="font-size: 12px; color: var(--stone); margin-bottom: 20px;">This action <strong>cannot be undone</strong>. This will permanently delete your account and all associated data including bookings, saved mountains, and hiking history.</p>
+      <div class="confirm-buttons">
+        <button class="btn btn-outline" onclick="closeModal('deleteAccountModal')">Cancel</button>
+        <form method="POST" action="delete_account.php" style="flex:1;" onsubmit="return confirm('This cannot be undone. Delete your account permanently?');">
+          <button type="submit" class="btn btn-primary" style="background: var(--danger); color: white;">Delete Permanently</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Logout Modal -->
+<div class="modal-bg" id="logoutModal">
+  <div class="modal" style="max-width: 380px;">
+    <div class="modal-hdr">
+      <div class="modal-title">Confirm Logout</div>
+      <button class="modal-close" onclick="closeModal('logoutModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom: 8px;">Are you sure you want to logout?</p>
+      <p style="font-size: 12px; color: var(--stone);">You'll need to login again to access your account.</p>
+      <div class="confirm-buttons">
+        <button class="btn btn-outline" onclick="closeModal('logoutModal')">Cancel</button>
+        <form method="POST" action="logout.php" style="flex:1;">
+          <button type="submit" class="btn btn-primary">Logout</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-  // Data models
-  let userProfile = { fullName: "Jamie Rivera", email: "jamie@lakbay.ph", phone: "+63 912 345 6789", homeRegion: "Cavite, Philippines", profilePic: null };
-  let hikingHistory = [];
-  let savedMountains = [];
-  let preferences = { locationEnabled: false, weatherAlerts: true, crowdAlerts: false, bookingReminders: true, newsletter: true };
-
-  const mountainsDB = [
-    { id:1, name:"Mt. Batulao", location:"Nasugbu, Batangas", elevation:"811m", time:"4-5 hrs", difficulty:"moderate", rating:4.8, image:"https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=70" },
-    { id:2, name:"Mt. Talamitam", location:"Nasugbu, Batangas", elevation:"630m", time:"3-4 hrs", difficulty:"easy", rating:4.6, image:"https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=400&q=70" },
-    { id:3, name:"Mt. Apayang", location:"Batangas", elevation:"980m", time:"6-7 hrs", difficulty:"hard", rating:4.9, image:"https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400&q=70" },
-    { id:4, name:"Mt. Lantik", location:"Alfonso, Cavite", elevation:"710m", time:"4-5 hrs", difficulty:"moderate", rating:4.7, image:"https://images.unsplash.com/photo-1501854140801-50d01698950b?w=400&q=70" }
-  ];
-
-  function loadData() {
-    if(localStorage.getItem('lakbay_profile')) userProfile = JSON.parse(localStorage.getItem('lakbay_profile'));
-    if(localStorage.getItem('lakbay_history')) hikingHistory = JSON.parse(localStorage.getItem('lakbay_history'));
-    if(localStorage.getItem('lakbay_saved')) savedMountains = JSON.parse(localStorage.getItem('lakbay_saved'));
-    if(localStorage.getItem('lakbay_prefs')) preferences = JSON.parse(localStorage.getItem('lakbay_prefs'));
-    document.getElementById('locationToggle').checked = preferences.locationEnabled;
-    document.getElementById('weatherAlertToggle').checked = preferences.weatherAlerts;
-    document.getElementById('crowdAlertToggle').checked = preferences.crowdAlerts;
-    document.getElementById('bookingReminderToggle').checked = preferences.bookingReminders;
-    document.getElementById('newsletterToggle').checked = preferences.newsletter;
-    updateLocationMsg();
-    renderAll();
-    loadProfilePicture();
-  }
-
-  function saveAll() {
-    localStorage.setItem('lakbay_profile', JSON.stringify(userProfile));
-    localStorage.setItem('lakbay_history', JSON.stringify(hikingHistory));
-    localStorage.setItem('lakbay_saved', JSON.stringify(savedMountains));
-    localStorage.setItem('lakbay_prefs', JSON.stringify(preferences));
-    renderAll();
-  }
-
-  function loadProfilePicture() {
-    const savedPic = localStorage.getItem('lakbay_profilePic');
-    if(savedPic) {
-      const avatarDiv = document.querySelector('#avatarDisplay');
-      avatarDiv.style.backgroundImage = `url(${savedPic})`;
-      avatarDiv.style.backgroundSize = 'cover';
-      avatarDiv.style.backgroundPosition = 'center';
-      const initialSpan = avatarDiv.querySelector('#avatarInitial');
-      if(initialSpan) initialSpan.style.display = 'none';
-    }
-  }
-
-  function uploadProfilePicture(input) {
-    if(input.files && input.files[0]) {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const imgData = e.target.result;
-        localStorage.setItem('lakbay_profilePic', imgData);
-        const avatarDiv = document.querySelector('#avatarDisplay');
-        avatarDiv.style.backgroundImage = `url(${imgData})`;
-        avatarDiv.style.backgroundSize = 'cover';
-        avatarDiv.style.backgroundPosition = 'center';
-        const initialSpan = avatarDiv.querySelector('#avatarInitial');
-        if(initialSpan) initialSpan.style.display = 'none';
-        showToast("Profile picture updated!");
-      };
-      reader.readAsDataURL(input.files[0]);
-    }
-  }
-
-  function renderAll() {
-    // Personal info
-    document.getElementById('personalInfoDisplay').innerHTML = `
-      <div class="info-row"><div class="info-label">Full Name</div><div class="info-value">${escapeHtml(userProfile.fullName)}</div></div>
-      <div class="info-row"><div class="info-label">Email</div><div class="info-value">${escapeHtml(userProfile.email)}</div></div>
-      <div class="info-row"><div class="info-label">Phone</div><div class="info-value">${escapeHtml(userProfile.phone || '—')}</div></div>
-      <div class="info-row"><div class="info-label">Home Region</div><div class="info-value">${escapeHtml(userProfile.homeRegion || '—')}</div></div>
-    `;
-    document.getElementById('sidebarName').innerText = userProfile.fullName;
-    document.getElementById('sidebarEmail').innerText = userProfile.email;
-    const profileBtn = document.getElementById('profileBtn');
-    if(profileBtn) profileBtn.innerText = userProfile.fullName.charAt(0).toUpperCase();
-    document.getElementById('totalHikesStat').innerText = hikingHistory.length;
-    document.getElementById('totalSavedStat').innerText = savedMountains.length;
-
-    // History list
-    const historyContainer = document.getElementById('historyList');
-    if(!hikingHistory.length) historyContainer.innerHTML = '<div class="empty-state">No hikes recorded yet. Start your journey!</div>';
-    else historyContainer.innerHTML = hikingHistory.map((h, idx) => `
-      <div class="history-item">
-        <div class="history-info"><h4>${escapeHtml(h.mountainName)}</h4><p>${escapeHtml(h.date)} · ${escapeHtml(h.notes || 'No notes')}</p></div>
-        <button class="btn-icon" onclick="removeHistory(${idx})"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-      </div>
-    `).join('');
-
-    // Saved mountains as mountain cards
-    const savedContainer = document.getElementById('savedList');
-    if(!savedMountains.length) savedContainer.innerHTML = '<div class="empty-state">No saved mountains. Favorite some peaks!</div>';
-    else savedContainer.innerHTML = savedMountains.map((m, idx) => `
-      <div class="saved-mtn-card" onclick="viewMountain(${m.id})">
-        <div class="saved-mtn-img" style="background-image: url('${m.image || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=70'}')">
-          <div class="saved-mtn-img-overlay"></div>
-          <div class="saved-mtn-badge"><span class="badge badge-${m.difficulty}">${m.difficulty}</span></div>
-          <div class="saved-mtn-remove" onclick="event.stopPropagation(); removeSaved(${idx})"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
-        </div>
-        <div class="saved-mtn-body">
-          <div class="saved-mtn-name">${escapeHtml(m.name)}</div>
-          <div class="saved-mtn-loc"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>${escapeHtml(m.location)}</div>
-          <div class="saved-mtn-stats"><span class="saved-mtn-stat">⛰ ${m.elevation}</span><span class="saved-mtn-stat">⏱ ${m.time}</span><span class="saved-mtn-stat">★ ${m.rating}</span></div>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  function viewMountain(id) {
-    showToast("Opening mountain details...");
-    // In a full app, this would open a modal or navigate
-  }
-
-  function removeHistory(idx) { hikingHistory.splice(idx,1); saveAll(); showToast("Hike removed"); }
-  function removeSaved(idx) { savedMountains.splice(idx,1); saveAll(); showToast("Mountain removed"); }
-
-  function addHikeEntry() {
-    const mtnId = parseInt(document.getElementById('historyMtnSelect').value);
-    const mtn = mountainsDB.find(m => m.id === mtnId);
-    if(!mtn) return showToast("Select a mountain");
-    const date = document.getElementById('historyDate').value;
-    if(!date) return showToast("Select a date");
-    const notes = document.getElementById('historyNotes').value.trim() || "Completed hike";
-    hikingHistory.push({ mountainId: mtn.id, mountainName: mtn.name, date, notes });
-    saveAll();
-    closeModal('addHistoryModal');
-    document.getElementById('historyDate').value = '';
-    document.getElementById('historyNotes').value = '';
-    showToast(`Added ${mtn.name} to history`);
-  }
-
-  function addSavedMountain(mtn) {
-    if(savedMountains.some(s => s.id === mtn.id)) return showToast(`${mtn.name} already saved`);
-    savedMountains.push(mtn);
-    saveAll();
-    closeModal('addSavedModal');
-    showToast(`${mtn.name} saved to favorites`);
-  }
-
-  function openAddHistoryModal() {
-    const select = document.getElementById('historyMtnSelect');
-    select.innerHTML = mountainsDB.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${m.difficulty})</option>`);
-    document.getElementById('addHistoryModal').classList.add('open');
-  }
-
-  function openAddSavedModal() {
-    const container = document.getElementById('savedMtnList');
-    container.innerHTML = mountainsDB.map(m => `
-      <div class="mtn-option" onclick="addSavedMountain(${JSON.stringify(m).replace(/"/g, '&quot;')})">
-        <div><div class="mtn-option-name">${escapeHtml(m.name)}</div><div class="mtn-option-loc">${escapeHtml(m.location)}</div></div>
-        <span style="color:var(--gold);">+ Save</span>
-      </div>
-    `).join('');
-    document.getElementById('addSavedModal').classList.add('open');
-  }
-
-  function openEditModal() {
-    document.getElementById('editName').value = userProfile.fullName;
-    document.getElementById('editEmail').value = userProfile.email;
-    document.getElementById('editPhone').value = userProfile.phone || '';
-    document.getElementById('editRegion').value = userProfile.homeRegion || '';
-    document.getElementById('editProfileModal').classList.add('open');
-  }
-
-  function savePersonalInfo() {
-    userProfile.fullName = document.getElementById('editName').value.trim() || "Explorer";
-    userProfile.email = document.getElementById('editEmail').value.trim();
-    userProfile.phone = document.getElementById('editPhone').value.trim();
-    userProfile.homeRegion = document.getElementById('editRegion').value.trim();
-    saveAll();
-    closeModal('editProfileModal');
-    showToast("Profile updated!");
-  }
-
-  function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('open');
-  }
-
-  function updateLocationMsg() {
-    const msgDiv = document.getElementById('locationStatusMsg');
-    if(preferences.locationEnabled) {
-      msgDiv.innerHTML = "Location tracking is ACTIVE. You'll get trail-specific alerts & route suggestions.";
-      if("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition((pos) => {
-          msgDiv.innerHTML += `<br><span style="font-size:10px;">Last known: ${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}</span>`;
-        }, () => {});
-      }
-    } else {
-      msgDiv.innerHTML = "Location sharing is OFF. Turn on to enable smart safety features and trail tracking.";
-    }
-  }
-
   // Sidebar navigation
   function initSidebarNavigation() {
     const links = document.querySelectorAll('.sidebar-link[data-section]');
-    const sections = ['personal', 'history', 'saved', 'location', 'notifications'];
+    const sections = ['personal', 'history', 'saved', 'location', 'settings'];
     
     function showSection(sectionId) {
       sections.forEach(s => {
@@ -981,61 +1526,151 @@
     });
   }
 
-  // Go back to previous page
-function goBack() {
-  // Try to use browser history first
-  if (document.referrer && document.referrer.includes(window.location.hostname)) {
-    window.history.back();
-  } else {
-    // If no valid referrer, go to explore page
-    window.location.href = "explore.php";
+  function goBack() {
+    if (document.referrer && document.referrer.includes(window.location.hostname)) {
+      window.history.back();
+    } else {
+      window.location.href = "explore.php";
+    }
   }
-}
-  // Logout to lakbayLanding.php
-function performLogout() {
-  // Clear all user data from localStorage
-  localStorage.removeItem('lakbay_profile');
-  localStorage.removeItem('lakbay_history');
-  localStorage.removeItem('lakbay_saved');
-  localStorage.removeItem('lakbay_prefs');
-  localStorage.removeItem('lakbay_profilePic');
+
+  function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('open');
+  }
+
+  function openEditModal() {
+    document.getElementById('editProfileModal').classList.add('open');
+  }
+
+  function openChangePasswordModal() {
+    document.getElementById('changePasswordModal').classList.add('open');
+    // Clear form fields
+    document.getElementById('current_password').value = '';
+    document.getElementById('new_password').value = '';
+    document.getElementById('confirm_password').value = '';
+    const errorDiv = document.getElementById('passwordError');
+    if (errorDiv) errorDiv.innerHTML = '';
+  }
+
+  function openAddSavedModal() {
+    document.getElementById('addSavedModal').classList.add('open');
+  }
+
+  function confirmDeleteAccount() {
+    document.getElementById('deleteAccountModal').classList.add('open');
+  }
+
+  function validatePasswordForm() {
+    const newPassword = document.getElementById('new_password').value;
+    const confirmPassword = document.getElementById('confirm_password').value;
+    const errorDiv = document.getElementById('passwordError');
+    
+    // Password validation
+    if (newPassword.length < 8) {
+      errorDiv.innerHTML = 'Password must be at least 8 characters.';
+      return false;
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      errorDiv.innerHTML = 'Password must contain at least one uppercase letter.';
+      return false;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      errorDiv.innerHTML = 'Password must contain at least one number.';
+      return false;
+    }
+    if (!/[^a-zA-Z0-9]/.test(newPassword)) {
+      errorDiv.innerHTML = 'Password must contain at least one special character.';
+      return false;
+    }
+    if (newPassword !== confirmPassword) {
+      errorDiv.innerHTML = 'New passwords do not match.';
+      return false;
+    }
+    
+    errorDiv.innerHTML = '';
+    return true;
+  }
+
+  // Location tracking
+  let locationEnabled = localStorage.getItem('locationEnabled') === 'true';
+  const locationToggle = document.getElementById('locationToggle');
+  const locationMsg = document.getElementById('locationStatusMsg');
   
-  showToast("Logged out successfully!");
-  setTimeout(() => {
-    // Redirect to login page (2 levels up from hiker frontend folder)
-    window.location.href = "../login and signup/login.php";
-  }, 800);
-}
+  if (locationToggle) {
+    locationToggle.checked = locationEnabled;
+  }
+  
+  function updateLocationMsg() {
+    if (locationEnabled) {
+      locationMsg.innerHTML = "Location tracking is ACTIVE. You'll get trail-specific alerts & route suggestions.";
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          locationMsg.innerHTML += `<br><span style="font-size:10px;">Last known: ${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}</span>`;
+        }, () => {});
+      }
+    } else {
+      locationMsg.innerHTML = "Location sharing is OFF. Turn on to enable smart safety features and trail tracking.";
+    }
+  }
+  
+  if (locationToggle) {
+    locationToggle.addEventListener('change', (e) => {
+      locationEnabled = e.target.checked;
+      localStorage.setItem('locationEnabled', locationEnabled);
+      updateLocationMsg();
+      showToast(locationEnabled ? "Location tracking enabled" : "Location tracking disabled");
+    });
+  }
+  
+  updateLocationMsg();
 
-  // Toggle listeners
-  document.getElementById('locationToggle').addEventListener('change', (e) => {
-    preferences.locationEnabled = e.target.checked;
-    saveAll();
-    updateLocationMsg();
-    showToast(preferences.locationEnabled ? "Location tracking enabled" : "Location tracking disabled");
-  });
-  document.getElementById('weatherAlertToggle').addEventListener('change', (e) => { preferences.weatherAlerts = e.target.checked; saveAll(); showToast(e.target.checked ? "Weather alerts ON" : "Weather alerts OFF"); });
-  document.getElementById('crowdAlertToggle').addEventListener('change', (e) => { preferences.crowdAlerts = e.target.checked; saveAll(); showToast(e.target.checked ? "Crowd alerts ON" : "Crowd alerts OFF"); });
-  document.getElementById('bookingReminderToggle').addEventListener('change', (e) => { preferences.bookingReminders = e.target.checked; saveAll(); showToast(e.target.checked ? "Booking reminders ON" : "Booking reminders OFF"); });
-  document.getElementById('newsletterToggle').addEventListener('change', (e) => { preferences.newsletter = e.target.checked; saveAll(); showToast(e.target.checked ? "Newsletter subscribed" : "Newsletter unsubscribed"); });
+  // Two-factor toggle
+  const twoFactorToggle = document.getElementById('twoFactorToggle');
+  if (twoFactorToggle) {
+    twoFactorToggle.addEventListener('change', async (e) => {
+      const enabled = e.target.checked;
+      // You can implement AJAX to update two_factor_enabled in database
+      showToast(enabled ? "Two-factor authentication enabled" : "Two-factor authentication disabled");
+    });
+  }
 
-  document.getElementById('logoutBtn').addEventListener('click', () => {
-    document.getElementById('logoutModal').classList.add('open');
-  });
-
-  function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
   function showToast(msg) {
     const toast = document.getElementById('toast');
     toast.innerText = msg;
     toast.classList.add('show');
-    setTimeout(()=>toast.classList.remove('show'), 2500);
+    setTimeout(() => toast.classList.remove('show'), 2500);
   }
 
+  // Display success/error messages from PHP
+  <?php if (isset($successMessage)): ?>
+    showToast("<?php echo addslashes($successMessage); ?>");
+  <?php endif; ?>
+  
+  <?php if (isset($passwordSuccess)): ?>
+    showToast("<?php echo addslashes($passwordSuccess); ?>");
+    closeModal('changePasswordModal');
+  <?php endif; ?>
+  
+  <?php if (isset($errors) && !empty($errors)): ?>
+    showToast("<?php echo addslashes(implode(', ', $errors)); ?>");
+  <?php endif; ?>
+  
+  <?php if (isset($passwordErrors) && !empty($passwordErrors)): ?>
+    showToast("<?php echo addslashes(implode(', ', $passwordErrors)); ?>");
+  <?php endif; ?>
+
+  // Modal background click to close
   document.querySelectorAll('.modal-bg').forEach(bg => {
-    bg.addEventListener('click', function(e) { if(e.target === bg) bg.classList.remove('open'); });
+    bg.addEventListener('click', function(e) {
+      if (e.target === bg) bg.classList.remove('open');
+    });
   });
 
-  loadData();
+  // Logout button
+  document.getElementById('logoutBtn')?.addEventListener('click', () => {
+    document.getElementById('logoutModal').classList.add('open');
+  });
+
   initSidebarNavigation();
 </script>
 </body>

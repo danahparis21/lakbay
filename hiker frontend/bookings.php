@@ -1,8 +1,27 @@
 <?php
+
 // hiker frontend/bookings.php - LAKBAY Bookings Page (Database Connected)
 require_once __DIR__ . '/../config/db.php';
-
+date_default_timezone_set('Asia/Manila');
 session_start();
+// At top of file, BEFORE session_start()
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && 
+    isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+    strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+    
+    // Capture any PHP errors as JSON instead of HTML
+    set_error_handler(function($errno, $errstr, $errfile, $errline) {
+        if (ob_get_length()) ob_clean();
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false, 
+            'message' => "PHP Error: $errstr in $errfile on line $errline"
+        ]);
+        exit;
+    });
+    ob_start(); // Buffer output so stray warnings don't corrupt JSON
+}
+
 
 // Fetch current user details if logged in
 $currentUser = null;
@@ -133,7 +152,7 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 b.hike_date as date, b.hike_type as type, b.status,
                 b.number_of_hikers as pax, b.total_amount as totalFee,
                 b.special_requests as notes, b.created_at,
-                b.camping as camping,
+                (b.hike_type = 'overnight') as camping,
                 m.name as mountain,
                 u.name as guideName,
                 SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2) as guideInitials
@@ -159,17 +178,23 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
             $stmt2 = $pdo->prepare("SELECT COUNT(*) as nudge_count, MAX(created_at) as last_nudge FROM booking_nudges WHERE booking_id = ?");
             $stmt2->execute([$row['id']]);
             $nudgeData = $stmt2->fetch(PDO::FETCH_ASSOC);
+
+            // Check if user has reviewed this booking
+            $stmt2 = $pdo->prepare("SELECT COUNT(*) as has_reviewed FROM reviews WHERE booking_id = ? AND user_id = ?");
+            $stmt2->execute([$row['id'], $currentUserId]);
+            $hasReviewed = $stmt2->fetch()['has_reviewed'] > 0;
             
-            // Generate a simple ID for JavaScript (using BK prefix)
-            $bookingId = 'BK' . str_pad($row['id'], 3, '0', STR_PAD_LEFT);
+            // Use the actual booking_number from the database
+            $bookingId = $row['booking_number'];
             
             $bookings[] = [
                 'id' => $bookingId,
+                'db_id' => $row['id'],
                 'mountainId' => $row['mountain_id'],
                 'mountain' => $row['mountain'],
                 'date' => $row['date'],
                 'time' => '06:00', // Default time
-                'type' => $row['type'] == 'overnight' ? 'overnight' : ($row['type'] == 'late' ? 'late' : 'day'),
+                'type' => $row['type'] == 'overnight' ? 'overnight' : 'day',
                 'status' => $row['status'],
                 'guideId' => $row['guide_id'],
                 'guideName' => $row['guideName'],
@@ -177,11 +202,12 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 'pax' => $row['pax'],
                 'hikers' => $hikers,
                 'totalFee' => floatval($row['totalFee']),
-                'createdAt' => strtotime($row['created_at']) * 1000,
+                'createdAt' => strtotime($row['created_at']) * 1000, // This should work if PHP timezone is set
                 'nudges' => intval($nudgeData['nudge_count'] ?? 0),
                 'lastNudge' => $nudgeData['last_nudge'] ? strtotime($nudgeData['last_nudge']) * 1000 : 0,
                 'camping' => $row['camping'] == 1,
-                'notes' => $row['notes'] ?? ''
+                'notes' => $row['notes'] ?? '',
+                'hasReviewed' => $hasReviewed 
             ];
         }
         
@@ -204,9 +230,11 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
         $stmt->execute([$currentUserName, $currentUserId]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $bookingId = 'BKJ' . str_pad($row['id'], 3, '0', STR_PAD_LEFT);
+            // Use actual booking number for joined hikes too
+            $bookingId = 'JO-' . $row['booking_number'];
             $bookings[] = [
                 'id' => $bookingId,
+                'db_id' => $row['id'],
                 'mountainId' => $row['mountain_id'],
                 'mountain' => $row['mountain'],
                 'date' => $row['date'],
@@ -224,7 +252,7 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 'lastNudge' => 0,
                 'camping' => false,
                 'notes' => '',
-                'joinedFromId' => 'BK' . str_pad($row['id'], 3, '0', STR_PAD_LEFT)
+                'joinedFromId' => $row['booking_number']
             ];
         }
         
@@ -246,84 +274,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
     $action = $_POST['action'] ?? '';
     
     if ($action === 'save_booking') {
-        // Save a new booking to database
-        $bookingData = json_decode($_POST['data'] ?? '', true);
-        
-        if ($bookingData && $currentUserId) {
-            // Determine if this is overnight/camping
-            $isCamping = ($bookingData['type'] === 'overnight');
-            
-            // Generate booking number
-            $year = date('Y');
-            $prefix = $isCamping ? 'CK' : 'BK';
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE booking_number LIKE ?");
-            $stmt->execute([$prefix . '-' . $year . '%']);
-            $count = $stmt->fetchColumn() + 1;
-            $bookingNumber = $prefix . '-' . $year . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
-            
-            // Get mountain fee
-            $stmt = $pdo->prepare("SELECT fee FROM mountains WHERE id = ?");
-            $stmt->execute([$bookingData['mountainId']]);
-            $mountain = $stmt->fetch();
-            $feePerPerson = $mountain['fee'] ?? 500;
-            
-            // Calculate total (simplified)
-            $totalAmount = $feePerPerson * $bookingData['pax'];
-            
-            // Insert into bookings table
-            $stmt = $pdo->prepare("
+        try {
+            $bookingData = json_decode($_POST['data'] ?? '', true);
+
+            if ($bookingData && $currentUserId) {
+                $isCamping = ($bookingData['type'] === 'overnight');
+                $year = date('Y');
+                $prefix = $isCamping ? 'CK' : 'BK';
+
+                // Count existing bookings with this prefix to generate number
+                $stmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE booking_number LIKE ?");
+                $stmt->execute([$prefix . '-' . $year . '-%']);
+                $count = $stmt->fetchColumn() + 1;
+                $bookingNumber = $prefix . '-' . $year . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
+
+                // Use the total fee calculated by the frontend to ensure consistency
+                $totalAmount = $bookingData['totalFee'] ?? 0;
+
+                // Map frontend type to database ENUM
+                $dbType = $bookingData['type'];
+                if ($dbType === 'day' || $dbType === 'late') {
+                    $dbType = 'day_hike';
+                }
+
+                $currentTime = date('Y-m-d H:i:s');
+$stmt = $pdo->prepare("
     INSERT INTO bookings (
         booking_number, user_id, mountain_id, guide_id,
         booking_date, hike_date, hike_type, number_of_hikers,
         total_amount, downpayment_amount, payment_status, status,
         special_requests, created_at, updated_at
-    ) VALUES (
-        ?, ?, ?, ?,
-        NOW(), ?, ?, ?,
-        ?, 0, 'pending', 'pending',
-        ?, NOW(), NOW()
-    )
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending', 'pending', ?, ?, ?)
 ");
-            
-            
-            $dbBookingId = $pdo->lastInsertId();
-            
-            // Insert hikers into booking_hikers
-            foreach ($bookingData['hikers'] as $hikerName) {
-                if (!empty($hikerName)) {
-                    $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
-                    $stmt->execute([$dbBookingId, $hikerName]);
+$stmt->execute([
+    $bookingNumber, $currentUserId, $bookingData['mountainId'], $bookingData['guideId'],
+    $currentTime, // booking_date
+    $bookingData['date'], // hike_date
+    $dbType, $bookingData['pax'],
+    $totalAmount, $bookingData['notes'] ?? '',
+    $currentTime, // created_at
+    $currentTime  // updated_at
+]);
+
+                $dbBookingId = $pdo->lastInsertId();
+
+                foreach ($bookingData['hikers'] as $hikerName) {
+                    if (!empty($hikerName)) {
+                        $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
+                        $stmt->execute([$dbBookingId, $hikerName]);
+                    }
                 }
+
+                if (ob_get_length()) ob_clean();
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Booking saved!',
+                    'booking_id' => $bookingNumber,
+                    'db_id' => $dbBookingId
+                ]);
+                exit;
             }
-            
-            echo json_encode(['success' => true, 'message' => 'Booking saved to database!', 'booking_id' => $bookingNumber]);
+            throw new Exception('Invalid booking data or session');
+        } catch (Exception $e) {
+            if (ob_get_length()) ob_clean();
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
             exit;
         }
-        
-        echo json_encode(['success' => false, 'message' => 'Failed to save booking']);
-        exit;
     }
     
-    if ($action === 'cancel_booking') {
-        $bookingId = $_POST['booking_id'] ?? '';
-        // Extract numeric ID from BK001 format
+   if ($action === 'cancel_booking') {
+    $bookingId = $_POST['booking_id'] ?? '';
+    
+    $currentTime = date('Y-m-d H:i:s');
+$stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE booking_number = ? AND user_id = ?");
+$stmt->execute([$currentTime, $bookingId, $currentUserId]);
+    
+    if ($stmt->rowCount() === 0) {
+        // Fallback: try numeric id extracted from BK017 format
         $numericId = preg_replace('/[^0-9]/', '', $bookingId);
-        
-        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = NOW() WHERE id = ? AND user_id = ?");
+        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = NOW() 
+                                WHERE id = ? AND user_id = ?");
         $stmt->execute([$numericId, $currentUserId]);
-        
-        if ($stmt->rowCount() > 0) {
-            echo json_encode(['success' => true, 'message' => 'Booking cancelled successfully']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Booking not found or already cancelled']);
-        }
-        exit;
     }
+
+    if ($stmt->rowCount() > 0) {
+        echo json_encode(['success' => true, 'message' => 'Booking cancelled']);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Booking not found or already cancelled']);
+    }
+    exit;
+}
     
     if ($action === 'nudge_guide') {
         $bookingId = $_POST['booking_id'] ?? '';
         $guideId = $_POST['guide_id'] ?? '';
-        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+        
+        // Find booking by number or numeric id
+        $stmt = $pdo->prepare("SELECT id FROM bookings WHERE booking_number = ? OR id = ?");
+        $stmt->execute([$bookingId, preg_replace('/[^0-9]/', '', $bookingId)]);
+        $booking = $stmt->fetch();
+        
+        if (!$booking) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found']);
+            exit;
+        }
+        $numericId = $booking['id'];
         
         // Check nudge limit
         $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM booking_nudges WHERE booking_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 20 MINUTE)");
@@ -332,15 +387,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
         
         if ($recentNudges['count'] >= 1) {
             echo json_encode(['success' => false, 'message' => 'Please wait 20 minutes before nudging again']);
-            exit;
-        }
-        
-        $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM booking_nudges WHERE booking_id = ?");
-        $stmt->execute([$numericId]);
-        $totalNudges = $stmt->fetch();
-        
-        if ($totalNudges['total'] >= 10) {
-            echo json_encode(['success' => false, 'message' => 'Maximum nudges reached. Please replace your guide.']);
             exit;
         }
         
@@ -356,8 +402,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
         $newGuideId = $_POST['new_guide_id'] ?? '';
         $numericId = preg_replace('/[^0-9]/', '', $bookingId);
         
-        $stmt = $pdo->prepare("UPDATE bookings SET guide_id = ?, updated_at = NOW() WHERE id = ? AND user_id = ?");
-        $stmt->execute([$newGuideId, $numericId, $currentUserId]);
+        $currentTime = date('Y-m-d H:i:s');
+$stmt = $pdo->prepare("UPDATE bookings SET guide_id = ?, updated_at = ? WHERE id = ? AND user_id = ?");
+$stmt->execute([$newGuideId, $currentTime, $numericId, $currentUserId]);
         
         echo json_encode(['success' => true, 'message' => 'Guide replaced successfully']);
         exit;
@@ -372,8 +419,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
         
         $numericId = preg_replace('/[^0-9]/', '', $bookingId);
         
-        $stmt = $pdo->prepare("UPDATE bookings SET hike_date = ?, special_requests = ?, updated_at = NOW() WHERE id = ? AND user_id = ?");
-        $stmt->execute([$newDate, $notes, $numericId, $currentUserId]);
+        $currentTime = date('Y-m-d H:i:s');
+$stmt = $pdo->prepare("UPDATE bookings SET hike_date = ?, special_requests = ?, updated_at = ? WHERE id = ? AND user_id = ?");
+$stmt->execute([$newDate, $notes, $currentTime, $numericId, $currentUserId]);
         
         // Update hikers
         $stmt = $pdo->prepare("DELETE FROM booking_hikers WHERE booking_id = ?");
@@ -414,7 +462,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
         }
         exit;
     }
-    
+    if ($action === 'lookup_hike') {
+        $bookingNumber = $_POST['booking_number'] ?? '';
+        
+        $stmt = $pdo->prepare("
+            SELECT 
+                b.id, b.booking_number, b.mountain_id, b.guide_id,
+                b.hike_date as date, b.hike_type as type, b.status,
+                b.number_of_hikers as pax,
+                m.name as mountain,
+                u.name as guideName,
+                (b.hike_type = 'overnight') as camping
+            FROM bookings b
+            JOIN mountains m ON b.mountain_id = m.id
+            JOIN guides g ON b.guide_id = g.user_id
+            JOIN users u ON g.user_id = u.id
+            WHERE b.booking_number = ?
+        ");
+        $stmt->execute([$bookingNumber]);
+        $hike = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($hike) {
+            // Get current hikers
+            $stmt2 = $pdo->prepare("SELECT hiker_name FROM booking_hikers WHERE booking_id = ?");
+            $stmt2->execute([$hike['id']]);
+            $hike['hikers'] = $stmt2->fetchAll(PDO::FETCH_COLUMN);
+            
+            // Check if current user is already in the list
+            $hike['alreadyJoined'] = in_array($user_name, $hike['hikers']);
+            
+            echo json_encode(['success' => true, 'hike' => $hike]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Hike not found']);
+        }
+        exit;
+    }
     if ($action === 'join_hike') {
         $bookingId = $_POST['booking_id'] ?? '';
         $bookingNumber = $_POST['booking_number'] ?? '';
@@ -429,21 +511,145 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
             $stmt = $pdo->prepare("SELECT id FROM booking_hikers WHERE booking_id = ? AND hiker_name = ?");
             $stmt->execute([$booking['id'], $user_name]);
             
-            if (!$stmt->fetch()) {
-                $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
-                $stmt->execute([$booking['id'], $user_name]);
-                
-                // Update number of hikers
-                $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers + 1 WHERE id = ?");
-                $stmt->execute([$booking['id']]);
-                
-                echo json_encode(['success' => true, 'message' => 'You joined the hike!']);
+            if ($stmt->fetch()) {
+                echo json_encode(['success' => false, 'message' => 'You have already joined this hike']);
                 exit;
             }
+            
+            $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
+            $stmt->execute([$booking['id'], $user_name]);
+            
+            // Update number of hikers
+            $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers + 1 WHERE id = ?");
+            $stmt->execute([$booking['id']]);
+            
+            echo json_encode(['success' => true, 'message' => 'You joined the hike!']);
+            exit;
         }
         
-        echo json_encode(['success' => false, 'message' => 'Could not join hike']);
+        echo json_encode(['success' => false, 'message' => 'Booking not found']);
         exit;
+    }
+    
+   
+    if ($action === 'get_existing_reviews') {
+        $bookingId = $_POST['booking_id'] ?? '';
+        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+        
+        $response = ['success' => true, 'mountain_review' => null, 'guide_review' => null];
+        
+        // Get mountain review
+        $stmt = $pdo->prepare("SELECT id, rating, title, comment, media FROM reviews WHERE booking_id = ? AND user_id = ?");
+        $stmt->execute([$numericId, $currentUserId]);
+        $mtnReview = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($mtnReview) {
+            $mtnReview['media'] = json_decode($mtnReview['media'] ?? '[]', true);
+            $response['mountain_review'] = $mtnReview;
+        }
+        
+        // Get guide review
+        $stmt = $pdo->prepare("SELECT id, rating, comment, photo_urls FROM guide_reviews WHERE booking_id = ? AND user_id = ?");
+        $stmt->execute([$numericId, $currentUserId]);
+        $guideReview = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($guideReview) {
+            $guideReview['photo_urls'] = json_decode($guideReview['photo_urls'] ?? '[]', true);
+            $response['guide_review'] = $guideReview;
+        }
+        
+        echo json_encode($response);
+        exit;
+    }
+
+    if ($action === 'save_review') {
+        try {
+            $data = json_decode($_POST['data'] ?? '', true);
+            if (!$data || !$currentUserId) throw new Exception('Invalid data');
+            
+            $bookingId = $data['booking_id'];
+            $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+            
+            // Get booking details
+            $stmt = $pdo->prepare("SELECT mountain_id, guide_id FROM bookings WHERE id = ?");
+            $stmt->execute([$numericId]);
+            $booking = $stmt->fetch();
+            
+            if (!$booking) throw new Exception('Booking not found');
+            
+            // Handle Mountain Review
+            if ($data['mountain_review']) {
+                $mtnData = $data['mountain_review'];
+                $media = json_encode($mtnData['media'] ?? []);
+                
+                if ($mtnData['review_id']) {
+                    // Update existing mountain review
+                    $stmt = $pdo->prepare("
+                        UPDATE reviews SET 
+                            rating = ?, title = ?, comment = ?, media = ?,
+                            updated_at = NOW()
+                        WHERE id = ? AND user_id = ?
+                    ");
+                    $stmt->execute([
+                        $mtnData['rating'], $mtnData['title'], $mtnData['comment'],
+                        $media, $mtnData['review_id'], $currentUserId
+                    ]);
+                } else {
+                    // Insert new mountain review
+                    $stmt = $pdo->prepare("
+                        INSERT INTO reviews (
+                            mountain_id, user_id, booking_id, rating, title, comment, 
+                            media, is_verified_purchase, status, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'approved', NOW(), NOW())
+                    ");
+                    $stmt->execute([
+                        $booking['mountain_id'], $currentUserId, $numericId,
+                        $mtnData['rating'], $mtnData['title'], $mtnData['comment'],
+                        $media
+                    ]);
+                }
+            }
+            
+            // Handle Guide Review
+            if ($data['guide_review']) {
+                $guideData = $data['guide_review'];
+                $photoUrls = json_encode($guideData['photo_urls'] ?? []);
+                
+                if ($guideData['review_id']) {
+                    // Update existing guide review
+                    $stmt = $pdo->prepare("
+                        UPDATE guide_reviews SET 
+                            rating = ?, comment = ?, photo_urls = ?,
+                            updated_at = NOW()
+                        WHERE id = ? AND user_id = ?
+                    ");
+                    $stmt->execute([
+                        $guideData['rating'], $guideData['comment'],
+                        $photoUrls, $guideData['review_id'], $currentUserId
+                    ]);
+                } else {
+                    // Insert new guide review
+                    $stmt = $pdo->prepare("
+                        INSERT INTO guide_reviews (
+                            guide_id, user_id, booking_id, rating, comment, 
+                            photo_urls, is_verified_purchase, status, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, 1, 'approved', NOW())
+                    ");
+                    $stmt->execute([
+                        $booking['guide_id'], $currentUserId, $numericId,
+                        $guideData['rating'], $guideData['comment'], $photoUrls
+                    ]);
+                }
+            }
+            
+            if (ob_get_length()) ob_clean();
+            echo json_encode(['success' => true]);
+            exit;
+        } catch (Exception $e) {
+            if (ob_get_length()) ob_clean();
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            exit;
+        }
     }
     
     echo json_encode(['success' => false, 'message' => 'Unknown action']);
@@ -456,6 +662,7 @@ $guidesJSON = json_encode($dbGuides);
 $userBookingsJSON = json_encode($dbUserBookings);
 $currentUserNameJS = json_encode($user_name);
 $currentUserIdJS = json_encode($currentUserId);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -634,6 +841,12 @@ body {
 .status-completed { background: #e8eaf6; color: #283593; border: 1px solid rgba(40,53,147,0.2); }
 .status-cancelled { background: #fce4ec; color: #c62828; border: 1px solid rgba(198,40,40,0.2); }
 .status-joined { background: #e8f5e9; color: #2e7d32; border: 1px solid rgba(46,125,50,0.2); }
+
+/* ── REVIEW MODAL STARS ── */
+.star-rating { display: flex; gap: 8px; font-size: 28px; color: #ddd; cursor: pointer; }
+.star-rating span { transition: color 0.2s; }
+.star-rating span:hover, .star-rating span.active { color: #f1c40f; }
+.star-rating span:hover ~ span { color: #ddd; }
 
 /* ── TOAST ── */
 .toast {
@@ -979,6 +1192,75 @@ body {
   .bookings-layout { padding: 80px 0 100px; }
   .bookings-header { flex-direction: column; align-items: flex-start; }
 }
+/* ── CUSTOM PHOTO UPLOAD ── */
+.photo-upload-zone {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  border: 2px dashed rgba(90,122,90,0.3);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: 0.2s;
+  background: var(--sky);
+}
+.photo-upload-zone:hover { border-color: var(--forest); background: var(--white); }
+.photo-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+.photo-upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--sage);
+  font-size: 11px;
+  gap: 4px;
+}
+.photo-upload-placeholder i { font-size: 18px; }
+
+.review-photo-preview {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.photo-item {
+  position: relative;
+  width: 90px;
+  height: 90px;
+}
+.photo-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.photo-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #ff5252;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
 </style>
 </head>
 <body>
@@ -1006,17 +1288,24 @@ body {
   <a href="hikerProfile.php" class="user-btn">J</a>
 </nav>
 
-<!-- MOBILE NAV -->
+
+<!-- ── MOBILE NAV ── -->
 <nav class="mobile-nav">
   <div class="mobile-nav-inner">
     <a href="explore.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span>Explore</span></a>
     <a href="bookings.php" class="mob-nav-item active"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Bookings</span></a>
-    <a href="quiz.php" class="mob-nav-item quiz-center"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>Quiz</span></a>
+    <a href="quiz.php" class="mob-nav-item quiz-center"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></a>
     <a href="messages.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Messages</span></a>
-    <a href="hikerProfile.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></a>
+    <a href="hikerProfile.php" class="mob-nav-item">
+      <?php if ($currentUser && $currentUser['avatar']): ?>
+        <div class="avatar-small" style="background-image: url('<?= htmlspecialchars($currentUser['avatar']) ?>');"></div>
+      <?php else: ?>
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <?php endif; ?>
+      <span>Profile</span>
+    </a>
   </div>
 </nav>
-
 <!-- PAGE -->
 <div class="bookings-layout">
   <div class="container">
@@ -1178,6 +1467,137 @@ body {
   </div>
 </div>
 
+   <!-- Enhanced REVIEW MODAL -->
+<div class="modal-bg" id="reviewModal">
+  <div class="modal" style="max-width:550px; max-height:90vh; overflow-y:auto;">
+    <div class="modal-hdr">
+      <div class="modal-title">Share Your Experience</div>
+      <button class="modal-close" onclick="closeReviewModal()">×</button>
+    </div>
+    <div class="modal-body" style="padding:20px 28px 28px;">
+      <input type="hidden" id="revBookingId">
+      <input type="hidden" id="existingMtnReviewId">
+      <input type="hidden" id="existingGuideReviewId">
+      
+      <!-- Mountain Review -->
+      <div style="margin-bottom:24px;">
+        <div style="font-weight:700;font-size:15px;color:var(--forest);margin-bottom:4px;" id="revMtnName">Mt. Batulao</div>
+        <div style="font-size:12px;color:var(--stone);margin-bottom:8px;">How was the trail and the view?</div>
+        
+        <!-- Existing Review Display -->
+        <div id="existingMtnReview" style="display:none; background:var(--sky); border-radius:12px; padding:12px; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-weight:700;">Your Review</span>
+            <button class="btn btn-sm btn-outline" onclick="enableEditReview('mtn')">Edit Review</button>
+          </div>
+          <div id="mtnExistingContent"></div>
+        </div>
+        
+        <!-- Review Form -->
+        <div id="mtnReviewForm">
+          <div class="star-rating" id="mtnStars">
+            <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+          </div>
+          <input type="hidden" id="mtnRating" value="0">
+          <input type="text" id="mtnTitle" class="inp" placeholder="Review Title (e.g. Amazing sunrise!)" style="margin-top:12px;width:100%;">
+          <textarea id="mtnComment" class="inp" rows="3" placeholder="Write your thoughts about the mountain..." style="margin-top:8px;resize:none;width:100%;"></textarea>
+          
+          <!-- Photo Upload -->
+          <div style="margin-top:16px;">
+            <label class="inp-label">Upload Photos (max 5)</label>
+            <div style="display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap;">
+              <div class="photo-upload-zone">
+                <input type="file" id="mtnPhotos" multiple accept="image/*" class="photo-input">
+                <div class="photo-upload-placeholder">
+                  <i class="fas fa-camera"></i>
+                  <span>Add Photos</span>
+                </div>
+              </div>
+              <div id="mtnPhotoPreview" class="review-photo-preview" style="margin-top:0;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div style="height:1px;background:rgba(16,6,0,0.06);margin-bottom:24px;"></div>
+      
+      <!-- Guide Review -->
+      <div style="margin-bottom:24px;">
+        <div style="font-weight:700;font-size:15px;color:var(--forest);margin-bottom:4px;" id="revGuideName">Maria Santos</div>
+        <div style="font-size:12px;color:var(--stone);margin-bottom:8px;">How was your guide's assistance?</div>
+        
+        <!-- Existing Review Display -->
+        <div id="existingGuideReview" style="display:none; background:var(--sky); border-radius:12px; padding:12px; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-weight:700;">Your Review</span>
+            <button class="btn btn-sm btn-outline" onclick="enableEditReview('guide')">Edit Review</button>
+          </div>
+          <div id="guideExistingContent"></div>
+        </div>
+        
+        <!-- Review Form -->
+        <div id="guideReviewForm">
+          <div class="star-rating" id="guideStars">
+            <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+          </div>
+          <input type="hidden" id="guideRating" value="0">
+          <textarea id="guideComment" class="inp" rows="3" placeholder="Write your feedback for the guide..." style="margin-top:12px;resize:none;width:100%;"></textarea>
+          
+          <!-- Guide Photo Upload -->
+          <div style="margin-top:16px;">
+            <label class="inp-label">Upload Photos (max 5)</label>
+            <div style="display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap;">
+              <div class="photo-upload-zone">
+                <input type="file" id="guidePhotos" multiple accept="image/*" class="photo-input">
+                <div class="photo-upload-placeholder">
+                  <i class="fas fa-camera"></i>
+                  <span>Add Photos</span>
+                </div>
+              </div>
+              <div id="guidePhotoPreview" class="review-photo-preview" style="margin-top:0;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <button class="btn btn-primary btn-full" id="submitReviewBtn" onclick="submitReview()">Post Reviews</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONFIRMATION MODAL ── -->
+<div class="modal-bg" id="confirmModal">
+  <div class="modal" style="max-width:400px; text-align:center;">
+    <div class="modal-body" style="padding:40px 28px;">
+      <div style="font-size:48px; margin-bottom:20px;" id="confirmIcon">⚠️</div>
+      <div class="modal-title" id="confirmTitle" style="margin-bottom:12px;">Are you sure?</div>
+      <p id="confirmText" style="font-size:14px; color:var(--stone); margin-bottom:28px;">This action cannot be undone.</p>
+      <div style="display:flex; gap:12px;">
+        <button class="btn btn-outline btn-full" onclick="closeConfirmModal()">No, Keep it</button>
+        <button class="btn btn-danger btn-full" id="confirmBtn">Yes, Proceed</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PROMPT MODAL ── -->
+<div class="modal-bg" id="promptModal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-hdr">
+      <div class="modal-title" id="promptTitle">Enter Information</div>
+      <button class="modal-close" onclick="closePromptModal()">×</button>
+    </div>
+    <div class="modal-body" style="padding:20px 28px 28px;">
+      <p id="promptText" style="font-size:13px; color:var(--stone); margin-bottom:12px;"></p>
+      <input type="text" id="promptInput" class="inp" style="width:100%; margin-bottom:20px;">
+      <div style="display:flex; gap:12px;">
+        <button class="btn btn-outline btn-full" onclick="closePromptModal()">Cancel</button>
+        <button class="btn btn-primary btn-full" id="promptSubmitBtn">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1193,21 +1613,17 @@ echo "let nextId = Math.max(...bookings.map(b => parseInt(b.id?.replace('BK', ''
 ?>
 
 
-
 function loadBookings() {
-  const saved = localStorage.getItem('lakbay_bk_v3');
-  if(saved) {
-    bookings = JSON.parse(saved);
-    const ids = bookings.map(b => parseInt((b.id||'').replace('BK',''))||0);
-    nextId = Math.max(11, ...ids) + 1;
-  } else {
-    bookings = JSON.parse(JSON.stringify(DUMMY_BOOKINGS));
-    // Add user's own bookings
-    bookings.push({id:"BK003",mountainId:4,mountain:"Mt. Lantik",date:"2025-05-18",time:"10:00",type:"day",status:"completed",guideId:3,guideName:"Rico Cabanlit",guideInitials:"RC",pax:3,hikers:["Jamie Rivera","John Doe","Jane Smith"],totalFee:2660,createdAt:Date.now()-86400000,nudges:0,lastNudge:0,camping:false,notes:""});
-    saveBookings();
-  }
+    // bookings is already populated from PHP/DB at page load.
+    // Sync nextId with existing IDs
+    const ids = bookings.map(b => parseInt((b.id || '').replace(/\D/g, '')) || 0);
+    nextId = Math.max(10, ...ids) + 1;
 }
-function saveBookings() { localStorage.setItem('lakbay_bk_v3', JSON.stringify(bookings)); }
+
+function saveBookings() {
+    // No-op: Bookings are persisted to the database via AJAX actions.
+}
+
 function genId() { return "BK" + String(nextId++).padStart(3,'0'); }
 
 // ── FLOW STATE ──
@@ -1275,10 +1691,10 @@ function renderStep(n) {
     body.innerHTML = `
       <div class="info-note">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span>Ask your hike organizer for the Booking ID (e.g. <strong>BK001</strong> through <strong>BK010</strong>). Test with any of those!</span>
+        <span>Ask your hike organizer for the Booking ID (e.g. <strong>BK-2026-001</strong>).</span>
       </div>
       <div class="hike-id-input-row">
-        <input type="text" id="hikeIdInput" placeholder="e.g. BK001" maxlength="10" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')lookupHikeId()">
+        <input type="text" id="hikeIdInput" placeholder="e.g. BK-2026-001" maxlength="15" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')lookupHikeId()">
         <button class="btn btn-primary" onclick="lookupHikeId()">
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           Look Up
@@ -1290,8 +1706,7 @@ function renderStep(n) {
     </button><button class="btn btn-primary btn-full" id="joinConfirmBtn" onclick="confirmJoinHike()" disabled>Join This Hike
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>`;
-
-  } else if(n===1) {
+} else if(n===1) {
     document.getElementById('flowTitle').textContent = 'Book a Hike';
     document.getElementById('flowSubtitle').textContent = 'Choose your mountain';
     body.innerHTML = mountains.map(m=>`
@@ -1382,9 +1797,15 @@ function renderStep(n) {
             <div class="inp-label">Start Time</div>
             <div class="custom-time-wrapper">
               <div class="dt-icon-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
-              <input type="time" id="hikeTime" value="${flowState.time}" onchange="updateTimePreview(this.value)">
+              <input type="time" id="hikeTime" value="${flowState.time}" 
+                min="${flowState.type==='day'?'00:00':(flowState.type==='late'?'16:00':'00:00')}"
+                max="${flowState.type==='day'?'15:00':(flowState.type==='late'?'23:59':'23:59')}"
+                onchange="updateTimePreview(this.value)">
             </div>
             <div class="time-display ${flowState.time?'visible':''}" id="timeDisplay"></div>
+            <div style="font-size:10px;color:var(--stone);margin-top:4px;">
+                ${flowState.type==='day'?'Day Hike: 12am-3pm':(flowState.type==='late'?'Late Hike: 4pm-12am':'Flexible time')}
+            </div>
           </div>
         </div>
       </div>`;
@@ -1508,60 +1929,74 @@ function proceedFromMode() {
   if(flowMode==='join') renderStep('join');
   else renderStep(1);
 }
-
-// ── HIKING ID LOOKUP ──
 function lookupHikeId() {
   const input = (document.getElementById('hikeIdInput')?.value||'').trim().toUpperCase();
   const resultEl = document.getElementById('hikeIdResult');
   const confirmBtn = document.getElementById('joinConfirmBtn');
   if(!input) { showToast('Please enter a Booking ID'); return; }
-  const hike = bookings.find(b => b.id === input);
-  if(hike) {
-    foundHike = hike;
-    const typeMap = {day:'Day Hike',late:'Late Hike',overnight:'Overnight'};
-    resultEl.innerHTML = `
-      <div class="hike-id-found-card">
-        <div class="hif-label"><svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Hike Found!</div>
-        <div class="hif-row"><span class="hif-key">Booking ID</span><span class="hif-val">${hike.id}</span></div>
-        <div class="hif-row"><span class="hif-key">Mountain</span><span class="hif-val">${hike.mountain}</span></div>
-        <div class="hif-row"><span class="hif-key">Date</span><span class="hif-val">${hike.date}${hike.time?' at '+hike.time:''}</span></div>
-        <div class="hif-row"><span class="hif-key">Type</span><span class="hif-val">${typeMap[hike.type]||hike.type}</span></div>
-        <div class="hif-row"><span class="hif-key">Tour Guide</span><span class="hif-val">${hike.guideName}</span></div>
-        <div class="hif-row"><span class="hif-key">Status</span><span class="hif-val">${hike.status.charAt(0).toUpperCase()+hike.status.slice(1)}</span></div>
-        <div class="hif-row"><span class="hif-key">Current Hikers</span><span class="hif-val">${hike.hikers.join(', ')}</span></div>
-      </div>`;
-    confirmBtn.disabled = false;
-  } else {
-    foundHike = null;
-    resultEl.innerHTML = `<div class="hike-id-not-found"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>No hike found with ID "<strong>${input}</strong>". Try BK001 to BK010.</div>`;
-    confirmBtn.disabled = true;
-  }
+  
+  resultEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--stone);"><i class="fas fa-spinner fa-spin"></i> Searching...</div>`;
+  confirmBtn.disabled = true;
+
+  fetch(window.location.href, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+    body: `action=lookup_hike&booking_number=${input}`
+  })
+  .then(res => res.json())
+  .then(data => {
+    if(data.success) {
+      const hike = data.hike;
+      foundHike = {
+          id: hike.booking_number,
+          db_id: hike.id,
+          mountain: hike.mountain,
+          date: hike.date,
+          type: hike.type,
+          guideName: hike.guideName,
+          hikers: hike.hikers,
+          status: hike.status,
+          guideInitials: hike.guideName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(),
+          pax: hike.pax,
+          mountainId: hike.mountain_id,
+          guideId: hike.guide_id,
+          camping: hike.camping
+      };
+
+      const typeMap = {day_hike:'Day Hike',late:'Late Hike',overnight:'Overnight'};
+      const isAlreadyIn = hike.alreadyJoined;
+      
+      resultEl.innerHTML = `
+        <div class="hike-id-found-card">
+          <div class="hif-label"><svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Hike Found!</div>
+          <div class="hif-row"><span class="hif-key">Booking ID</span><span class="hif-val">${hike.booking_number}</span></div>
+          <div class="hif-row"><span class="hif-key">Mountain</span><span class="hif-val">${hike.mountain}</span></div>
+          <div class="hif-row"><span class="hif-key">Date</span><span class="hif-val">${hike.date}</span></div>
+          <div class="hif-row"><span class="hif-key">Type</span><span class="hif-val">${typeMap[hike.type]||hike.type}</span></div>
+          <div class="hif-row"><span class="hif-key">Tour Guide</span><span class="hif-val">${hike.guideName}</span></div>
+          <div class="hif-row"><span class="hif-key">Status</span><span class="hif-val">${hike.status.charAt(0).toUpperCase()+hike.status.slice(1)}</span></div>
+          <div class="hif-row"><span class="hif-key">Current Hikers</span><span class="hif-val">${hike.hikers.join(', ')}</span></div>
+          ${isAlreadyIn ? `<div style="margin-top:16px; padding:12px; background:rgba(74,222,128,0.1); color:#166534; border-radius:8px; font-size:13px; font-weight:600; text-align:center;">✓ You have already joined this hike</div>` : ''}
+        </div>`;
+      
+      confirmBtn.disabled = isAlreadyIn;
+      if (isAlreadyIn) {
+          confirmBtn.innerHTML = `Already Joined <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`;
+      } else {
+          confirmBtn.innerHTML = `Join This Hike <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+      }
+    } else {
+      foundHike = null;
+      resultEl.innerHTML = `<div class="hike-id-not-found"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>${data.message || 'No hike found'}. Check the Booking ID and try again.</div>`;
+      confirmBtn.disabled = true;
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    showToast('Lookup failed. Try again.');
+  });
 }
 
-function confirmJoinHike() {
-  if(!foundHike) { showToast('No hike selected'); return; }
-  const joined = {
-    id: genId(), mountainId: foundHike.mountainId, mountain: foundHike.mountain,
-    date: foundHike.date, time: foundHike.time, type: foundHike.type,
-    status: 'joined', guideId: foundHike.guideId, guideName: foundHike.guideName,
-    guideInitials: foundHike.guideInitials, pax: foundHike.pax, hikers: [...foundHike.hikers],
-    totalFee: 0, createdAt: Date.now(), nudges: 0, lastNudge: 0,
-    camping: foundHike.camping||false, joinedFromId: foundHike.id,
-    notes: foundHike.notes||''
-  };
-  bookings.unshift(joined);
-  saveBookings();
-  closeBookingModal();
-  const typeMap = {day:'Day Hike',late:'Late Hike',overnight:'Overnight'};
-  document.getElementById('joinSuccessSummary').innerHTML = `
-    <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M4 10l8-6 8 6"/><rect x="4" y="10" width="16" height="12" rx="2"/></svg><span class="sr-label">Mountain</span><span class="sr-val">${foundHike.mountain}</span></div>
-    <div class="summary-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/></svg><span class="sr-label">Date</span><span class="sr-val">${foundHike.date}${foundHike.time?' at '+foundHike.time:''}</span></div>
-    <div class="summary-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/></svg><span class="sr-label">Type</span><span class="sr-val">${typeMap[foundHike.type]}</span></div>
-    <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="sr-label">Guide</span><span class="sr-val">${foundHike.guideName}</span></div>
-    <div class="summary-row"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/></svg><span class="sr-label">Original ID</span><span class="sr-val" style="font-family:'DM Mono',monospace;">${foundHike.id}</span></div>`;
-  document.getElementById('joinSuccessModal').classList.add('open');
-  renderBookings();
-}
 
 // ── NORMAL FLOW HELPERS ──
 function selectMtn(id) {
@@ -1655,6 +2090,18 @@ function nextStep() {
     const d = document.getElementById('hikeDate')?.value;
     const t = document.getElementById('hikeTime')?.value;
     if(!d) { showToast('Please select a date'); return; }
+    
+    // Time validation based on hike type
+    if(t) {
+        const [h,m] = t.split(':').map(Number);
+        if(flowState.type === 'day' && h > 15) {
+            showToast('Day hikes must start before 3:00 PM'); return;
+        }
+        if(flowState.type === 'late' && h < 16) {
+            showToast('Late hikes must start after 4:00 PM'); return;
+        }
+    }
+    
     flowState.date=d; flowState.time=t;
     flowState.pax=flowState.hikers.length;
     const cc = document.getElementById('campingCheck');
@@ -1662,38 +2109,6 @@ function nextStep() {
     renderStep(3); return;
   }
   renderStep(currentStep+1);
-}
-function createBooking() {
-  const m=flowState.mtn, f=m.fees, pax=flowState.hikers.length;
-  const isON=flowState.type==='overnight';
-  const total=f.regFee*pax+(f.envFee?f.envFee*pax:0)+(isON?f.guideON:f.guideDay)+((isON&&flowState.camping&&f.campFee)?f.campFee*pax:0);
-  const nb = {
-    id: genId(), mountainId:m.id, mountain:m.name, date:flowState.date,
-    time:flowState.time||(flowState.type==='day'?'08:00':(flowState.type==='late'?'16:00':'12:00')),
-    type:flowState.type, status:'pending', guideId:flowState.guide.id,
-    guideName:flowState.guide.name, guideInitials:flowState.guide.initials,
-    pax, hikers:[...flowState.hikers], totalFee:total, createdAt:Date.now(),
-    nudges:0, lastNudge:0, camping:flowState.camping||false, notes:''
-  };
-  bookings.unshift(nb);
-  saveBookings();
-  lastCreatedId = nb.id;
-  closeBookingModal();
-  // Show success
-  document.getElementById('successBookingId').textContent = nb.id;
-  document.getElementById('successTitle').textContent = 'Booking Created!';
-  document.getElementById('successDesc').textContent = 'Your booking is now PENDING. The guide will review your request.';
-  document.getElementById('successPolicy').style.display = '';
-  const typeNames={day:'Day Hike (12am–3pm)',late:'Late Hike (4pm–12am)',overnight:'Overnight'};
-  document.getElementById('successSummary').innerHTML = `
-    <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M4 10l8-6 8 6"/><rect x="4" y="10" width="16" height="12" rx="2"/></svg><span class="sr-label">Mountain</span><span class="sr-val">${nb.mountain}</span></div>
-    <div class="summary-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/></svg><span class="sr-label">Date & Time</span><span class="sr-val">${nb.date} at ${nb.time}</span></div>
-    <div class="summary-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/></svg><span class="sr-label">Type</span><span class="sr-val">${typeNames[nb.type]}</span></div>
-    <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span class="sr-label">Hikers (${pax})</span><span class="sr-val">${nb.hikers.join(', ')}</span></div>
-    <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="sr-label">Guide</span><span class="sr-val">${nb.guideName}</span></div>
-    <div class="summary-row"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><span class="sr-label">Total</span><span class="sr-val">₱${nb.totalFee.toLocaleString()}</span></div>`;
-  document.getElementById('successModal').classList.add('open');
-  renderBookings();
 }
 
 function copyBookingId() {
@@ -1737,10 +2152,11 @@ function renderBookings() {
         history.map(b => bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N)).join('') : 
         `<div class="empty-state" style="grid-column:1/-1;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><p>No booking history yet</p></div>`;
 }
+
 function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
   const ts = now - b.createdAt;
   const canReplace = b.status === 'pending' && ts >= FIVE_H;
-  const isJoined = !!b.joinedFromId;  // <-- MOVE THIS HERE - BEFORE using it!
+  const isJoined = !!b.joinedFromId;
   const canNudge = b.status === 'pending' && !isJoined && ts < FIVE_H && b.nudges < MAX_N && (now - b.lastNudge) >= TWENTY_M;
   const rem = Math.max(0, FIVE_H - ts);
   const hL = Math.floor(rem / 3600000);
@@ -1748,6 +2164,42 @@ function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
   const showTimer = b.status === 'pending' && ts < FIVE_H;
   const typeMap = {day:'Day (12am–3pm)', late:'Late (4pm–12am)', overnight:'Overnight'};
   const joinedBadge = isJoined ? `<span class="joined-badge">Joined</span>` : '';
+  
+  // Check for today's active hike for START button with proper date handling
+  let isToday = false;
+  let canStart = false;
+
+  try {
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    
+    let hikeDate = b.date ? new Date(b.date) : null;
+    if (hikeDate && !isNaN(hikeDate.getTime())) {
+      hikeDate.setHours(0, 0, 0, 0);
+      isToday = hikeDate.getTime() === todayDate.getTime();
+    }
+    
+    canStart = (b.status === 'confirmed' || b.status === 'active') && isToday;
+    
+    // Debug log - remove in production
+    console.log(`Booking ${b.id}: date=${b.date}, isToday=${isToday}, status=${b.status}, canStart=${canStart}`);
+  } catch(e) {
+    console.error('Date parsing error:', e);
+  }
+
+  let startBtn = '';
+  if (canStart) {
+    startBtn = `
+      <a href="active-hike.php?booking_id=${b.db_id || b.id}" class="btn btn-primary btn-sm">
+        <svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:white;margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        START HIKE
+      </a>
+    `;
+  }
+  
+  // Status labels mapping
+  const statusLabels = {pending:'Pending', confirmed:'Confirmed', completed:'Completed', cancelled:'Cancelled', joined:'Joined', active:'Active', finished:'Finished'};
+  const statusLabel = statusLabels[b.status] || b.status;
   
   return `
     <div class="booking-card">
@@ -1759,7 +2211,7 @@ function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
             ${b.date}${b.time ? ' · ' + b.time : ''} · ${typeMap[b.type] || b.type}
           </div>
         </div>
-        <span class="badge status-${b.status}" style="white-space:nowrap;">${{pending:'Pending', confirmed:'Confirmed', completed:'Completed', cancelled:'Cancelled', joined:'Joined'}[b.status] || b.status}</span>
+        <span class="badge status-${b.status}" style="white-space:nowrap;">${statusLabel}</span>
       </div>
       <div class="booking-card-guide">
         <div class="guide-av-sm">${b.guideInitials}</div>
@@ -1773,8 +2225,10 @@ function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
       ${!isJoined ? `<div class="fee-total">₱${b.totalFee.toLocaleString()} <span style="font-size:11px;font-weight:400;color:var(--stone);">pay after hike</span></div>` : `<div style="font-size:12px;color:var(--stone);margin-top:4px;">Fees managed by organizer</div>`}
       ${showTimer ? `<div class="countdown-timer"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Guide response: ${hL}h ${mL}m remaining</div>` : ''}
       ${b.nudges > 0 ? `<div class="nudge-count"><svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" fill="none"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Nudges: ${b.nudges}/${MAX_N}</div>` : ''}
+      
       <div class="booking-actions">
-        <a href="messages.php?guide=${b.guideId}" class="btn btn-outline btn-sm">
+        ${startBtn}
+        <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-sm">
           <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Message Guide
         </a>
         ${isJoined ? `
@@ -1798,7 +2252,17 @@ function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
           <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">
             <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel
           </button>
-        ` : '')}
+        ` : ((b.status === 'completed' || b.status === 'finished') ? `
+  ${(!b.hasReviewed) ? `
+    <button class="btn btn-primary btn-sm" onclick="openReviewModal('${b.id}')">
+      <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg> Write Review
+    </button>
+  ` : `
+    <button class="btn btn-outline btn-sm" onclick="openReviewModal('${b.id}')">
+      <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg> Edit Review
+    </button>
+  `}
+` : ''))}
       </div>
     </div>
   `;
@@ -1845,30 +2309,10 @@ function viewJoinedHike(bookingId) {
 
 
 let replaceBookingId=null, replaceGuideSelected=null;
-function openReplaceGuide(bookingId) {
-  replaceBookingId=bookingId;
-  const b=bookings.find(x=>x.id===bookingId); if(!b) return;
-  const avail=guides.filter(g=>g.id!==b.guideId&&g.mountains.includes(b.mountainId));
-  document.getElementById('replaceGuideList').innerHTML = avail.length?avail.map(g=>`
-    <div class="guide-replace-option" onclick="selectReplaceGuide(${g.id})" data-gid="${g.id}">
-      <div class="guide-av-sm">${g.initials}</div>
-      <div><div class="guide-select-name">${g.name}</div><div class="guide-select-meta">★ ${g.rating} · Available ${g.available}</div></div>
-    </div>`).join(''):'<div class="info-note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>No other guides available for this mountain.</div>';
-  document.getElementById('replaceGuideModal').classList.add('open');
-}
 function selectReplaceGuide(id) {
   replaceGuideSelected=id;
   document.querySelectorAll('.guide-replace-option').forEach(e=>e.classList.remove('selected'));
   document.querySelector(`.guide-replace-option[data-gid="${id}"]`)?.classList.add('selected');
-}
-function confirmReplaceGuide() {
-  if(!replaceGuideSelected){showToast('Select a guide first');return;}
-  const b=bookings.find(x=>x.id===replaceBookingId);
-  const g=guides.find(x=>x.id===replaceGuideSelected);
-  if(!b||!g) return;
-  b.guideId=g.id; b.guideName=g.name; b.guideInitials=g.initials;
-  b.status='pending'; b.createdAt=Date.now(); b.nudges=0; b.lastNudge=0;
-  saveBookings(); renderBookings(); closeReplaceModal(); showToast(`Guide replaced with ${g.name}`);
 }
 function closeReplaceModal(){document.getElementById('replaceGuideModal').classList.remove('open');replaceGuideSelected=null;}
 
@@ -1970,18 +2414,51 @@ function addEditHiker(bookingId) {
 function removeEditHiker(idx, bookingId) {
   const b=bookings.find(x=>x.id===bookingId); if(!b) return;
   if(idx===0){showToast("Can't remove organizer");return;}
-  if(confirm(`Remove ${b.hikers[idx]}?`)){
-    b.hikers.splice(idx,1); b.pax=b.hikers.length;
-    saveBookings(); refreshEditHikerList(bookingId); showToast('Hiker removed');
-  }
+  
+  openConfirmModal(
+    'Remove Hiker?',
+    `Are you sure you want to remove ${b.hikers[idx]} from this booking?`,
+    '👤',
+    'Remove Hiker',
+    'btn-danger',
+    () => {
+      b.hikers.splice(idx,1); b.pax=b.hikers.length;
+      saveBookings(); refreshEditHikerList(bookingId); showToast('Hiker removed');
+    }
+  );
 }
+let pendingPromptAction = null;
+function openPromptModal(title, text, defaultValue, action) {
+    document.getElementById('promptTitle').textContent = title;
+    document.getElementById('promptText').textContent = text;
+    document.getElementById('promptInput').value = defaultValue || '';
+    pendingPromptAction = action;
+    document.getElementById('promptModal').classList.add('open');
+    setTimeout(() => document.getElementById('promptInput').focus(), 100);
+}
+function closePromptModal() { document.getElementById('promptModal').classList.remove('open'); }
+document.getElementById('promptSubmitBtn').onclick = () => {
+    const val = document.getElementById('promptInput').value.trim();
+    if (pendingPromptAction) pendingPromptAction(val);
+    closePromptModal();
+};
+
 function showEditHikerModal(idx, bookingId) {
   const b=bookings.find(x=>x.id===bookingId); if(!b) return;
   const name=b.hikers[idx];
-  const newName=prompt(`Edit hiker name:`,name);
-  if(newName&&newName.trim()){
-    b.hikers[idx]=newName.trim(); saveBookings(); refreshEditHikerList(bookingId); showToast('Hiker updated');
-  }
+  
+  openPromptModal(
+    'Edit Hiker Name',
+    'Enter the full name of the hiker as it appears on their ID.',
+    name,
+    (newName) => {
+        if(newName && newName.trim()){
+            b.hikers[idx]=newName.trim(); saveBookings(); refreshEditHikerList(bookingId); showToast('Hiker updated');
+        } else if (newName === "") {
+            showToast('Name cannot be empty');
+        }
+    }
+  );
 }
 function refreshEditHikerList(bookingId) {
   const b=bookings.find(x=>x.id===bookingId); if(!b) return;
@@ -2014,31 +2491,61 @@ function saveBookingEdit() {
 }
 function closeEditModal(){document.getElementById('editBookingModal').classList.remove('open');}
 
+let pendingConfirmAction = null;
+function openConfirmModal(title, text, icon, btnText, btnClass, action) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmText').textContent = text;
+  document.getElementById('confirmIcon').textContent = icon || '⚠️';
+  const btn = document.getElementById('confirmBtn');
+  btn.textContent = btnText || 'Yes, Proceed';
+  btn.className = 'btn btn-full ' + (btnClass || 'btn-danger');
+  pendingConfirmAction = action;
+  document.getElementById('confirmModal').classList.add('open');
+}
+function closeConfirmModal() { document.getElementById('confirmModal').classList.remove('open'); }
+document.getElementById('confirmBtn').onclick = () => {
+  if (pendingConfirmAction) pendingConfirmAction();
+  closeConfirmModal();
+};
+
 function cancelBooking(bookingId, mode) {
     const label = mode === 'leave' ? 'leave this hike' : 'cancel this booking';
-    if (!confirm(`⚠️ Are you sure you want to ${label}?`)) return;
     
-    showToast('Processing cancellation...');
-    
-    fetch(window.location.href, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-        body: `action=cancel_booking&booking_id=${bookingId}`
-    }).then(response => response.json()).then(result => {
-        if (result.success) {
-            const b = bookings.find(x => x.id === bookingId);
-            if (b) {
-                b.status = 'cancelled';
-                showToast(mode === 'leave' ? '✓ You left the hike' : '✓ Booking cancelled');
-                renderBookings(); // This will move it to history
+    openConfirmModal(
+      mode === 'leave' ? 'Leave Hike?' : 'Cancel Booking?',
+      `Are you sure you want to ${label}? This will notify your guide and move the booking to your history.`,
+      mode === 'leave' ? '🚪' : '❌',
+      mode === 'leave' ? 'Yes, Leave' : 'Yes, Cancel',
+      'btn-danger',
+      () => {
+        showToast('Processing cancellation...');
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body: `action=cancel_booking&booking_id=${bookingId}`
+        }).then(response => response.json()).then(result => {
+            if (result.success) {
+                const b = bookings.find(x => x.id === bookingId);
+                if (b) {
+                    b.status = 'cancelled';
+                    showToast(mode === 'leave' ? '✓ You left the hike' : '✓ Booking cancelled');
+                    renderBookings();
+                    
+                    fetch('../api/hiker_messages.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `action=send_system_message&guide_id=${b.guideId}&message=I had to ${mode === 'leave' ? 'leave' : 'cancel'} my booking for ${b.mountain} on ${b.date}. Sorry for the inconvenience! ❌`
+                    });
+                }
+            } else {
+                showToast(result.message || 'Failed to cancel booking.');
             }
-        } else {
-            showToast(result.message || 'Failed to cancel booking. Please try again.');
-        }
-    }).catch(err => {
-        console.error(err);
-        showToast('Network error. Please try again.');
-    });
+        }).catch(err => {
+            console.error(err);
+            showToast('Network error.');
+        });
+      }
+    );
 }
 function switchTab(tab,el){
   document.querySelectorAll('.page-tab').forEach(t=>t.classList.remove('active'));
@@ -2049,143 +2556,84 @@ function switchTab(tab,el){
 
 function emptyState(){return`<div class="empty-state"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><p>No current bookings</p><button class="btn btn-primary" onclick="openBookingFlow()">Book your first hike</button></div>`;}
 
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  if (!t) {
+    console.warn('Toast element not found, using alert fallback:', msg);
+    return;
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
 
 // ── CLICK-OUTSIDE TO CLOSE MODALS ──
-['bookingModal','successModal','joinSuccessModal','viewJoinedModal','replaceGuideModal','editBookingModal'].forEach(id=>{
+['bookingModal','successModal','joinSuccessModal','viewJoinedModal','replaceGuideModal','editBookingModal', 'confirmModal', 'promptModal'].forEach(id=>{
   document.getElementById(id)?.addEventListener('click',e=>{
     if(e.target.id===id){
-      if(id==='bookingModal') closeBookingModal();
-      else if(id==='successModal') closeSuccess();
-      else if(id==='joinSuccessModal') closeJoinSuccess();
-      else if(id==='replaceGuideModal') closeReplaceModal();
-      else if(id==='editBookingModal') closeEditModal();
-      else document.getElementById(id).classList.remove('open');
+      document.getElementById(id).classList.remove('open');
     }
   });
 });
 
-
-// Save the original functions
-const originalCreateBooking = createBooking;
-const originalNudgeGuide = nudgeGuide;
-const originalCancelBooking = cancelBooking;
-const originalConfirmReplaceGuide = confirmReplaceGuide;
-const originalSaveBookingEdit = saveBookingEdit;
-const originalConfirmJoinHike = confirmJoinHike;
-const originalOpenReplaceGuide = openReplaceGuide;
-// Override createBooking to save to database
-createBooking = function() {
+function createBooking() {
     const m = flowState.mtn, f = m.fees, pax = flowState.hikers.length;
     const isON = flowState.type === 'overnight';
-    const total = f.regFee * pax + (f.envFee ? f.envFee * pax : 0) + (isON ? f.guideON : f.guideDay) + ((isON && flowState.camping && f.campFee) ? f.campFee * pax : 0);
-    
+    const total = f.regFee * pax + (f.envFee ? f.envFee * pax : 0) + 
+                  (isON ? f.guideON : f.guideDay) + 
+                  ((isON && flowState.camping && f.campFee) ? f.campFee * pax : 0);
+
     const nb = {
-        mountainId: m.id,
-        mountain: m.name,
-        date: flowState.date,
-        time: flowState.time || (flowState.type === 'day' ? '08:00' : (flowState.type === 'late' ? '16:00' : '12:00')),
-        type: flowState.type,
-        guideId: flowState.guide.id,
-        guideName: flowState.guide.name,
-        guideInitials: flowState.guide.initials,
-        pax: pax,
-        hikers: [...flowState.hikers],
-        totalFee: total,
-        notes: flowState.notes || '',
-        camping: flowState.camping || false
+        mountainId: m.id, mountain: m.name, date: flowState.date,
+        time: flowState.time || '08:00', type: flowState.type, status: 'pending',
+        guideId: flowState.guide.id, guideName: flowState.guide.name,
+        guideInitials: flowState.guide.initials, pax,
+        hikers: [...flowState.hikers], totalFee: total,
+        createdAt: Date.now(), nudges: 0, lastNudge: 0,
+        camping: flowState.camping || false, notes: ''
     };
+
+    const btn = document.querySelector('#flowFooter .btn-primary');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+    console.log('Inserting booking data:', nb);
     
-    showToast('Creating booking...');
-    
-    // Save to database via AJAX
     fetch(window.location.href, {
         method: 'POST',
-        headers: { 
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-Requested-With': 'XMLHttpRequest'
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
         body: 'action=save_booking&data=' + encodeURIComponent(JSON.stringify(nb))
     })
-    .then(async response => {
-        const text = await response.text();
-        console.log('Raw response:', text);
-        try {
-            return JSON.parse(text);
-        } catch(e) {
-            console.error('JSON parse error:', e);
-            throw new Error('Server returned invalid JSON. Check PHP errors.');
-        }
-    })
+    .then(response => response.json())
     .then(result => {
         if (result.success) {
-            // Add the booking to local array with a generated ID for display
-            const newId = 'BK' + String(Math.floor(Math.random() * 1000)).padStart(3, '0');
-            nb.id = newId;
-            nb.createdAt = Date.now();
-            nb.nudges = 0;
-            nb.lastNudge = 0;
-            nb.status = 'pending';
+            nb.id = result.booking_id;
             bookings.unshift(nb);
             closeBookingModal();
-            
-            document.getElementById('successBookingId').textContent = result.booking_id || newId;
-            document.getElementById('successTitle').textContent = 'Booking Created!';
-            document.getElementById('successDesc').textContent = 'Your booking has been saved. The guide will review your request.';
-            
-            const typeNames = {day:'Day Hike (12am–3pm)', late:'Late Hike (4pm–12am)', overnight:'Overnight'};
-            document.getElementById('successSummary').innerHTML = `
-                <div class="summary-row"><span class="sr-label">Mountain</span><span class="sr-val">${nb.mountain}</span></div>
-                <div class="summary-row"><span class="sr-label">Date & Time</span><span class="sr-val">${nb.date} at ${nb.time}</span></div>
-                <div class="summary-row"><span class="sr-label">Type</span><span class="sr-val">${typeNames[nb.type]}</span></div>
-                <div class="summary-row"><span class="sr-label">Hikers (${pax})</span><span class="sr-val">${nb.hikers.join(', ')}</span></div>
-                <div class="summary-row"><span class="sr-label">Guide</span><span class="sr-val">${nb.guideName}</span></div>
-                <div class="summary-row"><span class="sr-label">Total</span><span class="sr-val">₱${nb.totalFee.toLocaleString()}</span></div>`;
-            
+            document.getElementById('successBookingId').textContent = nb.id;
             document.getElementById('successModal').classList.add('open');
             renderBookings();
-            showToast(result.message);
+
+            // Send booking confirmation message to guide
+            fetch('../api/hiker_messages.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `action=send_system_message&guide_id=${nb.guideId}&message=I just booked a hike with you! Mountain: ${nb.mountain}, Date: ${nb.date}, Hikers: ${nb.pax} persons. Looking forward to it! 🏔️`
+            });
         } else {
-            showToast(result.message || 'Failed to save booking');
-            // Fallback to original behavior
-            originalCreateBooking();
+            showToast('Error: ' + (result.message || 'Could not save booking'));
+            if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
         }
     })
     .catch(err => {
-        console.error('Fetch error:', err);
-        showToast('Error saving to database. Saving locally instead.');
-        // Fallback to original behavior
-        originalCreateBooking();
+        console.error('Booking save failed:', err);
+        showToast('Network error — booking not saved. Please try again.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
     });
-};
+}
+
 function nudgeGuide(bookingId) {
     const b = bookings.find(x => x.id === bookingId);
-    if (!b || b.status !== 'pending') {
-        showToast('Only pending bookings can be nudged');
-        return;
-    }
-    
-    const now = Date.now(), FIVE_H = 18000000, TWENTY_M = 1200000, MAX_N = 10;
-    
-    // Check if response period expired (5 hours)
-    if (now - b.createdAt >= FIVE_H) {
-        showToast('Response period expired — you can replace the guide.');
-        renderBookings();
-        return;
-    }
-    
-    // Check max nudges
-    if (b.nudges >= MAX_N) {
-        showToast('Max nudges reached. Please replace your guide.');
-        return;
-    }
-    
-    // Check cooldown (20 minutes)
-    if (now - b.lastNudge < TWENTY_M && b.lastNudge > 0) {
-        const minutesLeft = Math.ceil((TWENTY_M - (now - b.lastNudge)) / 60000);
-        showToast(`Please wait ${minutesLeft} more minute(s) before nudging again.`);
-        return;
-    }
+    if (!b || b.status !== 'pending') return showToast('Only pending bookings can be nudged');
     
     showToast(`Sending nudge to ${b.guideName}...`);
     
@@ -2196,59 +2644,31 @@ function nudgeGuide(bookingId) {
     }).then(response => response.json()).then(result => {
         if (result.success) {
             b.nudges++;
-            b.lastNudge = now;
+            b.lastNudge = Date.now();
             renderBookings();
-            showToast(`🔔 Nudge sent to ${b.guideName}! They will receive a notification.`);
+            showToast(`🔔 Nudge sent to ${b.guideName}!`);
+
+            // Send nudge message
+            fetch('../api/hiker_messages.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `action=send_system_message&guide_id=${b.guideId}&message=Hi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋`
+            });
         } else {
             showToast(result.message);
         }
     }).catch(err => {
         console.error(err);
-        showToast('Network error. Could not send nudge.');
+        showToast('Network error.');
     });
 }
-// Override saveBookingEdit
-saveBookingEdit = function() {
-    const b = bookings.find(x => x.id === editBookingId);
-    if (!b) return;
+function confirmJoinHike() {
+    if (!foundHike) return showToast('No hike selected');
     
-    const newDate = document.getElementById('editDate')?.value;
-    const newTime = document.getElementById('editTime')?.value;
-    const notes = document.getElementById('editNotes')?.value || '';
-    
-    if (!newDate) {
-        showToast('Please select a date');
-        return;
-    }
-    
-    fetch(window.location.href, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-        body: `action=update_booking&booking_id=${editBookingId}&date=${newDate}&time=${newTime}&notes=${encodeURIComponent(notes)}&hikers=${encodeURIComponent(JSON.stringify(b.hikers))}`
-    }).then(response => response.json()).then(result => {
-        if (result.success) {
-            b.date = newDate;
-            b.time = newTime;
-            b.notes = notes;
-            const m = mountains.find(x => x.id === b.mountainId);
-            if (m) {
-                const isON = b.type === 'overnight';
-                const f = m.fees;
-                b.totalFee = f.regFee * b.pax + (f.envFee || 0) + (isON ? f.guideON : f.guideDay) + ((isON && b.camping && f.campFee) ? f.campFee * b.pax : 0);
-            }
-            renderBookings();
-            closeEditModal();
-            showToast('Booking updated!');
-        } else {
-            showToast(result.message);
-        }
-    }).catch(() => originalSaveBookingEdit());
-};
-
-// Override confirmJoinHike
-confirmJoinHike = function() {
-    if (!foundHike) {
-        showToast('No hike selected');
+    // Check if already joined
+    const alreadyJoined = bookings.some(b => b.joinedFromId === foundHike.id);
+    if (alreadyJoined) {
+        showToast('You have already joined this hike! ✓');
         return;
     }
     
@@ -2258,19 +2678,35 @@ confirmJoinHike = function() {
         body: `action=join_hike&booking_number=${foundHike.id}`
     }).then(response => response.json()).then(result => {
         if (result.success) {
-            originalConfirmJoinHike();
+            const joined = {
+                id: foundHike.id, mountainId: foundHike.mountainId, mountain: foundHike.mountain,
+                date: foundHike.date, time: foundHike.time, type: foundHike.type,
+                status: 'joined', guideId: foundHike.guideId, guideName: foundHike.guideName,
+                guideInitials: foundHike.guideInitials, pax: foundHike.pax, hikers: [...foundHike.hikers],
+                totalFee: 0, createdAt: Date.now(), nudges: 0, lastNudge: 0,
+                camping: foundHike.camping||false, joinedFromId: foundHike.id,
+                notes: foundHike.notes||''
+            };
+            bookings.unshift(joined);
+            closeBookingModal();
+            renderBookings();
+            showToast('✓ You successfully joined the hike!');
         } else {
-            showToast(result.message);
+            // Check if the error message indicates already joined
+            if (result.message && result.message.includes('Could not join')) {
+                showToast('You have already joined this hike ✓');
+            } else {
+                showToast(result.message || 'Could not join the hike');
+            }
         }
-    }).catch(() => originalConfirmJoinHike());
-};
+    }).catch(err => {
+        console.error(err);
+        showToast('Error joining hike. Please try again.');
+    });
+}
 
-// Override confirmReplaceGuide
-confirmReplaceGuide = function() {
-    if (!replaceGuideSelected) {
-        showToast('Select a guide first');
-        return;
-    }
+function confirmReplaceGuide() {
+    if (!replaceGuideSelected) return showToast('Select a guide first');
     
     fetch(window.location.href, {
         method: 'POST',
@@ -2278,17 +2714,26 @@ confirmReplaceGuide = function() {
         body: `action=replace_guide&booking_id=${replaceBookingId}&new_guide_id=${replaceGuideSelected}`
     }).then(response => response.json()).then(result => {
         if (result.success) {
-            originalConfirmReplaceGuide();
+            const b = bookings.find(x => x.id === replaceBookingId);
+            const g = guides.find(x => x.id === replaceGuideSelected);
+            if (b && g) {
+                b.guideId = g.id; b.guideName = g.name; b.guideInitials = g.initials;
+                b.status = 'pending'; b.nudges = 0;
+                renderBookings();
+                closeReplaceModal();
+                showToast(`✓ Guide replaced with ${g.name}`);
+            }
         } else {
             showToast(result.message);
         }
-    }).catch(() => originalConfirmReplaceGuide());
-};
+    }).catch(err => {
+        console.error(err);
+        showToast('Error replacing guide.');
+    });
+}
 
-// Override openReplaceGuide
-openReplaceGuide = function(bookingId) {
+function openReplaceGuide(bookingId) {
     replaceBookingId = bookingId;
-    
     fetch(window.location.href, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
@@ -2306,12 +2751,454 @@ openReplaceGuide = function(bookingId) {
             document.getElementById('replaceGuideList').innerHTML = '<div class="info-note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>No other guides available for this mountain.</div>';
             document.getElementById('replaceGuideModal').classList.add('open');
         }
-    }).catch(() => originalOpenReplaceGuide(bookingId));
-};
+    }).catch(err => {
+        console.error('Replace guide failed:', err);
+        showToast('Network error.');
+    });
+}
+
+
+// ── REVIEW SYSTEM ──
+function openReviewModal(bookingId) {
+    const b = bookings.find(x => x.id === bookingId);
+    if (!b) return;
+    
+    document.getElementById('revBookingId').value = bookingId;
+    document.getElementById('revMtnName').textContent = b.mountain;
+    document.getElementById('revGuideName').textContent = b.guideName;
+    
+    // Reset stars
+    resetStars('mtnStars', 'mtnRating');
+    resetStars('guideStars', 'guideRating');
+    document.getElementById('mtnTitle').value = '';
+    document.getElementById('mtnComment').value = '';
+    document.getElementById('guideComment').value = '';
+    
+    document.getElementById('reviewModal').classList.add('open');
+}
+
+function resetStars(containerId, hiddenId) {
+    const stars = document.querySelectorAll(`#${containerId} span`);
+    stars.forEach(s => s.classList.remove('active'));
+    document.getElementById(hiddenId).value = "0";
+}
+
+// Add event listeners for star ratings
+function initStars() {
+    document.querySelectorAll('.star-rating span').forEach(star => {
+        star.addEventListener('click', function() {
+            const val = this.getAttribute('data-val');
+            const container = this.parentElement;
+            const hiddenId = container.id === 'mtnStars' ? 'mtnRating' : 'guideRating';
+            
+            document.getElementById(hiddenId).value = val;
+            const stars = container.querySelectorAll('span');
+            stars.forEach(s => {
+                s.classList.toggle('active', s.getAttribute('data-val') <= val);
+            });
+        });
+    });
+}
+
+function closeReviewModal() {
+    document.getElementById('reviewModal').classList.remove('open');
+}
+// Global variables for tracking edit mode
+let editingMtnReview = false;
+let editingGuideReview = false;
+let existingMtnData = null;
+let existingGuideData = null;
+let uploadedMtnPhotos = [];
+let uploadedGuidePhotos = [];
+
+// Function to check if user has already reviewed
+function checkExistingReviews(bookingId) {
+    return fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: `action=get_existing_reviews&booking_id=${bookingId}`
+    }).then(response => response.json());
+}
+
+// Enhanced openReviewModal
+function openReviewModal(bookingId) {
+    const b = bookings.find(x => x.id === bookingId);
+    if (!b) return;
+    
+    document.getElementById('revBookingId').value = bookingId;
+    document.getElementById('revMtnName').textContent = b.mountain;
+    document.getElementById('revGuideName').textContent = b.guideName;
+    
+    // Reset forms
+    resetStars('mtnStars', 'mtnRating');
+    resetStars('guideStars', 'guideRating');
+    document.getElementById('mtnTitle').value = '';
+    document.getElementById('mtnComment').value = '';
+    document.getElementById('guideComment').value = '';
+    document.getElementById('mtnPhotos').value = '';
+    document.getElementById('guidePhotos').value = '';
+    uploadedMtnPhotos = [];
+    uploadedGuidePhotos = [];
+    document.getElementById('mtnPhotoPreview').innerHTML = '';
+    document.getElementById('guidePhotoPreview').innerHTML = '';
+    
+    // Reset edit mode flags
+    editingMtnReview = false;
+    editingGuideReview = false;
+    existingMtnData = null;
+    existingGuideData = null;
+    
+    // Show forms, hide existing review displays
+    document.getElementById('mtnReviewForm').style.display = 'block';
+    document.getElementById('guideReviewForm').style.display = 'block';
+    document.getElementById('existingMtnReview').style.display = 'none';
+    document.getElementById('existingGuideReview').style.display = 'none';
+    document.getElementById('submitReviewBtn').textContent = 'Post Reviews';
+    document.getElementById('submitReviewBtn').disabled = false;
+    
+    // Check for existing reviews
+    checkExistingReviews(bookingId).then(result => {
+        if (result.success) {
+            if (result.mountain_review) {
+                existingMtnData = result.mountain_review;
+                displayExistingReview('mtn', existingMtnData);
+            }
+            if (result.guide_review) {
+                existingGuideData = result.guide_review;
+                displayExistingReview('guide', existingGuideData);
+            }
+            
+            // If both reviews exist, disable submit button
+            if (existingMtnData && existingGuideData && !editingMtnReview && !editingGuideReview) {
+                document.getElementById('submitReviewBtn').disabled = true;
+                document.getElementById('submitReviewBtn').textContent = 'Reviews Already Submitted';
+            } else if (existingMtnData && !editingMtnReview) {
+                document.getElementById('mtnReviewForm').style.display = 'none';
+            }
+            if (existingGuideData && !editingGuideReview) {
+                document.getElementById('guideReviewForm').style.display = 'none';
+            }
+        }
+    });
+    
+    document.getElementById('reviewModal').classList.add('open');
+}
+
+function displayExistingReview(type, reviewData) {
+    const container = document.getElementById(`${type === 'mtn' ? 'existingMtnReview' : 'existingGuideReview'}`);
+    const contentDiv = document.getElementById(`${type === 'mtn' ? 'mtnExistingContent' : 'guideExistingContent'}`);
+    
+    if (type === 'mtn') {
+        // Display mountain review
+        contentDiv.innerHTML = `
+            <div style="margin-bottom:8px;">
+                <span style="font-weight:700;">Rating:</span> 
+                ${'★'.repeat(reviewData.rating)}${'☆'.repeat(5-reviewData.rating)}
+            </div>
+            <div style="margin-bottom:8px;">
+                <span style="font-weight:700;">Title:</span> ${reviewData.title || 'No title'}
+            </div>
+            <div style="margin-bottom:8px;">
+                <span style="font-weight:700;">Comment:</span> ${reviewData.comment || 'No comment'}
+            </div>
+        `;
+        
+        // Display existing photos
+        if (reviewData.media && reviewData.media.length > 0) {
+            contentDiv.innerHTML += `
+                <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                    ${reviewData.media.map(photo => `
+                        <img src="${photo}" style="width:70px;height:70px;object-fit:cover;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.1);">
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        document.getElementById(`existing${type === 'mtn' ? 'Mtn' : 'Guide'}Review`).style.display = 'block';
+        document.getElementById(`${type}ReviewForm`).style.display = 'none';
+    } else {
+        // Display guide review
+        contentDiv.innerHTML = `
+            <div style="margin-bottom:8px;">
+                <span style="font-weight:700;">Rating:</span> 
+                ${'★'.repeat(reviewData.rating)}${'☆'.repeat(5-reviewData.rating)}
+            </div>
+            <div style="margin-bottom:8px;">
+                <span style="font-weight:700;">Comment:</span> ${reviewData.comment || 'No comment'}
+            </div>
+        `;
+        
+        // Display existing photos
+        if (reviewData.photo_urls && reviewData.photo_urls.length > 0) {
+            contentDiv.innerHTML += `
+                <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                    ${reviewData.photo_urls.map(photo => `
+                        <img src="${photo}" style="width:70px;height:70px;object-fit:cover;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.1);">
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        document.getElementById(`existing${type === 'mtn' ? 'Mtn' : 'Guide'}Review`).style.display = 'block';
+        document.getElementById(`${type}ReviewForm`).style.display = 'none';
+    }
+}
+
+function enableEditReview(type) {
+    if (type === 'mtn') {
+        editingMtnReview = true;
+        document.getElementById('existingMtnReview').style.display = 'none';
+        document.getElementById('mtnReviewForm').style.display = 'block';
+        
+        // Pre-fill form with existing data
+        if (existingMtnData) {
+            // Pre-fill stars
+            const stars = document.querySelectorAll('#mtnStars span');
+            stars.forEach(star => {
+                const val = parseInt(star.getAttribute('data-val'));
+                if (val <= existingMtnData.rating) {
+                    star.classList.add('active');
+                }
+            });
+            document.getElementById('mtnRating').value = existingMtnData.rating;
+            document.getElementById('mtnTitle').value = existingMtnData.title || '';
+            document.getElementById('mtnComment').value = existingMtnData.comment || '';
+            
+            // Pre-fill photos
+            if (existingMtnData.media) {
+                const previewDiv = document.getElementById('mtnPhotoPreview');
+                existingMtnData.media.forEach(photo => {
+                    previewDiv.innerHTML += `
+                        <div class="photo-item">
+                            <img src="${photo}">
+                            <button class="photo-remove" onclick="removePhotoFromEdit('mtn', '${photo}')">×</button>
+                        </div>
+                    `;
+                });
+            }
+        }
+        
+        document.getElementById('submitReviewBtn').textContent = 'Update Reviews';
+        document.getElementById('submitReviewBtn').disabled = false;
+    } else {
+        editingGuideReview = true;
+        document.getElementById('existingGuideReview').style.display = 'none';
+        document.getElementById('guideReviewForm').style.display = 'block';
+        
+        // Pre-fill form with existing data
+        if (existingGuideData) {
+            // Pre-fill stars
+            const stars = document.querySelectorAll('#guideStars span');
+            stars.forEach(star => {
+                const val = parseInt(star.getAttribute('data-val'));
+                if (val <= existingGuideData.rating) {
+                    star.classList.add('active');
+                }
+            });
+            document.getElementById('guideRating').value = existingGuideData.rating;
+            document.getElementById('guideComment').value = existingGuideData.comment || '';
+            
+            // Pre-fill photos
+            if (existingGuideData.photo_urls) {
+                const previewDiv = document.getElementById('guidePhotoPreview');
+                existingGuideData.photo_urls.forEach(photo => {
+                    previewDiv.innerHTML += `
+                        <div class="photo-item">
+                            <img src="${photo}">
+                            <button class="photo-remove" onclick="removePhotoFromEdit('guide', '${photo}')">×</button>
+                        </div>
+                    `;
+                });
+            }
+        }
+        
+        document.getElementById('submitReviewBtn').textContent = 'Update Reviews';
+        document.getElementById('submitReviewBtn').disabled = false;
+    }
+}
+
+function removePhotoFromEdit(type, photoUrl) {
+    if (type === 'mtn') {
+        if (existingMtnData && existingMtnData.media) {
+            existingMtnData.media = existingMtnData.media.filter(p => p !== photoUrl);
+            // Remove from display
+            const previewDiv = document.getElementById('mtnPhotoPreview');
+            const images = previewDiv.querySelectorAll('div');
+            images.forEach(img => {
+                if (img.querySelector('img')?.src === photoUrl) {
+                    img.remove();
+                }
+            });
+        }
+    } else if (type === 'guide') {
+        if (existingGuideData && existingGuideData.photo_urls) {
+            existingGuideData.photo_urls = existingGuideData.photo_urls.filter(p => p !== photoUrl);
+            // Remove from display
+            const previewDiv = document.getElementById('guidePhotoPreview');
+            const images = previewDiv.querySelectorAll('div');
+            images.forEach(img => {
+                if (img.querySelector('img')?.src === photoUrl) {
+                    img.remove();
+                }
+            });
+        }
+    }
+}
+
+// Photo upload handling
+document.getElementById('mtnPhotos')?.addEventListener('change', function(e) {
+    handlePhotoUpload(e.target.files, 'mtn');
+});
+
+document.getElementById('guidePhotos')?.addEventListener('change', function(e) {
+    handlePhotoUpload(e.target.files, 'guide');
+});
+
+function handlePhotoUpload(files, type) {
+    const previewDiv = document.getElementById(`${type}PhotoPreview`);
+    
+    Array.from(files).forEach(file => {
+        if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewDiv.innerHTML += `
+                    <div style="position:relative;">
+                        <img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;">
+                        <button onclick="removePhoto('${type}', this)" style="position:absolute;top:-8px;right:-8px;background:red;color:white;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;">×</button>
+                    </div>
+                `;
+            };
+            reader.readAsDataURL(file);
+            
+            // Store file for upload
+            if (type === 'mtn') {
+                uploadedMtnPhotos.push(file);
+            } else {
+                uploadedGuidePhotos.push(file);
+            }
+        }
+    });
+}
+
+function removePhoto(type, btn) {
+    btn.closest('div').remove();
+    // Remove from uploaded array (we'll re-build the array when submitting)
+}
+
+async function uploadPhotos(files) {
+    if (!files || files.length === 0) return [];
+    
+    const formData = new FormData();
+    for (let file of files) {
+        formData.append('photos[]', file);
+    }
+    
+    try {
+        const response = await fetch('../api/upload_review_photos.php', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        return result.success ? result.files : [];
+    } catch (error) {
+        console.error('Photo upload error:', error);
+        return [];
+    }
+}
+
+// Enhanced submitReview function
+async function submitReview() {
+    const bookingId = document.getElementById('revBookingId').value;
+    const mtnRating = parseInt(document.getElementById('mtnRating').value);
+    const guideRating = parseInt(document.getElementById('guideRating').value);
+    
+    // Only validate if forms are visible (being submitted)
+    let hasMtnReview = false;
+    let hasGuideReview = false;
+    
+    if (document.getElementById('mtnReviewForm').style.display !== 'none' || editingMtnReview) {
+        if (mtnRating === 0) {
+            showToast('Please provide a rating for the mountain');
+            return;
+        }
+        hasMtnReview = true;
+    }
+    
+    if (document.getElementById('guideReviewForm').style.display !== 'none' || editingGuideReview) {
+        if (guideRating === 0) {
+            showToast('Please provide a rating for the guide');
+            return;
+        }
+        hasGuideReview = true;
+    }
+    
+    // Upload photos if any
+    const mtnPhotoUrls = uploadedMtnPhotos.length > 0 ? await uploadPhotos(uploadedMtnPhotos) : [];
+    const guidePhotoUrls = uploadedGuidePhotos.length > 0 ? await uploadPhotos(uploadedGuidePhotos) : [];
+    
+    // Combine with existing photos if editing
+    let finalMtnPhotos = mtnPhotoUrls;
+    let finalGuidePhotos = guidePhotoUrls;
+    
+    if (editingMtnReview && existingMtnData) {
+        finalMtnPhotos = [...(existingMtnData.media || []), ...mtnPhotoUrls];
+    }
+    if (editingGuideReview && existingGuideData) {
+        finalGuidePhotos = [...(existingGuideData.photo_urls || []), ...guidePhotoUrls];
+    }
+    
+    const data = {
+        booking_id: bookingId,
+        mountain_review: hasMtnReview ? {
+            rating: mtnRating,
+            title: document.getElementById('mtnTitle')?.value || '',
+            comment: document.getElementById('mtnComment')?.value || '',
+            media: finalMtnPhotos,
+            review_id: existingMtnData?.id || null
+        } : null,
+        guide_review: hasGuideReview ? {
+            rating: guideRating,
+            comment: document.getElementById('guideComment')?.value || '',
+            photo_urls: finalGuidePhotos,
+            review_id: existingGuideData?.id || null
+        } : null,
+        is_edit: editingMtnReview || editingGuideReview
+    };
+    
+    const btn = document.getElementById('submitReviewBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: 'action=save_review&data=' + encodeURIComponent(JSON.stringify(data))
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('✓ Reviews saved successfully!');
+            closeReviewModal();
+            // Reload bookings to show updated review status
+            location.reload();
+        } else {
+            showToast(result.message || 'Error saving reviews');
+            btn.disabled = false;
+            btn.textContent = editingMtnReview || editingGuideReview ? 'Update Reviews' : 'Post Reviews';
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('Error saving reviews');
+        btn.disabled = false;
+        btn.textContent = editingMtnReview || editingGuideReview ? 'Update Reviews' : 'Post Reviews';
+    });
+}
 
 // Initial load
 loadBookings();
 renderBookings();
+initStars();
 setInterval(renderBookings, 60000);
 </script>
 </body>
