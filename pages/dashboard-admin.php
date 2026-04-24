@@ -496,6 +496,7 @@ function formatCurrency($amount) {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="admin/shared.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
 </head>
 <body data-page="dashboard">
 <div class="app">
@@ -512,7 +513,7 @@ function formatCurrency($amount) {
           </div>
           LAKBAY
         </div>
-        <div class="logo-sub">wilderness intelligence</div>
+        <div class="logo-sub">wilderness: Silence beneath steps</div>
       </div>
       <div style="margin-bottom:8px; padding-left:28px;">
         <div class="nav-section-label">Navigation</div>

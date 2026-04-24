@@ -168,6 +168,7 @@ function formatCurrency($amount) {
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="shared.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
 </head>
 <body data-page="payments">
 <div class="app">
@@ -184,7 +185,7 @@ function formatCurrency($amount) {
           </div>
           LAKBAY
         </div>
-        <div class="logo-sub">wilderness intelligence</div>
+        <div class="logo-sub">wilderness: Silence beneath steps</div>
       </div>
       <div style="margin-bottom:8px; padding-left:28px;">
         <div class="nav-section-label">Navigation</div>

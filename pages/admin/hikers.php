@@ -74,13 +74,15 @@ foreach ($hikers as &$hiker) {
     $hiker['emergency'] = 'No emergency contact set';
 }
 
-// ========== FETCH BOOKINGS ==========
+// ========== FETCH BOOKINGS with additional details and hikers ==========
 $stmt = $pdo->prepare("
     SELECT 
         b.id,
         b.booking_number,
         b.user_id,
         u.name as hiker_name,
+        u.email as hiker_email,
+        u.phone as hiker_phone,
         m.name as mountain_name,
         b.hike_date,
         b.hike_type,
@@ -88,8 +90,9 @@ $stmt = $pdo->prepare("
         b.total_amount,
         b.downpayment_amount,
         b.payment_status,
-        b.status,
+        b.status as booking_status,
         g.name as guide_name,
+        b.special_requests,
         b.created_at
     FROM bookings b
     LEFT JOIN users u ON b.user_id = u.id
@@ -102,24 +105,47 @@ $stmt = $pdo->prepare("
 $stmt->execute();
 $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// ========== FETCH CAMPING BOOKINGS ==========
+// Fetch additional hikers for each booking
+foreach ($bookings as &$booking) {
+    $stmt = $pdo->prepare("
+        SELECT 
+            id,
+            booking_id,
+            hiker_name,
+            age,
+            emergency_contact_name,
+            emergency_contact_number
+        FROM booking_hikers
+        WHERE booking_id = ?
+    ");
+    $stmt->execute([$booking['id']]);
+    $allHikers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // All hikers in booking_hikers are additional (main booker is from users table)
+    $booking['additional_hikers'] = $allHikers;
+}
+
+// ========== FETCH CAMPING BOOKINGS with additional details ==========
 $stmt = $pdo->prepare("
     SELECT 
         c.id,
         c.booking_number,
         c.user_id,
         u.name as hiker_name,
+        u.email as hiker_email,
+        u.phone as hiker_phone,
         m.name as mountain_name,
-        c.start_date,
+        c.start_date as date,
         c.end_date,
         c.number_of_nights,
         c.number_of_hikers,
         c.total_amount,
         c.downpayment_amount,
         c.payment_status,
-        c.status,
+        c.status as booking_status,
         c.campsite_name,
         c.equipment_rental,
+        c.special_requests,
         g.name as guide_name,
         c.created_at
     FROM camping_bookings c
@@ -133,6 +159,25 @@ $stmt = $pdo->prepare("
 $stmt->execute();
 $campingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Fetch additional hikers for each camping booking using the same booking_hikers table
+foreach ($campingBookings as &$camping) {
+    $stmt = $pdo->prepare("
+        SELECT 
+            id,
+            booking_id,
+            hiker_name,
+            age,
+            emergency_contact_name,
+            emergency_contact_number
+        FROM booking_hikers
+        WHERE booking_id = ?
+    ");
+    $stmt->execute([$camping['id']]);
+    $allHikers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // All hikers in booking_hikers are additional
+    $camping['additional_hikers'] = $allHikers;
+}
 // Helper functions
 function getInitials($name) {
     $words = explode(' ', $name);
@@ -181,6 +226,31 @@ function formatDate($dateStr) {
     if (!$dateStr) return 'N/A';
     return date('M d, Y', strtotime($dateStr));
 }
+
+function getPaymentBadgeClass($status) {
+    $classes = [
+        'paid' => 'green',
+        'pending' => 'amber',
+        'expired' => 'red',
+        'failed' => 'red'
+    ];
+    return $classes[$status] ?? 'gray';
+}
+
+function getPaymentStatusLabel($status) {
+    $labels = [
+        'paid' => 'Paid',
+        'pending' => 'Pending',
+        'expired' => 'Expired',
+        'failed' => 'Failed'
+    ];
+    return $labels[$status] ?? $status ?? 'Pending';
+}
+
+function escapeHtml($str) {
+    if (!$str) return '';
+    return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -191,8 +261,9 @@ function formatDate($dateStr) {
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="shared.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
   <style>
-    /* Keep all existing styles - they remain unchanged */
+    /* Keep all existing styles */
     .tab-bar {
       display: flex;
       gap: 4px;
@@ -511,7 +582,7 @@ function formatDate($dateStr) {
     .modal-overlay.open { opacity: 1; pointer-events: all; }
     .modal {
       background: white; border-radius: 20px;
-      width: 100%; max-width: 640px;
+      width: 100%; max-width: 840px;
       box-shadow: 0 32px 64px -16px rgba(0,0,0,0.22);
       transform: translateY(14px);
       transition: transform 0.25s ease;
@@ -523,21 +594,44 @@ function formatDate($dateStr) {
       border-bottom: 1px solid var(--line);
       display: flex; justify-content: space-between;
     }
-    .detail-section { margin-bottom: 20px; }
+    .modal-body {
+      padding: 24px 26px;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .modal-footer {
+      padding: 16px 26px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+    .detail-section { margin-bottom: 28px; }
     .detail-section-title {
-      font-size: 0.65rem;
+      font-size: 0.7rem;
       font-weight: 700;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--ink-4);
       padding-bottom: 8px;
       border-bottom: 1px solid var(--line);
-      margin-bottom: 12px;
+      margin-bottom: 16px;
     }
     .detail-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .detail-item.span2 {
+      grid-column: span 2;
+    }
+    .detail-item.span3 {
+      grid-column: span 3;
     }
     .detail-label {
       font-size: 0.65rem;
@@ -545,7 +639,31 @@ function formatDate($dateStr) {
       color: var(--ink-4);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      margin-bottom: 4px;
+    }
+    .detail-val {
+      font-size: 0.85rem;
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .hikers-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    .hikers-table th {
+      text-align: left;
+      padding: 10px 8px;
+      background: var(--paper);
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--ink-4);
+      border-bottom: 1px solid var(--line);
+    }
+    .hikers-table td {
+      padding: 10px 8px;
+      font-size: 0.75rem;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink-2);
     }
     .receipt-area {
       border: 1.5px dashed var(--ink-5);
@@ -558,55 +676,30 @@ function formatDate($dateStr) {
     }
     @media (max-width: 960px) {
       .hikers-grid, .bookings-grid, .camping-grid { grid-template-columns: 1fr; }
+      .detail-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
     }
-    /* Replace your existing modal-overlay and modal styles with these */
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(10,12,18,0.55);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;  /* Changed from flex-start to center */
-  justify-content: center;
-  padding: 20px;  /* Reduced padding */
-  overflow-y: auto;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.22s ease;
-}
-
-.modal-overlay.open {
-  opacity: 1;
-  pointer-events: all;
-}
-
-.modal {
-  background: white;
-  border-radius: 20px;
-  width: 100%;
-  max-width: 640px;
-  margin: auto;  /* Add this for centering */
-  box-shadow: 0 32px 64px -16px rgba(0,0,0,0.22);
-  transform: translateY(14px);
-  transition: transform 0.25s ease;
-  overflow: hidden;
-}
-
-/* Specifically target logout modal to ensure it's properly centered */
-.modal-overlay:has(.logout-modal) {
-  align-items: center;
-  justify-content: center;
-}
-
-.modal.logout-modal {
-  max-width: 420px;
-  width: 90%;
-  margin: auto;
-}
-
-
+    @media (max-width: 600px) {
+      .detail-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .detail-item.span2, .detail-item.span3 {
+        grid-column: span 1;
+      }
+      .modal-header, .modal-body, .modal-footer {
+        padding: 16px !important;
+      }
+      .detail-section {
+        margin-bottom: 20px;
+      }
+      .hikers-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+    }
   </style>
 </head>
 <body data-page="hikers">
@@ -625,7 +718,7 @@ function formatDate($dateStr) {
           </div>
           LAKBAY
         </div>
-        <div class="logo-sub">wilderness intelligence</div>
+        <div class="logo-sub">wilderness: Silence beneath steps</div>
       </div>
       <div style="margin-bottom:8px; padding-left:28px;">
         <div class="nav-section-label">Navigation</div>
@@ -641,16 +734,16 @@ function formatDate($dateStr) {
         <li class="nav-item" data-href="/pages/admin/analytics.php"><i class="fas fa-chart-simple"></i> Analytics</li>
       </ul>
     </div>
-      <div>
-  <button class="logout-btn" onclick="showLogoutModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
-    <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
-    Log Out
-  </button>
-  <div class="sidebar-footer">
-    <div class="status-dot"></div> 
-    TEAM AURIX
-  </div>
-</div>
+    <div>
+      <button class="logout-btn" onclick="showLogoutModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
+        <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
+        Log Out
+      </button>
+      <div class="sidebar-footer">
+        <div class="status-dot"></div> 
+        TEAM AURIX
+      </div>
+    </div>
   </aside>
 
   <!-- MAIN -->
@@ -659,17 +752,17 @@ function formatDate($dateStr) {
       <div class="page-heading"><i class="fas fa-person-hiking"></i> Hikers</div>
       <div class="topbar-right">
         <div class="topbar-date" id="liveDate"></div>
-         <div class="topbar-user" style="cursor: pointer;">
-    <div class="avatar" id="topbarAvatar">
-        <?php if (!empty($_SESSION['user_avatar'])): ?>
-            <img src="<?= htmlspecialchars($_SESSION['user_avatar']) ?>" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
-        <?php else: ?>
-            <?= htmlspecialchars($adminInitial) ?>
-        <?php endif; ?>
-    </div>
-    <?= htmlspecialchars($adminName) ?>
-    <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
-</div>
+        <div class="topbar-user" style="cursor: pointer;">
+          <div class="avatar" id="topbarAvatar">
+            <?php if (!empty($_SESSION['user_avatar'])): ?>
+              <img src="<?= htmlspecialchars($_SESSION['user_avatar']) ?>" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+            <?php else: ?>
+              <?= htmlspecialchars($adminInitial) ?>
+            <?php endif; ?>
+          </div>
+          <?= htmlspecialchars($adminName) ?>
+          <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+        </div>
       </div>
     </div>
 
@@ -754,7 +847,21 @@ function formatDate($dateStr) {
   </div>
 </div>
 
-<!-- MODALS (simplified for PHP) -->
+<!-- DETAILED MODAL FOR BOOKINGS & CAMPING -->
+<div class="modal-overlay" id="bookingDetailModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title"><i class="fas fa-info-circle"></i> <span id="bookingDetailTitle">Booking Details</span></div>
+      <button class="modal-close" onclick="closeBookingModal()"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" id="bookingDetailBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeBookingModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- HIKER PROFILE MODAL -->
 <div class="modal-overlay" id="hikerModal">
   <div class="modal">
     <div class="modal-header">
@@ -796,6 +903,208 @@ function formatDate(dateStr) {
   if (!dateStr) return 'N/A';
   const d = new Date(dateStr);
   return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>]/g, function(m) {
+    if (m === '&') return '&amp;';
+    if (m === '<') return '&lt;';
+    if (m === '>') return '&gt;';
+    return m;
+  });
+}
+
+// Helper functions for badges
+function getBookingStatusBadgeClass(status) {
+  const classes = {
+    'active': 'green',
+    'finished': 'gray',
+    'expired': 'red',
+    'pending': 'amber',
+    'confirmed': 'green'
+  };
+  return classes[status] || 'gray';
+}
+
+function getBookingStatusLabel(status) {
+  const labels = {
+    'active': 'Active',
+    'finished': 'Finished',
+    'expired': 'Expired',
+    'pending': 'Pending',
+    'confirmed': 'Confirmed'
+  };
+  return labels[status] || status || 'Pending';
+}
+
+function getPaymentBadgeClass(status) {
+  const classes = {
+    'paid': 'green',
+    'pending': 'amber',
+    'expired': 'red',
+    'failed': 'red'
+  };
+  return classes[status] || 'gray';
+}
+
+function getPaymentStatusLabel(status) {
+  const labels = {
+    'paid': 'Paid',
+    'pending': 'Pending',
+    'expired': 'Expired',
+    'failed': 'Failed'
+  };
+  return labels[status] || status || 'Pending';
+}
+
+// Detailed modal functions with additional hikers section
+function openBookingDetailModal(booking) {
+    const isCamping = booking.type === 'camping';
+    
+    let html = `
+        <div class="detail-section">
+            <div class="detail-section-title">Booking Information</div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">Booking Number</div>
+                    <div class="detail-val"><strong>${escapeHtml(booking.booking_number)}</strong></div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Status</div>
+                    <div class="detail-val"><span class="badge ${getBookingStatusBadgeClass(booking.booking_status)}">${getBookingStatusLabel(booking.booking_status)}</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Payment Status</div>
+                    <div class="detail-val"><span class="badge ${getPaymentBadgeClass(booking.payment_status)}">${getPaymentStatusLabel(booking.payment_status)}</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Mountain</div>
+                    <div class="detail-val">${escapeHtml(booking.mountain_name)}</div>
+                </div>
+                ${!isCamping ? `
+                <div class="detail-item">
+                    <div class="detail-label">Hike Date</div>
+                    <div class="detail-val">${formatDate(booking.date)}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Hike Type</div>
+                    <div class="detail-val">${escapeHtml(booking.hike_type || 'Day Hike')}</div>
+                </div>
+                ` : `
+                <div class="detail-item">
+                    <div class="detail-label">Start Date</div>
+                    <div class="detail-val">${formatDate(booking.date)}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">End Date</div>
+                    <div class="detail-val">${formatDate(booking.end_date)}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Nights</div>
+                    <div class="detail-val">${booking.number_of_nights}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Campsite</div>
+                    <div class="detail-val">${escapeHtml(booking.campsite_name || 'Not specified')}</div>
+                </div>
+                `}
+                <div class="detail-item">
+                    <div class="detail-label">Total Hikers</div>
+                    <div class="detail-val">${booking.number_of_hikers}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Total Amount</div>
+                    <div class="detail-val">${formatCurrency(booking.total_amount)}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Downpayment</div>
+                    <div class="detail-val">${formatCurrency(booking.downpayment_amount)}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Guide</div>
+                    <div class="detail-val">${escapeHtml(booking.guide_name || 'Not assigned')}</div>
+                </div>
+                ${booking.special_requests ? `
+                <div class="detail-item span2">
+                    <div class="detail-label">Special Requests</div>
+                    <div class="detail-val">${escapeHtml(booking.special_requests)}</div>
+                </div>
+                ` : ''}
+                ${isCamping && booking.equipment_rental ? `
+                <div class="detail-item span2">
+                    <div class="detail-label">Equipment Rental</div>
+                    <div class="detail-val">${escapeHtml(booking.equipment_rental)}</div>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+        
+        <div class="detail-section">
+            <div class="detail-section-title">Main Hiker (Booker)</div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">Name</div>
+                    <div class="detail-val"><strong>${escapeHtml(booking.hiker_name)}</strong></div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-val">${escapeHtml(booking.hiker_email || 'Not provided')}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Phone</div>
+                    <div class="detail-val">${escapeHtml(booking.hiker_phone || 'Not provided')}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add additional hikers if any (from the PHP data)
+    if (booking.additional_hikers && booking.additional_hikers.length > 0) {
+        html += `
+            <div class="detail-section">
+                <div class="detail-section-title">Group Members (${booking.additional_hikers.length} additional)</div>
+                <table class="hikers-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Age</th>
+                            <th>Emergency Contact</th>
+                            <th>Emergency Phone</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        
+        booking.additional_hikers.forEach(hiker => {
+            html += `
+                <tr>
+                    <td>${escapeHtml(hiker.hiker_name)}</td>
+                    <td>${hiker.age || 'N/A'}</td>
+                    <td>${escapeHtml(hiker.emergency_contact_name || 'N/A')}</td>
+                    <td>${escapeHtml(hiker.emergency_contact_number || 'N/A')}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+    
+    document.getElementById('bookingDetailTitle').textContent = `${isCamping ? 'Camping' : 'Booking'}: ${booking.booking_number}`;
+    document.getElementById('bookingDetailBody').innerHTML = html;
+    openBookingModal();
+}
+
+function openBookingModal() {
+    openModal('bookingDetailModal');
+}
+
+function closeBookingModal() {
+    closeModal('bookingDetailModal');
 }
 
 // Render Hikers
@@ -858,7 +1167,7 @@ function renderBookings(list) {
           <div class="booking-hiker-name">${escapeHtml(b.hiker_name || 'Unknown')}</div>
           <div class="booking-mountain"><i class="fas fa-mountain"></i> ${escapeHtml(b.mountain_name || 'Unknown')}</div>
         </div>
-        <span class="booking-status-chip ${getBookingChipClass(b.status)}">${getBookingStatusLabel(b.status)}</span>
+        <span class="booking-status-chip ${getBookingChipClass(b.booking_status)}">${getBookingStatusLabel(b.booking_status)}</span>
       </div>
       <div class="booking-card-body">
         <div class="bc-field"><div class="bc-field-label">Tour Guide</div><div class="bc-field-val">${escapeHtml(b.guide_name || 'Not assigned')}</div></div>
@@ -873,9 +1182,16 @@ function renderBookings(list) {
           <div class="dp-dot ${getDpDotClass(b.payment_status)}"></div>
           <span class="dp-label">${getDpStatusLabel(b.payment_status)}</span>
         </div>
-        <button class="btn viewBookingBtn" data-id="${b.id}"><i class="fas fa-eye"></i> View</button>
+        <button class="btn viewBookingBtn" data-booking='${JSON.stringify(b)}'><i class="fas fa-eye"></i> View</button>
       </div>`;
     grid.appendChild(card);
+  });
+
+  document.querySelectorAll('.viewBookingBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const bookingData = JSON.parse(btn.dataset.booking);
+      openBookingDetailModal({...bookingData, type: 'booking', date: bookingData.hike_date});
+    });
   });
 }
 
@@ -894,25 +1210,32 @@ function renderCamping(list) {
         <div class="camping-mountain"><i class="fas fa-mountain"></i> ${escapeHtml(c.mountain_name || 'Unknown')}</div>
       </div>
       <div class="camping-card-body">
-        <div><div class="cc-field-label">Check-in</div><div class="cc-field-val">${formatDate(c.start_date)}</div></div>
+        <div><div class="cc-field-label">Check-in</div><div class="cc-field-val">${formatDate(c.date)}</div></div>
         <div><div class="cc-field-label">Check-out</div><div class="cc-field-val">${formatDate(c.end_date)}</div></div>
         <div><div class="cc-field-label">Guide</div><div class="cc-field-val">${escapeHtml(c.guide_name || 'Not assigned')}</div></div>
         <div><div class="cc-field-label">Hikers</div><div class="cc-field-val">${c.number_of_hikers} pax</div></div>
         <div><div class="cc-field-label">Campsite</div><div class="cc-field-val">${escapeHtml(c.campsite_name || 'Not specified')}</div></div>
-        <div><div class="cc-field-label">Status</div><div class="cc-field-val">${getBookingStatusLabel(c.status)}</div></div>
+        <div><div class="cc-field-label">Status</div><div class="cc-field-val">${getBookingStatusLabel(c.booking_status)}</div></div>
       </div>
       <div class="camping-card-footer">
         <div class="dp-status">
           <div class="dp-dot ${getDpDotClass(c.payment_status)}"></div>
           <span class="dp-label">${getDpStatusLabel(c.payment_status)}</span>
         </div>
-        <button class="btn viewCampingBtn" data-id="${c.id}"><i class="fas fa-eye"></i> View</button>
+        <button class="btn viewCampingBtn" data-camping='${JSON.stringify(c)}'><i class="fas fa-eye"></i> View</button>
       </div>`;
     grid.appendChild(card);
   });
+
+  document.querySelectorAll('.viewCampingBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const campingData = JSON.parse(btn.dataset.camping);
+      openBookingDetailModal({...campingData, type: 'camping'});
+    });
+  });
 }
 
-// Modal Functions
+// Hiker Modal Functions
 function openHikerModal(id) {
   const hiker = hikersData.find(h => h.id === id);
   if (!hiker) return;
@@ -941,50 +1264,18 @@ function openHikerModal(id) {
   openModal('hikerModal');
 }
 
-function openBookingModal(id) {
-  const booking = bookingsData.find(b => b.id == id);
-  if (!booking) {
-    alert('Booking details not available');
-    return;
-  }
-  alert(`📋 Booking Details\n\nID: ${booking.booking_number || booking.id}\nHiker: ${booking.hiker_name}\nMountain: ${booking.mountain_name}\nDate: ${formatDate(booking.hike_date)}\nStatus: ${getBookingStatusLabel(booking.status)}\nDP Status: ${getDpStatusLabel(booking.payment_status)}`);
-}
-
-function openCampingModal(id) {
-  const camping = campingData.find(c => c.id == id);
-  if (!camping) {
-    alert('Camping booking details not available');
-    return;
-  }
-  alert(`🏕️ Camping Details\n\nID: ${camping.booking_number || camping.id}\nHiker: ${camping.hiker_name}\nMountain: ${camping.mountain_name}\nCheck-in: ${formatDate(camping.start_date)}\nCheck-out: ${formatDate(camping.end_date)}\nCampsite: ${camping.campsite_name || 'Not specified'}\nStatus: ${getBookingStatusLabel(camping.status)}`);
-}
-
 function openModal(id) { 
   document.getElementById(id).classList.add('open'); 
 }
+
 function closeModal(id) { 
   document.getElementById(id).classList.remove('open'); 
 }
 
 // Helper functions
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/[&<>]/g, function(m) {
-    if (m === '&') return '&amp;';
-    if (m === '<') return '&lt;';
-    if (m === '>') return '&gt;';
-    return m;
-  });
-}
-
 function getBookingChipClass(status) {
   const chips = { active: 'chip-active', finished: 'chip-finished', expired: 'chip-expired' };
   return chips[status] || 'chip-pending';
-}
-
-function getBookingStatusLabel(status) {
-  const labels = { active: 'Active', finished: 'Finished', expired: 'Expired', pending: 'Pending', confirmed: 'Confirmed' };
-  return labels[status] || status || 'Pending';
 }
 
 function getDpStatusLabel(status) {
@@ -1019,7 +1310,7 @@ document.getElementById('applyBookingFilter')?.addEventListener('click', () => {
   const status = document.getElementById('bookingStatusFilter').value;
   const dpStatus = document.getElementById('dpStatusFilter').value;
   const filtered = bookingsData.filter(b => 
-    (!status || b.status === status) && 
+    (!status || b.booking_status === status) && 
     (!dpStatus || b.payment_status === dpStatus)
   );
   renderBookings(filtered);
@@ -1028,7 +1319,7 @@ document.getElementById('applyBookingFilter')?.addEventListener('click', () => {
 
 document.getElementById('applyCampingFilter')?.addEventListener('click', () => {
   const status = document.getElementById('campingStatusFilter').value;
-  const filtered = status ? campingData.filter(c => c.status === status) : campingData;
+  const filtered = status ? campingData.filter(c => c.booking_status === status) : campingData;
   renderCamping(filtered);
 });
 
@@ -1057,7 +1348,14 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 // Modal close handlers
 document.querySelectorAll('.modal-close, [data-close]').forEach(el => {
-  el.addEventListener('click', () => closeModal(el.dataset.close || el.closest('.modal-overlay')?.id));
+  el.addEventListener('click', () => {
+    const modalId = el.dataset.close;
+    if (modalId) {
+      closeModal(modalId);
+    } else if (el.closest('.modal-overlay')) {
+      closeModal(el.closest('.modal-overlay').id);
+    }
+  });
 });
 
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -1085,35 +1383,32 @@ setInterval(updateDate, 1000);
 renderHikers(hikersData);
 renderBookings(bookingsData);
 renderCamping(campingData);
+
 // Make topbar user clickable
 document.addEventListener('DOMContentLoaded', function() {
-    const topbarUser = document.querySelector('.topbar-user');
-    console.log('Setting up topbar click listener');
-    if (topbarUser) {
-        topbarUser.addEventListener('click', function(e) {
-            e.preventDefault();
-            console.log('Topbar clicked - opening modal');
-            if (typeof openProfileModal === 'function') {
-                openProfileModal();
-            } else {
-                console.error('openProfileModal function not found!');
-                alert('Modal function not loaded yet. Please refresh the page.');
-            }
-        });
-    }
+  const topbarUser = document.querySelector('.topbar-user');
+  if (topbarUser) {
+    topbarUser.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (typeof openProfileModal === 'function') {
+        openProfileModal();
+      } else {
+        console.error('openProfileModal function not found!');
+        alert('Modal function not loaded yet. Please refresh the page.');
+      }
+    });
+  }
 });
-
 </script>
+
 <!-- Include Profile Modal -->
 <?php 
-
 $modalPath = __DIR__ . '/profile-modal.php';
 if (file_exists($modalPath)) {
     include_once $modalPath;
     echo '<!-- Profile modal loaded from: ' . $modalPath . ' -->';
 } else {
     echo '<!-- Profile modal NOT found at: ' . $modalPath . ' -->';
-    // Fallback: try alternative path
     $altPath = 'admin/profile-modal.php';
     if (file_exists($altPath)) {
         include_once $altPath;
@@ -1121,13 +1416,13 @@ if (file_exists($modalPath)) {
     }
 }
 ?>
+
 <?php 
 $logoutModalPath = __DIR__ . '/../../includes/logout-modal.php';
 if (file_exists($logoutModalPath)) {
     include_once $logoutModalPath;
     echo '<!-- Logout modal loaded from: ' . $logoutModalPath . ' -->';
 } else {
-    // Try alternative path from pages directory
     $altLogoutPath = '../includes/logout-modal.php';
     if (file_exists($altLogoutPath)) {
         include_once $altLogoutPath;
