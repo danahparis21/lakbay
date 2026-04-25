@@ -41,7 +41,7 @@ $historyItems = [];
 
 // Day hike bookings
 $stmt = $pdo->prepare("
-    SELECT b.*, m.name as mountain_name, m.location, m.image, 'day_hike' as booking_type 
+    SELECT b.*, m.name as mountain_name, m.location, m.image, m.start_point_lat, m.start_point_lng, 'day_hike' as booking_type 
     FROM bookings b
     JOIN mountains m ON b.mountain_id = m.id
     WHERE b.user_id = ? 
@@ -60,13 +60,15 @@ foreach ($dayHikes as $hike) {
         'type' => 'Day Hike',
         'status' => $hike['status'],
         'booking_type' => 'day_hike',
-        'image' => $hike['image']
+        'image' => $hike['image'],
+        'lat' => $hike['start_point_lat'],
+        'lng' => $hike['start_point_lng']
     ];
 }
 
 // Camping bookings
 $stmt = $pdo->prepare("
-    SELECT c.*, m.name as mountain_name, m.location, m.image 
+    SELECT c.*, m.name as mountain_name, m.location, m.image, m.start_point_lat, m.start_point_lng
     FROM camping_bookings c
     JOIN mountains m ON c.mountain_id = m.id
     WHERE c.user_id = ? 
@@ -86,7 +88,9 @@ foreach ($campingHikes as $camping) {
         'type' => $nights . ' Night Camping',
         'status' => $camping['status'],
         'booking_type' => 'camping',
-        'image' => $camping['image']
+        'image' => $camping['image'],
+        'lat' => $camping['start_point_lat'],
+        'lng' => $camping['start_point_lng']
     ];
 }
 
@@ -111,7 +115,12 @@ $stmtAllMountains = $pdo->query("SELECT * FROM mountains WHERE status = 'Open' O
 $allMountains = $stmtAllMountains->fetchAll(PDO::FETCH_ASSOC);
 
 // Calculate total hikes count (completed + active + cancelled)
-$totalHikes = count($historyItems);
+$totalHikes = 0;
+foreach ($historyItems as $item) {
+    if ($item['status'] === 'completed' || $item['status'] === 'active') {
+        $totalHikes++;
+    }
+}
 
 // Calculate completed hikes count
 $completedHikes = 0;
@@ -121,13 +130,23 @@ foreach ($historyItems as $item) {
     }
 }
 
-// Badges count (based on achievements)
+$stmt = $pdo->prepare("
+    SELECT ub.times_earned, b.name 
+    FROM user_badges ub
+    JOIN badges b ON ub.badge_id = b.id
+    WHERE ub.user_id = ?
+");
+$stmt->execute([$currentUserId]);
+$allUserBadges = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Calculate total badge count (including duplicates - e.g., if earned 3x, count as 3)
 $badgeCount = 0;
-if ($completedHikes >= 1) $badgeCount++;
-if ($completedHikes >= 5) $badgeCount++;
-if ($completedHikes >= 10) $badgeCount++;
-if ($currentUser['hiking_level'] !== 'beginner') $badgeCount++;
-if (count($savedMountains) >= 3) $badgeCount++;
+foreach ($allUserBadges as $badge) {
+    $badgeCount += $badge['times_earned'];
+}
+
+// Also keep track of unique badges for display
+$uniqueBadgeCount = count($allUserBadges);
 
 // Handle avatar upload
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
@@ -281,9 +300,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     // Refresh history
     $historyItems = [];
     
+    // After refreshing history, recalculate badge count
+$stmt = $pdo->prepare("
+    SELECT ub.times_earned 
+    FROM user_badges ub
+    WHERE ub.user_id = ?
+");
+$stmt->execute([$currentUserId]);
+$allUserBadges = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$badgeCount = 0;
+foreach ($allUserBadges as $badge) {
+    $badgeCount += $badge['times_earned'];
+}
+
     // Refetch day hikes
     $stmt = $pdo->prepare("
-        SELECT b.*, m.name as mountain_name, m.location, m.image, 'day_hike' as booking_type 
+        SELECT b.*, m.name as mountain_name, m.location, m.image, m.start_point_lat, m.start_point_lng, 'day_hike' as booking_type 
         FROM bookings b
         JOIN mountains m ON b.mountain_id = m.id
         WHERE b.user_id = ? 
@@ -302,13 +334,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             'type' => 'Day Hike',
             'status' => $hike['status'],
             'booking_type' => 'day_hike',
-            'image' => $hike['image']
+            'image' => $hike['image'],
+            'lat' => $hike['start_point_lat'],
+            'lng' => $hike['start_point_lng']
         ];
     }
     
     // Refetch camping bookings
     $stmt = $pdo->prepare("
-        SELECT c.*, m.name as mountain_name, m.location, m.image 
+        SELECT c.*, m.name as mountain_name, m.location, m.image, m.start_point_lat, m.start_point_lng
         FROM camping_bookings c
         JOIN mountains m ON c.mountain_id = m.id
         WHERE c.user_id = ? 
@@ -328,7 +362,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             'type' => $nights . ' Night Camping',
             'status' => $camping['status'],
             'booking_type' => 'camping',
-            'image' => $camping['image']
+            'image' => $camping['image'],
+            'lat' => $camping['start_point_lat'],
+            'lng' => $camping['start_point_lng']
         ];
     }
     
@@ -336,6 +372,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         return strtotime($b['date']) - strtotime($a['date']);
     });
 }
+
+$userBadges = [];
+$stmt = $pdo->prepare("
+    SELECT b.*, ub.earned_at, ub.times_earned, ub.mountain_name, ub.hike_date
+    FROM user_badges ub
+    JOIN badges b ON ub.badge_id = b.id
+    WHERE ub.user_id = ?
+    ORDER BY ub.earned_at DESC
+");
+$stmt->execute([$currentUserId]);
+$userBadges = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// Group badges by name to show duplicates - FIXED to use times_earned
+$badgeGroups = [];
+foreach ($userBadges as $badge) {
+    $key = $badge['name'];
+    if (!isset($badgeGroups[$key])) {
+        $badgeGroups[$key] = [
+            'badge' => $badge,
+            'count' => 0,
+            'dates' => []
+        ];
+    }
+    // FIX: Use times_earned from database instead of just incrementing by 1
+    $badgeGroups[$key]['count'] += $badge['times_earned'];
+    $badgeGroups[$key]['dates'][] = date('M j, Y', strtotime($badge['earned_at']));
+}
+
+// Calculate hiking insights
+$totalDistance = 0;
+$yearlyStats = [];
+$mountainFrequency = [];
+
+foreach ($historyItems as $item) {
+    $year = date('Y', strtotime($item['date']));
+    if (!isset($yearlyStats[$year])) {
+        $yearlyStats[$year] = ['count' => 0, 'distance' => 0];
+    }
+    $yearlyStats[$year]['count']++;
+    
+    $mountainName = $item['mountain_name'];
+    if (!isset($mountainFrequency[$mountainName])) {
+        $mountainFrequency[$mountainName] = 0;
+    }
+    $mountainFrequency[$mountainName]++;
+}
+
+$currentYear = date('Y');
+$lastYear = $currentYear - 1;
+$currentYearCount = $yearlyStats[$currentYear]['count'] ?? 0;
+$lastYearCount = $yearlyStats[$lastYear]['count'] ?? 0;
+$growthPercent = $lastYearCount > 0 ? round(($currentYearCount - $lastYearCount) / $lastYearCount * 100) : 100;
+$mostHikedMountain = !empty($mountainFrequency) ? array_keys($mountainFrequency, max($mountainFrequency))[0] : 'None yet';
+
+// Get the image for the most hiked mountain
+$mostHikedMountainImage = '';
+if ($mostHikedMountain !== 'None yet') {
+    foreach ($historyItems as $item) {
+        if ($item['mountain_name'] === $mostHikedMountain) {
+            $mostHikedMountainImage = $item['image'];
+            break;
+        }
+    }
+}
+if (empty($mostHikedMountainImage)) {
+    $mostHikedMountainImage = 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&q=80';
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -345,6 +448,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>LAKBAY — My Profile</title>
   <link rel="stylesheet" href="shared.css">
+  <!-- Leaflet CSS for map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
+  <!-- html2canvas for JPG export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     :root {
       --forest: #100600;
@@ -546,7 +655,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     .profile-main {
       flex: 1;
       min-width: 0;
-      padding-top: 20px; /* Aligns with sidebar's top offset */
+      padding-top: 20px;
     }
     .profile-section {
       background: var(--white);
@@ -750,57 +859,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     .saved-mtn-remove svg { width: 14px; height: 14px; stroke: white; }
 
     .history-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      max-height: 420px;
-      overflow-y: auto;
-      padding-right: 8px;
-      scrollbar-width: thin;
-      scrollbar-color: var(--gold) transparent;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-height: none;
+        overflow-y: visible;
+        padding-right: 0;
     }
-    .history-list::-webkit-scrollbar {
-      width: 4px;
+
+    .history-scroll-wrapper {
+        max-height: 500px;
+        overflow-y: auto;
+        padding-right: 8px;
+        scrollbar-width: thin;
+        scrollbar-color: var(--gold) transparent;
     }
-    .history-list::-webkit-scrollbar-thumb {
-      background-color: var(--gold);
-      border-radius: 10px;
+
+    .history-scroll-wrapper::-webkit-scrollbar {
+        width: 4px;
     }
+
+    .history-scroll-wrapper::-webkit-scrollbar-thumb {
+        background-color: var(--gold);
+        border-radius: 10px;
+    }
+
     .history-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 16px;
-      background: rgba(16,6,0,0.02);
-      border-radius: var(--radius-sm);
-      transition: 0.2s;
-      flex-wrap: wrap;
-      gap: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        background: rgba(16,6,0,0.02);
+        border-radius: var(--radius-sm);
+        transition: all 0.2s ease;
+        flex-wrap: wrap;
+        gap: 12px;
+        cursor: pointer;
+        border: 1px solid transparent;
     }
-    .history-item:hover { background: rgba(16,6,0,0.05); }
+    .history-item:hover {
+        background: rgba(16,6,0,0.06);
+        border-color: rgba(201,168,76,0.3);
+        transform: translateX(4px);
+    }
     .history-info {
-      flex: 1;
+        flex: 1;
     }
     .history-info h4 {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--forest);
-      margin-bottom: 4px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--forest);
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
     .history-info p {
-      font-size: 11px;
-      color: var(--stone);
+        font-size: 12px;
+        color: var(--stone);
+        margin-bottom: 4px;
+    }
+    .history-info small {
+        font-size: 10px;
+        color: var(--sage);
     }
     .history-status {
-      font-size: 10px;
-      font-weight: 600;
-      padding: 4px 8px;
-      border-radius: 50px;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 50px;
+        white-space: nowrap;
     }
     .status-active { background: #27ae60; color: white; }
     .status-completed { background: #3498db; color: white; }
     .status-cancelled { background: #95a5a6; color: white; }
     .status-pending { background: #f39c12; color: white; }
+    .status-joined { background: #8e44ad; color: white; }
 
     .setting-row {
       display: flex;
@@ -893,16 +1027,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       color: var(--stone);
       font-size: 13px;
     }
-    .btn-icon {
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      padding: 6px;
-      border-radius: 8px;
-      color: var(--danger);
-      transition: 0.2s;
-    }
-    .btn-icon:hover { background: rgba(192,57,43,0.1); }
 
     .modal-bg {
       position: fixed;
@@ -1012,16 +1136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       margin-top: 24px;
     }
     .confirm-buttons .btn { flex: 1; }
-    .error-message {
-      color: var(--danger);
-      font-size: 12px;
-      margin-top: 6px;
-    }
-    .success-message {
-      color: var(--success);
-      font-size: 12px;
-      margin-top: 6px;
-    }
+    
     .password-requirements {
       font-size: 11px;
       color: var(--stone);
@@ -1059,15 +1174,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       padding: 12px 24px;
       border-radius: 50px;
       font-size: 13px;
+      font-weight: 600;
       z-index: 1100;
-      transition: 0.3s;
+      transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
       opacity: 0;
       white-space: nowrap;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      backdrop-filter: blur(10px);
+      background: rgba(16,6,0,0.9);
+      border: 1px solid rgba(201,168,76,0.3);
     }
     .toast.show {
       transform: translateX(-50%) translateY(0);
       opacity: 1;
     }
+    .toast.success { background: rgba(46,125,50,0.9); border-color: #2ed573; }
+    .toast.error { background: rgba(192,57,43,0.9); border-color: #ff4757; }
 
     @media (max-width: 768px) {
       .mobile-back-bar { display: flex; }
@@ -1109,11 +1231,267 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       .saved-mtn-grid { grid-template-columns: 1fr; }
       .toast { white-space: normal; text-align: center; max-width: 90%; }
     }
+
+    .badges-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 20px;
+    }
+    .badge-card {
+        background: linear-gradient(135deg, var(--forest), var(--moss));
+        border-radius: var(--radius-sm);
+        padding: 20px 16px;
+        text-align: center;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(201,168,76,0.3);
+    }
+    .badge-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+        border-color: var(--gold);
+    }
+    .badge-icon {
+        font-size: 48px;
+        margin-bottom: 12px;
+        filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+    }
+    .badge-name {
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--gold);
+        margin-bottom: 6px;
+    }
+    .badge-description {
+        font-size: 11px;
+        color: rgba(255,255,255,0.7);
+        margin-bottom: 8px;
+    }
+    .badge-earned-count {
+        font-size: 10px;
+        color: var(--gold);
+        background: rgba(201,168,76,0.2);
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 20px;
+        margin-top: 6px;
+    }
+    .badge-earned-date {
+        font-size: 9px;
+        color: rgba(255,255,255,0.5);
+        margin-top: 8px;
+    }
+    .badge-card.duplicate {
+        background: linear-gradient(135deg, #2a2a1a, #1a1a0a);
+    }
+
+    /* Bento Grid Dashboard Styles */
+    .insights-dashboard {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        grid-template-rows: repeat(2, 160px);
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .insight-card {
+        background: var(--white);
+        border-radius: var(--radius);
+        overflow: hidden;
+        position: relative;
+        border: 1px solid rgba(16,6,0,0.08);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+
+    .insight-card:hover {
+        transform: scale(1.01);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+    }
+
+    .insight-card.large { grid-column: span 2; grid-row: span 2; }
+    .insight-card.medium { grid-column: span 2; }
+    .insight-card.small { grid-column: span 1; }
+
+    .insight-bg {
+        position: absolute;
+        inset: 0;
+        background-size: cover;
+        background-position: center;
+        transition: transform 0.5s;
+    }
+    .insight-card:hover .insight-bg { transform: scale(1.1); }
+
+    .insight-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to bottom, rgba(16,6,0,0.1), rgba(16,6,0,0.8));
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: 20px;
+        color: white;
+    }
+
+    .insight-stats { display: flex; flex-direction: column; gap: 2px; }
+    .insight-number {
+        font-size: 32px;
+        font-weight: 800;
+        font-family: 'Playfair Display', serif;
+        color: var(--gold);
+        line-height: 1;
+    }
+    .insight-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        opacity: 0.9;
+    }
+
+    #journeyMap {
+        height: 100%;
+        width: 100%;
+        z-index: 1;
+        background: var(--sky);
+    }
+    .map-badge {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        background: var(--forest);
+        color: var(--gold);
+        padding: 6px 12px;
+        border-radius: 40px;
+        font-size: 10px;
+        font-weight: 700;
+        z-index: 10;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .trend-up .insight-number { color: #2ed573; }
+    .trend-down .insight-number { color: #ff4757; }
+
+    .story-summary {
+        background: linear-gradient(135deg, rgba(201,168,76,0.1), rgba(26,46,26,0.05));
+        border-radius: var(--radius-sm);
+        padding: 20px;
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+        margin-bottom: 24px;
+        border-left: 3px solid var(--gold);
+    }
+    .story-icon { font-size: 32px; }
+    .story-text { flex: 1; font-size: 14px; line-height: 1.6; color: var(--forest); }
+
+    @media (max-width: 992px) {
+        .insights-dashboard { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; }
+        .insight-card.large, .insight-card.medium, .insight-card.small { grid-column: span 2; height: 200px; }
+        .insight-card.map-card { height: 300px; order: -1; }
+    }
+
+    /* Star Rating */
+    .star-rating {
+        display: flex;
+        gap: 8px;
+        margin: 8px 0;
+    }
+    .star-rating span {
+        font-size: 32px;
+        color: var(--mist);
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .star-rating span:hover {
+        transform: scale(1.2);
+        color: var(--gold);
+    }
+    .star-rating span.active {
+        color: var(--gold);
+    }
+    .star-rating.readonly {
+        gap: 2px;
+    }
+    .star-rating.readonly span {
+        font-size: 18px;
+        cursor: default;
+    }
+    .star-rating.readonly span:hover {
+        transform: none;
+    }
+
+    /* System Review Section Enhancements */
+    #existingSystemReview {
+        background: rgba(201, 168, 76, 0.05) !important;
+        border: 1px solid rgba(201, 168, 76, 0.15);
+        border-left: 4px solid var(--gold);
+        box-shadow: var(--shadow);
+        padding: 24px !important;
+    }
+    .review-data-row {
+        margin-bottom: 16px;
+    }
+    .review-data-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--stone);
+        font-weight: 700;
+        margin-bottom: 6px;
+        display: block;
+    }
+    .review-data-value {
+        font-size: 14px;
+        color: var(--forest);
+        line-height: 1.6;
+    }
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 14px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .status-badge.pending { background: #fff8e1; color: #f57f17; }
+    .status-badge.approved { background: #e8f5e9; color: #2e7d32; }
+    .status-badge.rejected { background: #ffebee; color: #c62828; }
+
+    .info-note {
+        background: rgba(16,6,0,0.03);
+        padding: 16px;
+        border-radius: var(--radius-sm);
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        color: var(--stone);
+        font-size: 12px;
+        line-height: 1.6;
+        border: 1px solid rgba(16,6,0,0.05);
+    }
+    .info-note svg {
+        width: 18px;
+        height: 18px;
+        stroke: var(--sage);
+        stroke-width: 2;
+        fill: none;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+
   </style>
 </head>
 <body>
 
-<!-- MOBILE BACK BUTTON BAR -->
 <div class="mobile-back-bar">
   <button class="back-btn" onclick="goBack()">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
@@ -1121,43 +1499,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   <h3>My Profile</h3>
 </div>
 
-<!-- DESKTOP NAV -->
-<nav class="desktop-nav">
-  <a href="../index.php" class="brand">
-    <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#100600" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#100600" opacity=".35"/></svg>
-    LAKBAY
-  </a>
-  <div class="tabs">
-    <a href="explore.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Explore
-    </a>
-    <a href="bookings.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings
-    </a>
-    <a href="quiz.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Quiz
-    </a>
-    <a href="messages.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages
-    </a>
-  </div>
-  <a href="hikerProfile.php" class="user-btn active"><?php echo htmlspecialchars($userInitial); ?></a>
-</nav>
+<?php
+// Set current page for navbar highlighting
+$currentPage = 'hikerProfile'; // Change per page: 'explore', 'bookings', 'quiz', 'messages', 'hikerProfile'
+?>
+<?php include __DIR__ . '/../includes/navbar.php'; ?>
 
-<!-- MOBILE NAV -->
-<nav class="mobile-nav">
-  <div class="mobile-nav-inner">
-    <a href="explore.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span>Explore</span></a>
-    <a href="bookings.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Bookings</span></a>
-    <a href="quiz.php" class="mob-nav-item quiz-center"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></a>
-    <a href="messages.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Messages</span></a>
-    <a href="hikerProfile.php" class="mob-nav-item active"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></a>
-  </div>
-</nav>
-
-<!-- PROFILE LAYOUT -->
 <div class="profile-layout">
-  <!-- Sidebar Navigation -->
   <aside class="profile-sidebar">
     <div class="sidebar-avatar">
       <div class="avatar-wrapper">
@@ -1177,26 +1525,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       <div class="sidebar-email"><?php echo htmlspecialchars($currentUser['email']); ?></div>
     </div>
     <nav class="sidebar-nav">
-      <div class="sidebar-link active" data-section="personal">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        Personal Info
-      </div>
-      <div class="sidebar-link" data-section="history">
+       <div class="sidebar-link active" data-section="history">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v4l3 3M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/></svg>
         Hiking History
       </div>
+
+      <div class="sidebar-link" data-section="personal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Personal Info
+      </div>
+     
       <div class="sidebar-link" data-section="saved">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
         Saved Mountains
       </div>
-      <div class="sidebar-link" data-section="location">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        Location & Tracking
-      </div>
+      <div class="sidebar-link" data-section="badges">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+        My Badges
+    </div>
       <div class="sidebar-link" data-section="settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Account Settings
       </div>
+      <div class="sidebar-link" data-section="system_review">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+  Rate Lakbay
+</div>
+
       <div class="sidebar-logout">
         <div class="sidebar-link" id="logoutBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -1206,17 +1561,125 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     </nav>
   </aside>
 
-  <!-- Main Content -->
   <main class="profile-main">
-    <!-- Stats Cards -->
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-number"><?php echo $totalHikes; ?></div><div class="stat-label">Total Hikes</div></div>
-      <div class="stat-card"><div class="stat-number"><?php echo count($savedMountains); ?></div><div class="stat-label">Saved Peaks</div></div>
-      <div class="stat-card"><div class="stat-number"><?php echo $badgeCount; ?></div><div class="stat-label">Badges Earned</div></div>
+<!-- Stats Grid - Removed duplicate badges card -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number"><?php echo $totalHikes; ?></div>
+        <div class="stat-label">Total Hikes</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number"><?php echo count($savedMountains); ?></div>
+        <div class="stat-label">Saved Peaks</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number"><?php echo $badgeCount; ?></div>
+        <div class="stat-label">Badges Earned</div>
+    </div>
+</div>
+<div id="section-history" class="profile-section active-section">
+      <div class="section-header">
+        <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v4l3 3M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/></svg>Hiking Journey</h2>
+      </div>
+
+      
+      <div id="exportRegion" style="background: var(--cream); padding: 20px; border-radius: var(--radius);">
+        <div class="insights-dashboard">
+          <div class="insight-card large map-card">
+            <div id="journeyMap"></div>
+            <div class="map-badge">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              MY PEAK CONQUESTS
+            </div>
+          </div>
+
+          <div class="insight-card medium">
+            <div class="insight-bg" style="background-image: url('https://images.unsplash.com/photo-1551632811-561732d1e306?w=800&q=80')"></div>
+            <div class="insight-overlay">
+              <div class="insight-stats">
+                <div class="insight-number"><?php echo $totalHikes; ?></div>
+                <div class="insight-label">Total Adventures</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="insight-card small">
+            <div class="insight-bg" style="background-image: url('<?php echo htmlspecialchars($mostHikedMountainImage); ?>')"></div>
+            <div class="insight-overlay">
+              <div class="insight-stats">
+                <div class="insight-number" style="font-size: 14px; color: white;"><?php echo htmlspecialchars($mostHikedMountain); ?></div>
+                <div class="insight-label">Home Peak</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="insight-card small trend-<?php echo $growthPercent >= 0 ? 'up' : 'down'; ?>">
+            <div class="insight-overlay" style="background: var(--forest); justify-content: center; align-items: center; text-align: center;">
+              <div class="insight-stats">
+                <div class="insight-number"><?php echo $growthPercent >= 0 ? '+' : ''; ?><?php echo $growthPercent; ?>%</div>
+                <div class="insight-label">Yearly Growth</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="story-summary" style="margin-bottom: 0;">
+          <div class="story-icon">🏔️</div>
+          <div class="story-text">
+            <strong style="color: var(--gold); display: block; margin-bottom: 4px;">THE LAKBAY CHRONICLES</strong>
+            <?php if ($totalHikes == 0): ?>
+                Your adventure hasn't started yet! Book your first hike to begin your journey.
+            <?php elseif ($totalHikes == 1): ?>
+                Welcome to the hiking family! Your journey has just begun. Every mountain tells a story, and yours is just starting.
+            <?php elseif ($totalHikes >= 10): ?>
+                Legendary hiker! You've conquered <?php echo $totalHikes; ?> mountains. <?php echo $completedHikes; ?> peaks completed shows true dedication. <?php echo $mostHikedMountain != 'None yet' ? $mostHikedMountain . ' feels like home now!' : ''; ?>
+            <?php elseif ($totalHikes >= 5): ?>
+                Impressive! You've reached <?php echo $totalHikes; ?> summits. <?php echo $growthPercent > 0 ? "That's $growthPercent% more than last year!" : "Keep the momentum going!"; ?>
+            <?php else: ?>
+                Great start! You've experienced <?php echo $totalHikes; ?> amazing hikes. <?php echo $completedHikes; ?> completed so far. The mountains are calling!
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 24px;">
+        <div class="section-header" style="margin-bottom: 16px; padding-bottom: 0; border-bottom: none;">
+          <h3 style="font-size: 16px; font-weight: 600;">Recent Adventures</h3>
+          <button class="btn btn-primary" style="padding: 10px 20px; font-size: 12px;" onclick="exportHikingJourney()">✨ Share My Journey (JPG)</button>
+        </div>
+        
+        <div class="history-scroll-wrapper">
+          <div id="historyList" class="history-list">
+            <?php if (empty($historyItems)): ?>
+              <div class="empty-state">No hikes recorded yet. Make your first booking!</div>
+            <?php else: ?>
+              <?php foreach ($historyItems as $item): ?>
+                <div class="history-item" onclick="showHikeDetails(<?php echo htmlspecialchars(json_encode($item)); ?>)">
+                  <div class="history-info">
+                    <h4><?php echo htmlspecialchars($item['mountain_name']); ?></h4>
+                    <p><?php echo date('F j, Y', strtotime($item['date'])); ?> · <?php echo htmlspecialchars($item['type']); ?></p>
+                    <p><small><?php echo htmlspecialchars($item['location']); ?></small></p>
+                  </div>
+                  <div>
+                    <span class="history-status status-<?php echo $item['status']; ?>"><?php echo ucfirst($item['status']); ?></span>
+                  </div>
+                  <?php if ($item['status'] === 'active' || $item['status'] === 'pending'): ?>
+                  <form id="cancelForm-<?php echo $item['id']; ?>" method="POST" style="margin:0;">
+                    <input type="hidden" name="action" value="cancel_booking">
+                    <input type="hidden" name="booking_id" value="<?php echo $item['id']; ?>">
+                    <input type="hidden" name="booking_type" value="<?php echo $item['booking_type']; ?>">
+                    <button type="button" class="btn-outline-danger" style="padding: 4px 12px; font-size: 11px;" onclick="confirmCancelHike('cancelForm-<?php echo $item['id']; ?>')">Cancel</button>
+                  </form>
+                  <?php endif; ?>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Section 1: Personal Information -->
-    <div id="section-personal" class="profile-section active-section">
+    <div id="section-personal" class="profile-section">
       <div class="section-header">
         <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Personal Information</h2>
         <div class="section-header-actions">
@@ -1224,6 +1687,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
           <button class="btn-outline-small" onclick="openChangePasswordModal()">Change Password</button>
         </div>
       </div>
+      
       <div id="personalInfoDisplay">
         <div class="info-row"><div class="info-label">Full Name</div><div class="info-value"><?php echo htmlspecialchars($currentUser['name']); ?></div></div>
         <div class="info-row"><div class="info-label">Email</div><div class="info-value"><?php echo htmlspecialchars($currentUser['email']); ?></div></div>
@@ -1244,40 +1708,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       </div>
     </div>
 
-    <!-- Section 2: Hiking History -->
-    <div id="section-history" class="profile-section">
-      <div class="section-header">
-        <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v4l3 3M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/></svg>Hiking History</h2>
-      </div>
-      <div id="historyList" class="history-list">
-        <?php if (empty($historyItems)): ?>
-          <div class="empty-state">No hikes recorded yet. Make your first booking!</div>
-        <?php else: ?>
-          <?php foreach ($historyItems as $item): ?>
-            <div class="history-item">
-              <div class="history-info">
-                <h4><?php echo htmlspecialchars($item['mountain_name']); ?></h4>
-                <p><?php echo date('F j, Y', strtotime($item['date'])); ?> · <?php echo htmlspecialchars($item['type']); ?></p>
-                <p><small><?php echo htmlspecialchars($item['location']); ?></small></p>
-              </div>
-              <div>
-                <span class="history-status status-<?php echo $item['status']; ?>"><?php echo ucfirst($item['status']); ?></span>
-              </div>
-              <?php if ($item['status'] === 'active' || $item['status'] === 'pending'): ?>
-              <form method="POST" style="margin:0;" onsubmit="return confirm('Cancel this booking?');">
-                <input type="hidden" name="action" value="cancel_booking">
-                <input type="hidden" name="booking_id" value="<?php echo $item['id']; ?>">
-                <input type="hidden" name="booking_type" value="<?php echo $item['booking_type']; ?>">
-                <button type="submit" class="btn-outline-danger" style="padding: 4px 12px; font-size: 11px;">Cancel</button>
-              </form>
-              <?php endif; ?>
-            </div>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </div>
-    </div>
-
-    <!-- Section 3: Saved Mountains -->
     <div id="section-saved" class="profile-section">
       <div class="section-header">
         <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Saved Mountains</h2>
@@ -1292,11 +1722,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
               <div class="saved-mtn-img" style="background-image: url('<?php echo htmlspecialchars($mountain['image'] ?? 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80'); ?>')">
                 <div class="saved-mtn-img-overlay"></div>
                 <div class="saved-mtn-badge"><span class="badge badge-<?php echo strtolower($mountain['difficulty'] ?? 'moderate'); ?>"><?php echo htmlspecialchars($mountain['difficulty'] ?? 'Moderate'); ?></span></div>
-                <form method="POST" class="saved-mtn-remove" onsubmit="return confirm('Remove from saved?');" style="margin:0;">
+                <form id="removeSavedForm-<?php echo $mountain['id']; ?>" method="POST" class="saved-mtn-remove" style="margin:0;">
                   <input type="hidden" name="action" value="remove_saved">
                   <input type="hidden" name="saved_id" value="<?php echo $mountain['id']; ?>">
-                  <button type="submit" style="background:transparent; border:none; cursor:pointer; width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  <button type="button" style="background:transparent; border:none; cursor:pointer; width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:white;" onclick="confirmRemoveSaved('removeSavedForm-<?php echo $mountain['id']; ?>')">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                   </button>
                 </form>
               </div>
@@ -1315,22 +1745,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       </div>
     </div>
 
-    <!-- Section 4: Location & Tracking -->
-    <div id="section-location" class="profile-section">
-      <div class="section-header">
-        <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Location & Tracking</h2>
-      </div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4>Share real-time location</h4>
-          <p>Allow Lakbay to track your location during active hikes for safety & trail recommendations.</p>
+    <div id="section-badges" class="profile-section">
+        <div class="section-header">
+            <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>My Badges</h2>
         </div>
-        <label class="toggle-switch"><input type="checkbox" id="locationToggle"><span class="slider"></span></label>
-      </div>
-      <div id="locationStatusMsg" style="font-size: 12px; color: var(--sage); margin-top: 16px; padding: 12px; background: rgba(16,6,0,0.03); border-radius: 10px;"></div>
+        <div id="badgesContainer" class="badges-grid">
+            <div class="loading-spinner">Loading your achievements...</div>
+        </div>
     </div>
 
-    <!-- Section 5: Account Settings -->
     <div id="section-settings" class="profile-section">
       <div class="section-header">
         <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Account Settings</h2>
@@ -1348,10 +1771,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         <button class="btn-outline-danger" onclick="confirmDeleteAccount()">Delete Account</button>
       </div>
     </div>
+    
+<div id="section-system_review" class="profile-section">
+  <div class="section-header">
+    <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Rate LAKBAY</h2>
+  </div>
+  
+  <div id="existingSystemReview" style="display:none; margin-bottom:24px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
+      <div>
+        <h3 style="font-family:'Playfair Display', serif; font-size:18px; color:var(--forest); margin-bottom:4px;">Your Platform Review</h3>
+        <p style="font-size:12px; color:var(--stone);">Thank you for helping us grow the hiking community.</p>
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="enableEditSystemReview()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px; margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit Review
+      </button>
+    </div>
+    <div id="systemReviewExistingContent"></div>
+  </div>
+  
+  <div id="systemReviewForm">
+    <div class="story-summary" style="margin-bottom:24px;">
+      <div class="story-icon">🌿</div>
+      <div class="story-text">
+        <strong>Help us improve!</strong> Your feedback directly impacts how we build Lakbay. We're constantly listening to our hiking community to make trail discovery safer and more enjoyable.
+      </div>
+    </div>
+    
+    <div class="field-group">
+      <label class="field-label">Overall Experience</label>
+      <div class="star-rating" id="systemStars">
+        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+      </div>
+      <input type="hidden" id="systemRating" value="0">
+    </div>
+    
+    <div class="field-group">
+      <label class="field-label">Review Headline</label>
+      <input type="text" id="systemTitle" class="inp" placeholder="Summarize your experience (e.g., Best hiking platform!)">
+    </div>
+    
+    <div class="field-group">
+      <label class="field-label">Detailed Feedback</label>
+      <textarea id="systemComment" class="inp" rows="5" placeholder="What do you love about LAKBAY? What can we improve? Your thoughts on guides, booking, and trail info..."></textarea>
+    </div>
+    
+    <div style="display:flex; justify-content:flex-end; margin-top:24px;">
+      <button class="btn btn-primary" style="padding: 14px 40px;" onclick="submitSystemReview()" id="submitSystemBtn">Submit Review</button>
+    </div>
+
+    <div class="info-note" style="margin-top:32px;">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>
+        <strong>Privacy Note:</strong> Your review will be visible on our homepage after admin verification. Only hikers with completed adventures can share their story to ensure authentic community feedback.
+      </div>
+    </div>
+  </div>
+</div>
   </main>
+  
 </div>
 
-<!-- MODALS -->
 
 <!-- Edit Profile Modal -->
 <div class="modal-bg" id="editProfileModal">
@@ -1401,9 +1882,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         <div class="inp-label" style="margin-top:16px;">Confirm New Password</div>
         <input type="password" name="confirm_password" id="confirm_password" class="inp" required>
         <div id="passwordError" class="error-message"></div>
-        <?php if (isset($passwordSuccess)): ?>
-          <div class="success-message"><?php echo $passwordSuccess; ?></div>
-        <?php endif; ?>
         <button type="submit" class="btn btn-primary btn-full" style="margin-top:24px;">Update Password</button>
       </div>
     </form>
@@ -1453,41 +1931,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   </div>
 </div>
 
-<!-- Delete Account Modal -->
-<div class="modal-bg" id="deleteAccountModal">
-  <div class="modal" style="max-width: 400px;">
-    <div class="modal-hdr">
-      <div class="modal-title">Delete Account</div>
-      <button class="modal-close" onclick="closeModal('deleteAccountModal')">✕</button>
-    </div>
+<!-- Confirm Modals -->
+<div class="modal-bg" id="logoutModal">
+  <div class="modal" style="max-width: 380px;">
+    <div class="modal-hdr"><div class="modal-title">Confirm Logout</div><button class="modal-close" onclick="closeModal('logoutModal')">✕</button></div>
     <div class="modal-body">
-      <p style="margin-bottom: 12px;">Are you absolutely sure?</p>
-      <p style="font-size: 12px; color: var(--stone); margin-bottom: 20px;">This action <strong>cannot be undone</strong>. This will permanently delete your account and all associated data including bookings, saved mountains, and hiking history.</p>
+      <p style="margin-bottom: 8px;">Are you sure you want to logout?</p>
       <div class="confirm-buttons">
-        <button class="btn btn-outline" onclick="closeModal('deleteAccountModal')">Cancel</button>
-        <form method="POST" action="delete_account.php" style="flex:1;" onsubmit="return confirm('This cannot be undone. Delete your account permanently?');">
-          <button type="submit" class="btn btn-primary" style="background: var(--danger); color: white;">Delete Permanently</button>
-        </form>
+        <button class="btn btn-outline" onclick="closeModal('logoutModal')">Cancel</button>
+        <form method="POST" action="logout.php" style="flex:1;"><button type="submit" class="btn btn-primary">Logout</button></form>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Logout Modal -->
-<div class="modal-bg" id="logoutModal">
-  <div class="modal" style="max-width: 380px;">
-    <div class="modal-hdr">
-      <div class="modal-title">Confirm Logout</div>
-      <button class="modal-close" onclick="closeModal('logoutModal')">✕</button>
-    </div>
-    <div class="modal-body">
-      <p style="margin-bottom: 8px;">Are you sure you want to logout?</p>
-      <p style="font-size: 12px; color: var(--stone);">You'll need to login again to access your account.</p>
-      <div class="confirm-buttons">
-        <button class="btn btn-outline" onclick="closeModal('logoutModal')">Cancel</button>
-        <form method="POST" action="logout.php" style="flex:1;">
-          <button type="submit" class="btn btn-primary">Logout</button>
-        </form>
+<div class="modal-bg" id="confirmModal">
+  <div class="modal" style="max-width: 400px; text-align: center;">
+    <div class="modal-body" style="padding: 40px 28px;">
+      <div style="font-size: 48px; margin-bottom: 20px;" id="confirmIcon">⚠️</div>
+      <div class="modal-title" id="confirmTitle" style="margin-bottom: 12px;">Are you sure?</div>
+      <p id="confirmText" style="font-size: 14px; color: var(--stone); margin-bottom: 28px;"></p>
+      <div style="display: flex; gap: 12px;">
+        <button class="btn btn-outline btn-full" onclick="closeConfirmModal()">Cancel</button>
+        <button class="btn btn-primary btn-full" id="confirmBtn">Proceed</button>
       </div>
     </div>
   </div>
@@ -1496,11 +1962,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 <div class="toast" id="toast"></div>
 
 <script>
-  // Sidebar navigation
   function initSidebarNavigation() {
     const links = document.querySelectorAll('.sidebar-link[data-section]');
-    const sections = ['personal', 'history', 'saved', 'location', 'settings'];
-    
+    const sections = ['history', 'personal', 'saved', 'badges', 'settings', 'system_review'];
     function showSection(sectionId) {
       sections.forEach(s => {
         const section = document.getElementById(`section-${s}`);
@@ -1508,170 +1972,358 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       });
       const activeSection = document.getElementById(`section-${sectionId}`);
       if(activeSection) activeSection.classList.add('active-section');
-      
       links.forEach(link => {
-        if(link.getAttribute('data-section') === sectionId) {
-          link.classList.add('active');
-        } else {
-          link.classList.remove('active');
-        }
+        if(link.getAttribute('data-section') === sectionId) link.classList.add('active');
+        else link.classList.remove('active');
       });
     }
-    
     links.forEach(link => {
-      link.addEventListener('click', (e) => {
+      link.addEventListener('click', () => {
         const section = link.getAttribute('data-section');
         if(section) showSection(section);
       });
     });
   }
 
-  function goBack() {
-    if (document.referrer && document.referrer.includes(window.location.hostname)) {
-      window.history.back();
-    } else {
-      window.location.href = "explore.php";
-    }
+  function closeModal(modalId) { document.getElementById(modalId).classList.remove('open'); }
+  function openEditModal() { document.getElementById('editProfileModal').classList.add('open'); }
+  function openChangePasswordModal() { document.getElementById('changePasswordModal').classList.add('open'); }
+  function openAddSavedModal() { document.getElementById('addSavedModal').classList.add('open'); }
+  function openConfirm(title, text, onConfirm, icon = '⚠️', confirmText = 'Proceed', isDanger = true) {
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmText').textContent = text;
+    document.getElementById('confirmIcon').textContent = icon;
+    const btn = document.getElementById('confirmBtn');
+    btn.textContent = confirmText;
+    btn.style.background = isDanger ? 'var(--danger)' : 'var(--forest)';
+    btn.onclick = () => { onConfirm(); closeConfirmModal(); };
+    document.getElementById('confirmModal').classList.add('open');
   }
-
-  function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('open');
-  }
-
-  function openEditModal() {
-    document.getElementById('editProfileModal').classList.add('open');
-  }
-
-  function openChangePasswordModal() {
-    document.getElementById('changePasswordModal').classList.add('open');
-    // Clear form fields
-    document.getElementById('current_password').value = '';
-    document.getElementById('new_password').value = '';
-    document.getElementById('confirm_password').value = '';
-    const errorDiv = document.getElementById('passwordError');
-    if (errorDiv) errorDiv.innerHTML = '';
-  }
-
-  function openAddSavedModal() {
-    document.getElementById('addSavedModal').classList.add('open');
-  }
-
-  function confirmDeleteAccount() {
-    document.getElementById('deleteAccountModal').classList.add('open');
-  }
-
-  function validatePasswordForm() {
-    const newPassword = document.getElementById('new_password').value;
-    const confirmPassword = document.getElementById('confirm_password').value;
-    const errorDiv = document.getElementById('passwordError');
-    
-    // Password validation
-    if (newPassword.length < 8) {
-      errorDiv.innerHTML = 'Password must be at least 8 characters.';
-      return false;
-    }
-    if (!/[A-Z]/.test(newPassword)) {
-      errorDiv.innerHTML = 'Password must contain at least one uppercase letter.';
-      return false;
-    }
-    if (!/[0-9]/.test(newPassword)) {
-      errorDiv.innerHTML = 'Password must contain at least one number.';
-      return false;
-    }
-    if (!/[^a-zA-Z0-9]/.test(newPassword)) {
-      errorDiv.innerHTML = 'Password must contain at least one special character.';
-      return false;
-    }
-    if (newPassword !== confirmPassword) {
-      errorDiv.innerHTML = 'New passwords do not match.';
-      return false;
-    }
-    
-    errorDiv.innerHTML = '';
-    return true;
-  }
-
-  // Location tracking
-  let locationEnabled = localStorage.getItem('locationEnabled') === 'true';
-  const locationToggle = document.getElementById('locationToggle');
-  const locationMsg = document.getElementById('locationStatusMsg');
-  
-  if (locationToggle) {
-    locationToggle.checked = locationEnabled;
-  }
-  
-  function updateLocationMsg() {
-    if (locationEnabled) {
-      locationMsg.innerHTML = "Location tracking is ACTIVE. You'll get trail-specific alerts & route suggestions.";
-      if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition((pos) => {
-          locationMsg.innerHTML += `<br><span style="font-size:10px;">Last known: ${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}</span>`;
-        }, () => {});
-      }
-    } else {
-      locationMsg.innerHTML = "Location sharing is OFF. Turn on to enable smart safety features and trail tracking.";
-    }
-  }
-  
-  if (locationToggle) {
-    locationToggle.addEventListener('change', (e) => {
-      locationEnabled = e.target.checked;
-      localStorage.setItem('locationEnabled', locationEnabled);
-      updateLocationMsg();
-      showToast(locationEnabled ? "Location tracking enabled" : "Location tracking disabled");
-    });
-  }
-  
-  updateLocationMsg();
-
-  // Two-factor toggle
-  const twoFactorToggle = document.getElementById('twoFactorToggle');
-  if (twoFactorToggle) {
-    twoFactorToggle.addEventListener('change', async (e) => {
-      const enabled = e.target.checked;
-      // You can implement AJAX to update two_factor_enabled in database
-      showToast(enabled ? "Two-factor authentication enabled" : "Two-factor authentication disabled");
-    });
-  }
-
-  function showToast(msg) {
+  function closeConfirmModal() { document.getElementById('confirmModal').classList.remove('open'); }
+  function showToast(msg, type = 'info') {
     const toast = document.getElementById('toast');
-    toast.innerText = msg;
+    toast.textContent = msg;
+    toast.className = `toast ${type}`;
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 2500);
+    setTimeout(() => toast.classList.remove('show'), 3000);
   }
-
-  // Display success/error messages from PHP
-  <?php if (isset($successMessage)): ?>
-    showToast("<?php echo addslashes($successMessage); ?>");
-  <?php endif; ?>
-  
-  <?php if (isset($passwordSuccess)): ?>
-    showToast("<?php echo addslashes($passwordSuccess); ?>");
-    closeModal('changePasswordModal');
-  <?php endif; ?>
-  
-  <?php if (isset($errors) && !empty($errors)): ?>
-    showToast("<?php echo addslashes(implode(', ', $errors)); ?>");
-  <?php endif; ?>
-  
-  <?php if (isset($passwordErrors) && !empty($passwordErrors)): ?>
-    showToast("<?php echo addslashes(implode(', ', $passwordErrors)); ?>");
-  <?php endif; ?>
-
-  // Modal background click to close
-  document.querySelectorAll('.modal-bg').forEach(bg => {
-    bg.addEventListener('click', function(e) {
-      if (e.target === bg) bg.classList.remove('open');
-    });
-  });
-
-  // Logout button
-  document.getElementById('logoutBtn')?.addEventListener('click', () => {
-    document.getElementById('logoutModal').classList.add('open');
-  });
 
   initSidebarNavigation();
+
+  // Journey Map
+  let journeyMap = null;
+  const historyData = <?php echo json_encode($historyItems); ?>;
+  function initJourneyMap() {
+    if (journeyMap) return;
+    const validHikes = historyData.filter(h => h.lat && h.lng && (h.status === 'completed' || h.status === 'active'));
+    const center = validHikes.length > 0 ? [validHikes[0].lat, validHikes[0].lng] : [14.1333, 120.9167];
+    journeyMap = L.map('journeyMap', { zoomControl: false, attributionControl: false }).setView(center, 10);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(journeyMap);
+    const hikeIcon = L.divIcon({
+        className: 'custom-div-icon',
+        html: "<div style='background-color: #c9a84c; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;'></div>",
+        iconSize: [12, 12], iconAnchor: [6, 6]
+    });
+    const bounds = [];
+    validHikes.forEach(hike => {
+        L.marker([hike.lat, hike.lng], { icon: hikeIcon }).addTo(journeyMap).bindPopup(`<strong>${hike.mountain_name}</strong><br>${hike.date}`);
+        bounds.push([hike.lat, hike.lng]);
+    });
+    if (bounds.length > 1) journeyMap.fitBounds(bounds, { padding: [30, 30] });
+  }
+
+  document.querySelector('[data-section="history"]').addEventListener('click', () => setTimeout(initJourneyMap, 100));
+  if (document.getElementById('section-history').classList.contains('active-section')) setTimeout(initJourneyMap, 100);
+
+  function exportHikingJourney() {
+    const region = document.getElementById('exportRegion');
+    showToast("📸 Capturing your journey...", "info");
+    setTimeout(() => {
+        html2canvas(region, { useCORS: true, allowTaint: true, backgroundColor: '#faf7f2', scale: 2 }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `LAKBAY_Journey_<?php echo addslashes($currentUser['name']); ?>.jpg`;
+            link.href = canvas.toDataURL('image/jpeg', 0.9);
+            link.click();
+            showToast("✨ Journey exported as JPG!", "success");
+        });
+    }, 500);
+  }
+
+  function loadBadges() {
+    fetch('../api/get_user_badges.php').then(r => r.json()).then(data => {
+        if (data.success && data.badges.length > 0) {
+            document.getElementById('badgesContainer').innerHTML = data.badges.map(badge => `
+                <div class="badge-card ${badge.count > 1 ? 'duplicate' : ''}" onclick="showToast('${badge.name} earned ${badge.count}x times!')">
+                    <div class="badge-icon">${badge.icon}</div>
+                    <div class="badge-name">${badge.name}</div>
+                    <div class="badge-description">${badge.description || 'Achievement unlocked!'}</div>
+                    ${badge.count > 1 ? `<div class="badge-earned-count">Earned ${badge.count}x times</div>` : ''}
+                    <div class="badge-earned-date">${badge.dates[0]}</div>
+                    ${badge.count > 1 && badge.dates.length > 1 ? `<div class="badge-earned-date" style="font-size: 8px;">+ ${badge.dates.length - 1} more</div>` : ''}
+                </div>
+            `).join('');
+        } else {
+            document.getElementById('badgesContainer').innerHTML = '<div class="empty-state">No badges yet. Start hiking!</div>';
+        }
+    }).catch(err => {
+        console.error('Error loading badges:', err);
+        document.getElementById('badgesContainer').innerHTML = '<div class="empty-state">Unable to load badges</div>';
+    });
+}
+  document.querySelector('[data-section="badges"]').addEventListener('click', loadBadges);
+
+ function showHikeDetails(hike) {
+    // Generate different memory note based on hike status
+    let memoryNote = '';
+    let showHikeAgain = false;
+    
+    switch(hike.status) {
+        case 'completed':
+            memoryNote = '✨ What an incredible journey! The summit view was breathtaking, and every step was worth it. This mountain will always hold a special place in your heart. 🏔️';
+            showHikeAgain = true;
+            break;
+        case 'active':
+            memoryNote = '🌟 Your adventure is still unfolding! The trail awaits, and new memories are being made with every step. Keep going! 🥾';
+            showHikeAgain = true;
+            break;
+        case 'pending':
+            memoryNote = '⏳ Your planned adventure is coming soon! The mountains are waiting for you. Get ready for an unforgettable experience! 📅';
+            showHikeAgain = true;
+            break;
+        case 'cancelled':
+            memoryNote = ''; // No memory note for cancelled hikes
+            showHikeAgain = false;
+            break;
+        default:
+            memoryNote = 'Every summit reached is a victory. The mountains called, and you answered.';
+            showHikeAgain = true;
+    }
+    
+    const modalHtml = `
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-hdr">
+                <div class="modal-title">${hike.mountain_name}</div>
+                <button class="modal-close" onclick="closeModal('hikeDetailModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+                    <div class="history-status status-${hike.status}">${hike.status.toUpperCase()}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Date</div>
+                    <div class="info-value">${new Date(hike.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Location</div>
+                    <div class="info-value">${hike.location}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Type</div>
+                    <div class="info-value">${hike.type}</div>
+                </div>
+                ${hike.booking_number ? `
+                <div class="info-row">
+                    <div class="info-label">Booking ID</div>
+                    <div class="info-value" style="font-family: monospace;">${hike.booking_number}</div>
+                </div>
+                ` : ''}
+                
+                ${memoryNote ? `
+                <div style="background: linear-gradient(135deg, var(--sky), rgba(201,168,76,0.1)); border-radius: 12px; padding: 16px; margin-top: 20px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--gold);">📖 Memory Note</div>
+                    <p style="font-size: 13px; line-height: 1.6; color: var(--forest);">${memoryNote}</p>
+                </div>
+                ` : ''}
+                
+                ${hike.status === 'cancelled' ? `
+                <div style="background: rgba(192,57,43,0.1); border-radius: 12px; padding: 16px; margin-top: 20px; border-left: 3px solid var(--danger);">
+                    <div style="font-weight: 600; margin-bottom: 4px; color: var(--danger);">⚠️ Cancelled Adventure</div>
+                    <p style="font-size: 12px; color: var(--stone);">This hike was cancelled. We hope you can reschedule and conquer this peak another time! 🌄</p>
+                </div>
+                ` : ''}
+                
+                <div style="margin-top: 24px; display: flex; gap: 12px;">
+                    <button class="btn btn-outline btn-full" onclick="closeModal('hikeDetailModal')">Close</button>
+                    ${showHikeAgain && hike.status !== 'cancelled' ? `
+                    <button class="btn btn-primary btn-full" onclick="window.location.href='explore.php'">
+                        🏔️ Hike Again
+                    </button>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    let m = document.getElementById('hikeDetailModal');
+    if (!m) {
+        m = document.createElement('div');
+        m.id = 'hikeDetailModal';
+        m.className = 'modal-bg';
+        document.body.appendChild(m);
+    }
+    m.innerHTML = modalHtml;
+    m.classList.add('open');
+    m.onclick = (e) => { if (e.target === m) m.classList.remove('open'); };
+}
+  function confirmCancelHike(formId) {
+    openConfirm('Cancel Hike', 'Cancel this booking?', () => document.getElementById(formId).submit(), '🗑️', 'Yes, Cancel');
+  }
+
+  function confirmRemoveSaved(formId) {
+    openConfirm('Remove Saved', 'Remove from saved peaks?', () => document.getElementById(formId).submit(), '❓', 'Remove');
+  }
+
+  document.getElementById('logoutBtn')?.addEventListener('click', () => document.getElementById('logoutModal').classList.add('open'));
+  document.querySelectorAll('.modal-bg').forEach(bg => bg.addEventListener('click', (e) => { if(e.target === bg) bg.classList.remove('open'); }));
+
+
+// ── SYSTEM REVIEW FUNCTIONS ──
+let editingSystemReview = false;
+let existingSystemReviewData = null;
+
+function initSystemStars() {
+    document.querySelectorAll('#systemStars span').forEach(star => {
+        star.addEventListener('click', function() {
+            const val = this.getAttribute('data-val');
+            document.getElementById('systemRating').value = val;
+            const stars = document.querySelectorAll('#systemStars span');
+            stars.forEach(s => {
+                s.classList.toggle('active', s.getAttribute('data-val') <= val);
+            });
+        });
+    });
+}
+
+function checkExistingSystemReview() {
+    fetch('../api/get_system_review.php', {
+        method: 'GET',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success && result.review) {
+            existingSystemReviewData = result.review;
+            displayExistingSystemReview(existingSystemReviewData);
+            document.getElementById('systemReviewForm').style.display = 'none';
+            document.getElementById('existingSystemReview').style.display = 'block';
+        } else {
+            document.getElementById('systemReviewForm').style.display = 'block';
+            document.getElementById('existingSystemReview').style.display = 'none';
+        }
+    })
+    .catch(err => console.error('Error checking system review:', err));
+}
+
+function displayExistingSystemReview(review) {
+    const contentDiv = document.getElementById('systemReviewExistingContent');
+    const statusLabel = review.status === 'approved' ? 'Approved' : (review.status === 'pending' ? 'Pending Approval' : 'Rejected');
+    const statusClass = review.status;
+    
+    const rating = parseInt(review.rating);
+    const activeStars = '<span class="active">★</span>'.repeat(rating);
+    const inactiveStars = '<span>★</span>'.repeat(5 - rating);
+    
+    contentDiv.innerHTML = `
+        <div class="review-data-row">
+            <span class="review-data-label">Your Rating</span>
+            <div class="star-rating readonly">
+                ${activeStars}${inactiveStars}
+            </div>
+        </div>
+        <div class="review-data-row">
+            <span class="review-data-label">Review Title</span>
+            <div class="review-data-value" style="font-weight:700;">${review.title || 'No title provided'}</div>
+        </div>
+        <div class="review-data-row">
+            <span class="review-data-label">Your Feedback</span>
+            <div class="review-data-value">${review.comment}</div>
+        </div>
+        <div style="margin-top:24px; padding-top:16px; border-top:1px solid rgba(16,6,0,0.06); display:flex; justify-content:space-between; align-items:center;">
+            <div class="status-badge ${statusClass}">
+                ${review.status === 'approved' ? '✅' : (review.status === 'pending' ? '⏳' : '❌')} ${statusLabel}
+            </div>
+            <span style="font-size:11px; color:var(--stone);">Submitted on ${new Date(review.created_at).toLocaleDateString()}</span>
+        </div>
+    `;
+}
+
+function enableEditSystemReview() {
+    editingSystemReview = true;
+    document.getElementById('existingSystemReview').style.display = 'none';
+    document.getElementById('systemReviewForm').style.display = 'block';
+    
+    if (existingSystemReviewData) {
+        // Pre-fill stars
+        const stars = document.querySelectorAll('#systemStars span');
+        stars.forEach(star => {
+            const val = parseInt(star.getAttribute('data-val'));
+            if (val <= existingSystemReviewData.rating) {
+                star.classList.add('active');
+            }
+        });
+        document.getElementById('systemRating').value = existingSystemReviewData.rating;
+        document.getElementById('systemTitle').value = existingSystemReviewData.title || '';
+        document.getElementById('systemComment').value = existingSystemReviewData.comment;
+        document.getElementById('submitSystemBtn').textContent = 'Update Review';
+    }
+}
+
+function submitSystemReview() {
+    const rating = parseInt(document.getElementById('systemRating').value);
+    const title = document.getElementById('systemTitle').value.trim();
+    const comment = document.getElementById('systemComment').value.trim();
+    
+    if (rating === 0) {
+        showToast('Please select a rating', 'error');
+        return;
+    }
+    if (!comment) {
+        showToast('Please write your feedback', 'error');
+        return;
+    }
+    
+    const btn = document.getElementById('submitSystemBtn');
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+    
+    fetch('../api/save_system_review.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({
+            rating: rating,
+            title: title,
+            comment: comment,
+            review_id: existingSystemReviewData?.id || null,
+            is_edit: editingSystemReview
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('✓ Review submitted! Awaiting admin approval.', 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showToast(result.message || 'Error submitting review', 'error');
+            btn.disabled = false;
+            btn.textContent = editingSystemReview ? 'Update Review' : 'Submit Review';
+        }
+    })
+    .catch(err => {
+        console.error('Error:', err);
+        showToast('Network error. Please try again.', 'error');
+        btn.disabled = false;
+        btn.textContent = editingSystemReview ? 'Update Review' : 'Submit Review';
+    });
+}
+
+// Load system review when section is clicked
+document.querySelector('[data-section="system_review"]').addEventListener('click', () => {
+    setTimeout(() => {
+        checkExistingSystemReview();
+        initSystemStars();
+    }, 100);
+});
+
 </script>
 </body>
 </html>

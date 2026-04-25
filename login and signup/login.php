@@ -54,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LAKBAY — Sign In</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -301,7 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .field-wrapper {
       position: relative;
     }
-    .field-wrapper svg {
+    .field-icon {
       position: absolute;
       left: 16px;
       top: 50%;
@@ -334,7 +335,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .field-input:focus + .field-focus-line { width: 100%; }
     .field-input::placeholder { color: var(--sage); }
 
-    .field-wrapper:focus-within svg { stroke: var(--gold); }
+    .field-wrapper:focus-within .field-icon { stroke: var(--gold); }
 
     .eye-toggle {
       position: absolute;
@@ -593,6 +594,115 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     @media (max-width: 420px) {
       .form-panel { padding: 32px 20px; }
     }
+    .social-row {
+  display: grid;
+  gap: 12px;
+  justify-content: center;
+}
+.social-btn.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--white);
+  border: 1.5px solid rgba(13,5,0,0.1);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--forest);
+  text-decoration: none;
+  position: relative;
+}
+.social-btn.disabled:hover {
+  border-color: rgba(13,5,0,0.1);
+  background: var(--white);
+  transform: none;
+}
+
+.coming-soon-tooltip {
+  position: absolute;
+  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--forest);
+  color: var(--gold);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  font-family: 'DM Mono', monospace;
+  z-index: 10;
+}
+.social-btn.disabled:hover .coming-soon-tooltip {
+  opacity: 1;
+}
+
+/* Dark mode support for tooltip */
+@media (max-width: 900px) {
+  .social-btn.disabled {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.12);
+    color: var(--white);
+  }
+  .social-btn.disabled:hover {
+    background: rgba(255,255,255,0.08);
+  }
+  .coming-soon-tooltip {
+    background: var(--white);
+    color: var(--forest);
+  }
+}
+
+/* Back button */
+.back-button {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--stone);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  z-index: 10;
+}
+.back-button:hover {
+  color: var(--forest);
+  transform: translateX(-2px);
+}
+.back-button svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+
+/* Dark mode for back button on mobile */
+@media (max-width: 900px) {
+  .back-button {
+    top: 20px;
+    left: 20px;
+    color: rgba(255,255,255,0.6);
+  }
+  .back-button:hover {
+    color: var(--white);
+  }
+}
+
   </style>
 </head>
 <body>
@@ -641,6 +751,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <!-- RIGHT FORM PANEL -->
   <div class="form-panel">
+    <a href="../index.php" class="back-button">
+      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to Home
+    </a>
     <div class="form-inner">
 
       <p class="form-eyebrow">Welcome back</p>
@@ -658,7 +772,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="field-group">
           <label class="field-label" for="loginEmail">Email address</label>
           <div class="field-wrapper">
-            <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <svg class="field-icon" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             <input type="email" id="loginEmail" name="email" class="field-input" placeholder="you@example.com" autocomplete="email" value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
           </div>
           <p class="field-error" id="emailError">Please enter a valid email.</p>
@@ -667,7 +781,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="field-group">
           <label class="field-label" for="loginPassword">Password</label>
           <div class="field-wrapper">
-            <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <svg class="field-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <input type="password" id="loginPassword" name="password" class="field-input" placeholder="Enter your password" autocomplete="current-password">
             <button type="button" class="eye-toggle" onclick="togglePwd('loginPassword', this)">
               <svg viewBox="0 0 24 24" id="eyeLogin"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -687,22 +801,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </form>
 
       <div class="divider">
-        <div class="divider-line"></div>
-        <span class="divider-text">or continue with</span>
-        <div class="divider-line"></div>
-      </div>
+  <div class="divider-line"></div>
+  <span class="divider-text">or continue with</span>
+  <div class="divider-line"></div>
+</div>
 
-      <div class="social-row">
-        <a href="#" class="social-btn" onclick="socialLogin('google')">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-          Google
-        </a>
-        <a href="#" class="social-btn" onclick="socialLogin('facebook')">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-          Facebook
-        </a>
-      </div>
-
+<div class="social-row" style="grid-template-columns: 1fr;">
+  <div class="social-btn disabled" style="position:relative; opacity:0.6; cursor:not-allowed;">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+    Google
+    <span class="coming-soon-tooltip">Coming soon</span>
+  </div>
+</div>
     </div>
   </div>
 </div>

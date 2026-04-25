@@ -129,6 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LAKBAY — Create Account | Nasugbu Trails</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -614,6 +615,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
       .form-title, .form-eyebrow, .form-subtitle { color: var(--mist) !important; }
       .form-subtitle { color: rgba(232,226,216,0.6) !important; }
+      .form-subtitle a { color: var(--white) !important; border-color: var(--gold-light); }
       .step-dot:not(.active):not(.done) { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.4); }
       .step-line { background: rgba(255,255,255,0.1); }
       .step-label { color: rgba(255,255,255,0.35); }
@@ -622,7 +624,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .field-input { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); color: white; }
       .field-input::placeholder { color: rgba(255,255,255,0.3); }
       .field-input:focus { background: rgba(255,255,255,0.12); }
-      .region-select { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); color: white; }
+      .region-select { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); color: white; }
+      .region-select option { background: var(--forest); color: white; }
       .level-card { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); }
       .level-card.selected { background: rgba(255,255,255,0.95); border-color: white; }
       .level-card.selected .level-name { color: var(--forest); }
@@ -632,10 +635,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .level-desc { color: rgba(255,255,255,0.4); }
       .level-icon svg { stroke: var(--mist); }
       .btn-back { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.6); }
-      .terms-check { filter: invert(1) hue-rotate(180deg) brightness(0.85); }
-      .custom-check { background: transparent; }
-      .terms-text { color: rgba(255,255,255,0.55); }
-      .terms-text a { color: white; }
+      .terms-check { filter: none; }
+      .custom-check { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.3); }
+      .terms-text { color: rgba(255,255,255,0.65); }
+      .terms-text a { color: var(--gold-light); border-color: var(--gold-light); }
       .pwd-rule { color: rgba(255,255,255,0.4); }
       .pwd-rule.met { color: var(--success); }
       .pwd-strength-bar { background: rgba(255,255,255,0.1); }

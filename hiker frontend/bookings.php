@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
 }
 
 
-// Fetch current user details if logged in
+
 $currentUser = null;
 $userInitial = 'J';
 $currentUserId = null;
@@ -39,7 +39,7 @@ if (isset($_SESSION['user_id'])) {
         $currentUser = $stmt->fetch();
         
         if ($currentUser) {
-            $user_name = $currentUser['name'];
+            $user_name = $currentUser['name'];  // This should now be "Pedro Hiker" for user ID 4
             $nameParts = explode(' ', trim($currentUser['name']));
             $userInitial = '';
             foreach ($nameParts as $part) {
@@ -52,11 +52,14 @@ if (isset($_SESSION['user_id'])) {
     }
 }
 
-// --- Helper function to get mountains from database ---
 function getMountainsFromDB($pdo) {
     $mountains = [];
     try {
-        $stmt = $pdo->query("SELECT id, name, location, difficulty, image, fee, elevation FROM mountains WHERE status = 'Open' ORDER BY name");
+        $stmt = $pdo->query("
+            SELECT id, name, location, difficulty, image, fee, 
+                   registration_fee, environmental_fee, elevation 
+            FROM mountains WHERE status = 'Open' ORDER BY name
+        ");
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             // Map database fields to match the JavaScript expected format
             $mountains[] = [
@@ -66,8 +69,8 @@ function getMountainsFromDB($pdo) {
                 'difficulty' => strtolower($row['difficulty']),
                 'image' => $row['image'] ?? 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60',
                 'fees' => [
-                    'regFee' => intval($row['fee'] ?? 150),
-                    'envFee' => 120,
+                    'regFee' => intval($row['registration_fee'] ?? 150),
+                    'envFee' => intval($row['environmental_fee'] ?? 120),
                     'guideDay' => 900,
                     'guideON' => 1600,
                     'campFee' => 50,
@@ -86,7 +89,8 @@ function getMountainsFromDB($pdo) {
             ['id'=>1,'name'=>'Mt. Batulao','location'=>'Nasugbu, Batangas','difficulty'=>'moderate','image'=>'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60','fees'=>['regFee'=>150,'envFee'=>120,'guideDay'=>900,'guideON'=>1600,'campFee'=>50,'parkDay'=>100,'parkON'=>150]],
             ['id'=>2,'name'=>'Mt. Talamitam','location'=>'Nasugbu, Batangas','difficulty'=>'easy','image'=>'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=200&q=60','fees'=>['regFee'=>100,'envFee'=>0,'guideDay'=>700,'guideON'=>1100,'campFee'=>0,'parkDay'=>80,'parkON'=>80]],
             ['id'=>3,'name'=>'Mt. Apayang','location'=>'Batangas','difficulty'=>'hard','image'=>'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200&q=60','fees'=>['regFee'=>200,'envFee'=>0,'guideDay'=>1200,'guideON'=>2000,'campFee'=>100,'parkDay'=>0,'parkON'=>0]],
-            ['id'=>4,'name'=>'Mt. Lantik','location'=>'Alfonso, Cavite','difficulty'=>'moderate','image'=>'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=200&q=60','fees'=>['regFee'=>130,'envFee'=>100,'guideDay'=>900,'guideON'=>1500,'campFee'=>0,'parkDay'=>100,'parkON'=>100]]
+            ['id'=>4,'name'=>'Mt. Lantik','location'=>'Alfonso, Cavite','difficulty'=>'moderate','image'=>'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=200&q=60','fees'=>['regFee'=>130,'envFee'=>100,'guideDay'=>900,'guideON'=>1500,'campFee'=>0,'parkDay'=>100,'parkON'=>100]],
+            ['id'=>5,'name'=>'Mountain Trilogy','location'=>'Nasugbu, Batangas','difficulty'=>'hard','image'=>'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60','fees'=>['regFee'=>350,'envFee'=>300,'guideDay'=>2500,'guideON'=>4000,'campFee'=>150,'parkDay'=>200,'parkON'=>250]]
         ];
     }
     return $mountains;
@@ -213,21 +217,22 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
         
         // Get joined hikes (where user is in booking_hikers)
         $stmt = $pdo->prepare("
-            SELECT 
-                b.id, b.booking_number, b.mountain_id, b.guide_id,
-                b.hike_date as date, b.hike_type as type, 'joined' as status,
-                b.number_of_hikers as pax, b.total_amount as totalFee,
-                m.name as mountain,
-                u.name as guideName,
-                bh.hiker_name as joinedAs
-            FROM booking_hikers bh
-            JOIN bookings b ON bh.booking_id = b.id
-            JOIN mountains m ON b.mountain_id = m.id
-            JOIN guides g ON b.guide_id = g.user_id
-            JOIN users u ON g.user_id = u.id
-            WHERE bh.hiker_name = ? AND b.user_id != ?
-        ");
-        $stmt->execute([$currentUserName, $currentUserId]);
+    SELECT 
+        b.id, b.booking_number, b.mountain_id, b.guide_id,
+        b.hike_date as date, b.hike_type as type, 'joined' as status,
+        b.number_of_hikers as pax, b.total_amount as totalFee,
+        m.name as mountain,
+        u.name as guideName,
+        bh.hiker_name as joinedAs
+    FROM booking_hikers bh
+    JOIN bookings b ON bh.booking_id = b.id
+    JOIN mountains m ON b.mountain_id = m.id
+    JOIN guides g ON b.guide_id = g.user_id
+    JOIN users u ON g.user_id = u.id
+    WHERE bh.hiker_name = ? AND b.user_id != ?
+");
+// Use the current user's name from the database, not the session variable
+$stmt->execute([$currentUserName, $currentUserId]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             // Use actual booking number for joined hikes too
@@ -266,7 +271,22 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
 // Get data from database
 $dbMountains = getMountainsFromDB($pdo);
 $dbGuides = getGuidesFromDB($pdo);
-$dbUserBookings = getUserBookingsFromDB($pdo, $currentUserId, $user_name);
+$dbUserBookings = getUserBookingsFromDB($pdo, $currentUserId, $currentUser ? $currentUser['name'] : 'Guest');
+
+// ── AUTO-FINISH FALLBACK ──
+// Mark any 'active' hikes older than 24 hours as completed (safety net)
+try {
+    $pdo->exec("
+        UPDATE bookings 
+        SET status = 'finished',
+            special_requests = CONCAT(IFNULL(special_requests, ''), ' [Auto-finished by system after 24h]')
+        WHERE status = 'active' 
+          AND hike_date < DATE_SUB(NOW(), INTERVAL 1 DAY)
+    ");
+} catch (PDOException $e) {
+    // Silently fail — not critical
+    error_log('Auto-finish fallback error: ' . $e->getMessage());
+}
 
 // Handle AJAX Actions (Cancel, Nudge, Replace Guide, etc.)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
@@ -534,7 +554,11 @@ $stmt->execute([$newDate, $notes, $currentTime, $numericId, $currentUserId]);
    
     if ($action === 'get_existing_reviews') {
         $bookingId = $_POST['booking_id'] ?? '';
-        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+        
+        $stmt = $pdo->prepare("SELECT id FROM bookings WHERE booking_number = ?");
+        $stmt->execute([$bookingId]);
+        $booking = $stmt->fetch();
+        $numericId = $booking ? $booking['id'] : 0;
         
         $response = ['success' => true, 'mountain_review' => null, 'guide_review' => null];
         
@@ -568,14 +592,14 @@ $stmt->execute([$newDate, $notes, $currentTime, $numericId, $currentUserId]);
             if (!$data || !$currentUserId) throw new Exception('Invalid data');
             
             $bookingId = $data['booking_id'];
-            $numericId = preg_replace('/[^0-9]/', '', $bookingId);
             
             // Get booking details
-            $stmt = $pdo->prepare("SELECT mountain_id, guide_id FROM bookings WHERE id = ?");
-            $stmt->execute([$numericId]);
+            $stmt = $pdo->prepare("SELECT id, mountain_id, guide_id FROM bookings WHERE booking_number = ?");
+            $stmt->execute([$bookingId]);
             $booking = $stmt->fetch();
             
             if (!$booking) throw new Exception('Booking not found');
+            $numericId = $booking['id'];
             
             // Handle Mountain Review
             if ($data['mountain_review']) {
@@ -671,6 +695,8 @@ $currentUserIdJS = json_encode($currentUserId);
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>LAKBAY — Bookings</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="shared.css">
+ <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* ── CSS RESET & VARIABLES ── */
@@ -805,7 +831,7 @@ body {
   background: transparent; color: var(--forest);
   border: 1.5px solid rgba(26,46,26,0.2);
 }
-.btn-outline:hover { background: var(--sky); border-color: var(--forest); }
+.btn-outline:hover { background: var(--sky); border-color: var(--forest); color: var(--forest); }
 .btn-danger { background: #fce4ec; color: var(--danger); border: 1.5px solid rgba(192,57,43,0.2); }
 .btn-danger:hover { background: var(--danger); color: white; }
 .btn-full { width: 100%; }
@@ -879,7 +905,7 @@ body {
 @media (max-width: 768px) { .bookings-grid { grid-template-columns: 1fr; } }
 
 /* ── PAGE TABS ── */
-.page-tabs { display: flex; border-bottom: 2px solid rgba(16,6,0,0.08); margin-bottom: 28px; }
+.page-tabs { display: flex; border-bottom: 2px solid rgba(16,6,0,0.08); margin-bottom: 0; }
 .page-tab {
   padding: 12px 24px; font-size: 14px; font-weight: 600; color: var(--stone);
   cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: .2s;
@@ -887,6 +913,148 @@ body {
 }
 .page-tab svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2; fill: none; }
 .page-tab.active { color: var(--forest); border-color: var(--forest); }
+
+/* ── FILTER TOOLBAR ── */
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0 20px;
+  flex-wrap: wrap;
+}
+.search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 360px;
+}
+.search-wrap svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px; height: 16px;
+  stroke: var(--stone); stroke-width: 2; fill: none;
+  pointer-events: none;
+}
+.search-input {
+  width: 100%;
+  padding: 10px 14px 10px 40px;
+  border: 1.5px solid rgba(16,6,0,0.1);
+  border-radius: 50px;
+  background: var(--white);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px;
+  color: var(--forest);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.search-input::placeholder { color: var(--stone); opacity: 0.6; }
+.search-input:focus {
+  border-color: var(--forest);
+  box-shadow: 0 0 0 3px rgba(26,46,26,0.08);
+}
+.search-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: rgba(16,6,0,0.08);
+  border: none;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--stone);
+  font-size: 12px;
+  line-height: 1;
+  transition: background 0.15s;
+}
+.search-clear:hover { background: rgba(16,6,0,0.16); }
+.search-clear.show { display: flex; }
+
+.filter-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  flex-shrink: 0;
+  max-width: 100%;
+  padding-bottom: 2px;
+}
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-chip {
+  padding: 7px 16px;
+  border-radius: 50px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  cursor: pointer;
+  border: 1.5px solid rgba(16,6,0,0.1);
+  background: var(--white);
+  color: var(--stone);
+  white-space: nowrap;
+  transition: all 0.18s ease;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.filter-chip:hover { border-color: var(--forest); color: var(--forest); }
+.filter-chip.active {
+  background: var(--forest);
+  color: var(--cream);
+  border-color: var(--forest);
+}
+.filter-chip .chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px; height: 18px;
+  border-radius: 50px;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 0 5px;
+}
+.filter-chip.active .chip-count {
+  background: rgba(255,255,255,0.2);
+  color: var(--cream);
+}
+.filter-chip:not(.active) .chip-count {
+  background: rgba(16,6,0,0.06);
+  color: var(--stone);
+}
+.filter-no-results {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--stone);
+}
+.filter-no-results svg {
+  width: 40px; height: 40px;
+  stroke: var(--stone); stroke-width: 1.5; fill: none;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+.filter-no-results p {
+  font-size: 14px; font-weight: 600; margin-bottom: 4px;
+}
+.filter-no-results span {
+  font-size: 12px; opacity: 0.7;
+}
+
+@media (max-width: 600px) {
+  .filter-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .search-wrap { max-width: 100%; min-width: unset; }
+}
 
 /* ── BOOKING CARD ── */
 .booking-card {
@@ -1261,51 +1429,237 @@ body {
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
+/* Full-width slot above the 2-col grid */
+.today-hike-slot {
+  grid-column: 1 / -1;
+}
+ 
+/* Ambient pulse behind the card */
+@keyframes todayGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(26,46,26,0.0),  0 8px 40px rgba(16,6,0,0.14); }
+  50%       { box-shadow: 0 0 0 8px rgba(26,46,26,0.06), 0 8px 40px rgba(16,6,0,0.14); }
+}
+ 
+.today-hike-card {
+  position: relative;
+  background: var(--white);
+  border-radius: 20px;
+  border: 2px solid var(--forest);
+  overflow: hidden;
+  animation: todayGlow 3s ease-in-out infinite;
+  transition: transform .2s;
+}
+.today-hike-card:hover { transform: translateY(-2px); }
+ 
+/* Forest-green top stripe */
+.today-hike-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--forest) 0%, var(--sage) 60%, var(--gold) 100%);
+}
+ 
+/* Subtle diagonal texture on the banner half */
+.today-banner {
+  background: var(--forest);
+  padding: 18px 24px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+ 
+.today-icon-ring {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  border: 1.5px solid rgba(255,255,255,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  animation: pulse-ring 2.4s cubic-bezier(0.4,0,0.6,1) infinite;
+}
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0   rgba(255,255,255,0.35); }
+  70%  { box-shadow: 0 0 0 12px rgba(255,255,255,0);    }
+  100% { box-shadow: 0 0 0 0   rgba(255,255,255,0);     }
+}
+ 
+.today-banner-text { flex: 1; min-width: 0; }
+.today-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 3px;
+}
+.today-headline {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(17px, 3vw, 21px);
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+ 
+/* Countdown chip */
+.today-countdown {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 30px;
+  padding: 6px 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.9);
+  flex-shrink: 0;
+}
+.today-countdown svg {
+  width: 13px; height: 13px;
+  stroke: rgba(255,255,255,0.7);
+  fill: none; stroke-width: 2;
+}
+ 
+/* Card body — reuses existing booking-card styles */
+.today-body {
+  padding: 16px 20px 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px 20px;
+  align-items: start;
+}
+ 
+.today-details { min-width: 0; }
+ 
+.today-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--stone);
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.today-meta svg {
+  width: 12px; height: 12px;
+  stroke: var(--sage); fill: none; stroke-width: 2;
+  flex-shrink: 0;
+}
+.today-meta .sep { color: rgba(16,6,0,0.2); }
+ 
+/* Guide row inside today card */
+.today-guide {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--sky);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+ 
+/* CTA area */
+.today-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 140px;
+}
+ 
+/* START HIKE button — bigger, more prominent in today card */
+.btn-start-hike {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 20px;
+  border-radius: 50px;
+  background: var(--forest);
+  color: var(--cream);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: background .18s, transform .15s, box-shadow .18s;
+  box-shadow: 0 4px 16px rgba(26,46,26,0.28);
+  white-space: nowrap;
+}
+.btn-start-hike:hover {
+  background: #243824;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(26,46,26,0.36);
+}
+.btn-start-hike:active { transform: scale(0.97); }
+.btn-start-hike svg {
+  width: 15px; height: 15px;
+  fill: var(--cream); flex-shrink: 0;
+}
+ 
+/* Fee note */
+.today-fee {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--forest);
+}
+.today-fee span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--stone);
+}
+ 
+/* Urgency strip at the bottom of the banner */
+.today-urgency {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 20px;
+  background: rgba(201,168,76,0.08);
+  border-top: 1px solid rgba(201,168,76,0.18);
+  font-size: 12px;
+  color: var(--bark);
+  font-weight: 500;
+}
+.today-urgency svg {
+  width: 13px; height: 13px;
+  stroke: var(--gold); fill: none; stroke-width: 2;
+  flex-shrink: 0;
+}
+ 
+@media (max-width: 560px) {
+  .today-body {
+    grid-template-columns: 1fr;
+  }
+  .today-cta {
+    flex-direction: row;
+    min-width: 0;
+  }
+  .btn-start-hike { flex: 1; }
+  .today-countdown { display: none; }
+}
+ 
+
 </style>
 </head>
 <body>
 
-<!-- DESKTOP NAV -->
-<nav class="desktop-nav">
-  <a href="../index.php" class="brand">
-    <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#100600" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#100600" opacity=".35"/></svg>
-    LAKBAY
-  </a>
-  <div class="tabs">
-    <a href="explore.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Explore
-    </a>
-    <a href="bookings.php" class="tab-link active">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings
-    </a>
-    <a href="quiz.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Quiz
-    </a>
-    <a href="messages.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages
-    </a>
-  </div>
-  <a href="hikerProfile.php" class="user-btn">J</a>
-</nav>
+<?php
+// Set current page for navbar highlighting
+$currentPage = 'bookings'; // Change per page: 'explore', 'bookings', 'quiz', 'messages', 'hikerProfile'
+?>
+<?php include __DIR__ . '/../includes/navbar.php'; ?>
 
-
-<!-- ── MOBILE NAV ── -->
-<nav class="mobile-nav">
-  <div class="mobile-nav-inner">
-    <a href="explore.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span>Explore</span></a>
-    <a href="bookings.php" class="mob-nav-item active"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Bookings</span></a>
-    <a href="quiz.php" class="mob-nav-item quiz-center"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></a>
-    <a href="messages.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Messages</span></a>
-    <a href="hikerProfile.php" class="mob-nav-item">
-      <?php if ($currentUser && $currentUser['avatar']): ?>
-        <div class="avatar-small" style="background-image: url('<?= htmlspecialchars($currentUser['avatar']) ?>');"></div>
-      <?php else: ?>
-        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <?php endif; ?>
-      <span>Profile</span>
-    </a>
-  </div>
-</nav>
 <!-- PAGE -->
 <div class="bookings-layout">
   <div class="container">
@@ -1326,6 +1680,25 @@ body {
       </div>
       <div class="page-tab" onclick="switchTab('history',this)">
         <svg viewBox="0 0 24 24"><path d="M12 8v4l3 3M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/></svg>History
+      </div>
+    </div>
+
+    <!-- Filter Toolbar -->
+    <div class="filter-toolbar" id="filterToolbar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" class="search-input" id="searchInput" placeholder="Search mountain, guide, or booking ID…" oninput="onSearchInput(this.value)">
+        <button class="search-clear" id="searchClear" onclick="clearSearch()">&times;</button>
+      </div>
+      <div class="filter-chips" id="filterChips">
+        <div class="filter-chip active" data-filter="all" onclick="setFilter('all',this)">All <span class="chip-count" id="countAll">0</span></div>
+        <div class="filter-chip" data-filter="pending" onclick="setFilter('pending',this)">Pending <span class="chip-count" id="countPending">0</span></div>
+        <div class="filter-chip" data-filter="confirmed" onclick="setFilter('confirmed',this)">Confirmed <span class="chip-count" id="countConfirmed">0</span></div>
+        <div class="filter-chip" data-filter="active" onclick="setFilter('active',this)">Active <span class="chip-count" id="countActive">0</span></div>
+        <div class="filter-chip" data-filter="joined" onclick="setFilter('joined',this)">Joined <span class="chip-count" id="countJoined">0</span></div>
+        <!-- History-only chips (hidden by default) -->
+        <div class="filter-chip" data-filter="finished" onclick="setFilter('finished',this)" style="display:none;">Finished <span class="chip-count" id="countFinished">0</span></div>
+        <div class="filter-chip" data-filter="cancelled" onclick="setFilter('cancelled',this)" style="display:none;">Cancelled <span class="chip-count" id="countCancelled">0</span></div>
       </div>
     </div>
 
@@ -1634,12 +2007,29 @@ let foundHike = null;
 let lastCreatedId = '';
 
 function openBookingFlow() {
-  flowState = {step:1,mtn:null,type:'day',pax:1,solo:true,hikers:["Jamie Rivera"],bookerName:"Jamie Rivera",guide:null,date:'',time:'',camping:false};
-  currentStep = 0; flowMode = null; foundHike = null;
+  // Use the actual logged-in user's name from PHP
+  const loggedInUserName = currentUserName;
+  flowState = {
+    step: 1,
+    mtn: null,
+    type: 'day',
+    pax: 1,
+    solo: true,
+    hikers: [loggedInUserName],
+    bookerName: loggedInUserName,
+    guide: null,
+    date: '',
+    time: '',
+    camping: false
+  };
+  currentStep = 0;
+  flowMode = null;
+  foundHike = null;
   document.getElementById('flowSteps').style.display = 'none';
   document.getElementById('bookingModal').classList.add('open');
   renderStep(0);
 }
+
 function closeBookingModal() { document.getElementById('bookingModal').classList.remove('open'); }
 
 function updateStepIndicators(n) {
@@ -2127,30 +2517,241 @@ function copyBookingId() {
 function closeSuccess() { document.getElementById('successModal').classList.remove('open'); }
 function closeJoinSuccess() { document.getElementById('joinSuccessModal').classList.remove('open'); }
 
-function renderBookings() {
+function todayCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
+    const typeMap = { day: 'Day Hike · 12am–3pm', late: 'Late Hike · 4pm–12am', overnight: 'Overnight' };
+    const isJoined = !!b.joinedFromId;
+ 
+    // Live clock countdown to hike time
+    let countdownHTML = '';
+    if (b.time) {
+        const [hh, mm] = b.time.split(':').map(Number);
+        const hikeMs = new Date();
+        hikeMs.setHours(hh, mm, 0, 0);
+        const diff = hikeMs - Date.now();
+        if (diff > 0) {
+            const hrs  = Math.floor(diff / 3600000);
+            const mins = Math.floor((diff % 3600000) / 60000);
+            countdownHTML = `
+                <div class="today-countdown">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    ${hrs > 0 ? hrs + 'h ' : ''}${mins}m away
+                </div>`;
+        } else {
+            countdownHTML = `
+                <div class="today-countdown" style="background:rgba(201,168,76,0.2);border-color:rgba(201,168,76,0.4);color:var(--gold);">
+                    <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    Hike time now!
+                </div>`;
+        }
+    }
+ 
+    const startUrl = `active-hike.php?booking_id=${b.db_id || b.id}`;
+ 
+    // Secondary actions: message guide
+    const msgBtn = `
+        <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}"
+           class="btn btn-outline btn-sm">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Message Guide
+        </a>`;
+ 
+    // Cancel/Leave logic: only pending gets cancel, joined gets leave, confirmed/active get nothing
+    let cancelBtn = '';
+    if (isJoined) {
+        cancelBtn = `<button class="btn btn-danger btn-sm"
+                   onclick="cancelBooking('${b.id}','leave')">
+               <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+               Leave
+           </button>`;
+    } else if (b.status === 'pending') {
+        cancelBtn = `<button class="btn btn-danger btn-sm"
+                   onclick="cancelBooking('${b.id}')">
+               <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+               Cancel
+           </button>`;
+    }
+    // confirmed / active → no cancel button
+ 
+    const feeNote = !isJoined
+        ? `<div class="today-fee">₱${b.totalFee.toLocaleString()} <span>pay after hike</span></div>`
+        : `<div style="font-size:12px;color:var(--stone);">Fees managed by organizer</div>`;
+ 
+    // Status badge colour override for today (show confirmed green prominently)
+    const statusLabel = { pending:'Pending', confirmed:'Confirmed', active:'Active', joined:'Joined' }[b.status] || b.status;
+ 
+    return `
+    <div class="today-hike-card">
+ 
+      <!-- Green top banner -->
+      <div class="today-banner">
+        <div class="today-icon-ring">⛰️</div>
+        <div class="today-banner-text">
+          <div class="today-eyebrow">🟢 You have a hike today</div>
+          <div class="today-headline">${b.mountain}</div>
+        </div>
+        ${countdownHTML}
+      </div>
+ 
+      <!-- Urgency strip -->
+      <div class="today-urgency">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Head to the trailhead and tap <strong style="margin:0 3px;">Start Hike</strong> to begin GPS tracking &amp; earn badges.
+      </div>
+ 
+      <!-- Body -->
+      <div class="today-body">
+ 
+        <!-- Left: details -->
+        <div class="today-details">
+          <div class="today-meta">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            ${b.date}${b.time ? ' · ' + b.time : ''}
+            <span class="sep">·</span>
+            ${typeMap[b.type] || b.type}
+            <span class="sep">·</span>
+            <span class="badge status-${b.status}">${statusLabel}</span>
+            ${isJoined ? '<span class="joined-badge">Joined</span>' : ''}
+          </div>
+ 
+          <div class="today-guide">
+            <div class="guide-av-sm">${b.guideInitials}</div>
+            <div style="flex:1;">
+              <div style="font-weight:700;font-size:13px;color:var(--forest);">${b.guideName}</div>
+              <div style="font-size:11px;color:var(--stone);">
+                ${b.pax} hiker(s) · #${b.id}${isJoined ? ' · via ' + b.joinedFromId : ''}
+              </div>
+            </div>
+          </div>
+ 
+          ${feeNote}
+ 
+          <!-- Secondary actions inline -->
+          <div class="booking-actions" style="margin-top:12px;">
+            ${msgBtn}
+            ${cancelBtn}
+          </div>
+        </div>
+ 
+        <!-- Right: big CTA -->
+        <div class="today-cta">
+          <a href="${startUrl}" class="btn-start-hike">
+            <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Start Hike
+          </a>
+          <div style="font-size:10px;text-align:center;color:var(--stone);line-height:1.4;padding:0 4px;">
+            Enables GPS tracking &amp; checkpoint badges
+          </div>
+        </div>
+ 
+      </div>
+    </div>`;
+}
+function renderBookings(){
     const cc = document.getElementById('currentBookings');
     const hc = document.getElementById('historyBookings');
     const now = Date.now(), FIVE_H = 18000000, TWENTY_M = 1200000, MAX_N = 10;
-    
-    // Current = pending, confirmed, active, joined (excluding cancelled/completed)
-    const current = bookings.filter(b => {
-        const status = b.status;
-        return status !== 'cancelled' && status !== 'completed' && status !== 'finished';
+ 
+    // Split into today vs the rest
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+ 
+    function isHikeToday(b) {
+        try {
+            if (!b.date) return false;
+            const d = new Date(b.date);
+            if (isNaN(d.getTime())) return false;
+            d.setHours(0, 0, 0, 0);
+            return d.getTime() === todayDate.getTime();
+        } catch(e) { return false; }
+    }
+ 
+    // Separate arrays for different purposes
+    const regularStatuses = ['pending', 'confirmed', 'active', 'joined'];  // For non-today current
+    const todayStatuses = ['confirmed', 'active'];  // For today section only
+    const historyStatuses = ['cancelled', 'completed', 'finished'];
+
+    // ── Apply search filter ──
+    const q = searchQuery.toLowerCase().trim();
+    function matchesSearch(b) {
+        if (!q) return true;
+        const fields = [
+            b.mountain, b.guideName, b.id, b.date, b.type,
+            b.status, b.joinedFromId,
+            ...(b.hikers || [])
+        ].filter(Boolean);
+        return fields.some(f => String(f).toLowerCase().includes(q));
+    }
+ 
+    // ── Count per status (for the filter chips) ──
+    const currentTab = document.getElementById('tab-current').style.display !== 'none';
+    const allBookingsForTab = bookings.filter(b =>
+        currentTab ? regularStatuses.includes(b.status) : historyStatuses.includes(b.status)
+    ).filter(matchesSearch);
+
+    // Update chip counts
+    const counts = {};
+    allBookingsForTab.forEach(b => {
+        counts[b.status] = (counts[b.status] || 0) + 1;
     });
-    
-    // History = cancelled, completed, finished
-    const history = bookings.filter(b => {
-        const status = b.status;
-        return status === 'cancelled' || status === 'completed' || status === 'finished';
+    document.getElementById('countAll').textContent = allBookingsForTab.length;
+    ['pending','confirmed','active','joined','finished','cancelled'].forEach(s => {
+        const el = document.getElementById('count' + s.charAt(0).toUpperCase() + s.slice(1));
+        if (el) el.textContent = counts[s] || 0;
     });
-    
-    cc.innerHTML = current.length ? 
-        current.map(b => bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N)).join('') : 
-        emptyState();
-    
-    hc.innerHTML = history.length ? 
-        history.map(b => bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N)).join('') : 
-        `<div class="empty-state" style="grid-column:1/-1;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><p>No booking history yet</p></div>`;
+
+    // ── Apply status filter ──
+    function matchesFilter(b) {
+        if (activeFilter === 'all') return true;
+        return b.status === activeFilter;
+    }
+
+    // "Today" cards: only confirmed or active (NOT pending)
+    const todayBookings = bookings.filter(b =>
+        todayStatuses.includes(b.status) && isHikeToday(b) && matchesSearch(b) && matchesFilter(b)
+    );
+ 
+    // Regular current: regularStatuses bookings NOT today (includes pending)
+    const current = bookings.filter(b =>
+        regularStatuses.includes(b.status) && !isHikeToday(b) && matchesSearch(b) && matchesFilter(b)
+    );
+ 
+    const history = bookings.filter(b =>
+        historyStatuses.includes(b.status) && matchesSearch(b) && matchesFilter(b)
+    );
+ 
+    // Build current tab HTML
+    const todayHTML = todayBookings.map(b => `
+        <div class="today-hike-slot">
+            ${todayCard(b, now, FIVE_H, TWENTY_M, MAX_N)}
+        </div>
+    `).join('');
+ 
+    const regularHTML = current.length
+        ? current.map(b => bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N)).join('')
+        : '';
+ 
+    if (!todayHTML && !regularHTML) {
+        if (q || activeFilter !== 'all') {
+            cc.innerHTML = noFilterResults();
+        } else {
+            cc.innerHTML = emptyState();
+        }
+    } else {
+        cc.innerHTML = todayHTML + regularHTML;
+    }
+ 
+    if (history.length) {
+        hc.innerHTML = history.map(b => bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N)).join('');
+    } else {
+        if (q || activeFilter !== 'all') {
+            hc.innerHTML = noFilterResults();
+        } else {
+            hc.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                 <p>No booking history yet</p>
+               </div>`;
+        }
+    }
 }
 
 function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
@@ -2252,20 +2853,69 @@ function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
           <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">
             <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel
           </button>
-        ` : ((b.status === 'completed' || b.status === 'finished') ? `
-  ${(!b.hasReviewed) ? `
+        ` : (b.status === 'confirmed' || b.status === 'active') ? `
+          <button class="btn btn-outline btn-sm" onclick="viewActiveHikeDetails('${b.id}')">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/></svg> View Details
+          </button>
+` 
+          : (b.status === 'completed' || b.status === 'finished' || b.status === 'cancelled') ? `
+          <button class="btn btn-outline btn-sm" onclick="viewActiveHikeDetails('${b.id}')">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/></svg> View Details
+          </button>
+  ${(!b.hasReviewed && (b.status === 'completed' || b.status === 'finished')) ? `
     <button class="btn btn-primary btn-sm" onclick="openReviewModal('${b.id}')">
       <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg> Write Review
     </button>
-  ` : `
+  ` : (b.hasReviewed && (b.status === 'completed' || b.status === 'finished')) ? `
     <button class="btn btn-outline btn-sm" onclick="openReviewModal('${b.id}')">
       <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg> Edit Review
     </button>
-  `}
-` : ''))}
+  ` : ''}
+` : '')}
       </div>
     </div>
   `;
+}
+// ── VIEW ACTIVE/CONFIRMED HIKE DETAILS (for future hikes) ──
+function viewActiveHikeDetails(bookingId) {
+  const b = bookings.find(x => x.id === bookingId);
+  if (!b) return;
+  
+  const typeMap = { day: 'Day Hike (12am–3pm)', late: 'Late Hike (4pm–12am)', overnight: 'Overnight' };
+  const statusLabel = { pending: 'Pending', confirmed: 'Confirmed', active: 'Active', joined: 'Joined' }[b.status] || b.status;
+  const canStart = false; // Not today, so cannot start
+  
+  document.getElementById('vjTitle').textContent = b.mountain;
+  document.getElementById('vjBody').innerHTML = `
+    <div class="summary-box">
+      <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M4 10l8-6 8 6"/><rect x="4" y="10" width="16" height="12" rx="2"/></svg><span class="sr-label">Mountain</span><span class="sr-val">${b.mountain}</span></div>
+      <div class="summary-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/></svg><span class="sr-label">Date & Time</span><span class="sr-val">${b.date}${b.time ? ' at ' + b.time : ''}</span></div>
+      <div class="summary-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/></svg><span class="sr-label">Type</span><span class="sr-val">${typeMap[b.type] || b.type}</span></div>
+      <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="sr-label">Guide</span><span class="sr-val">${b.guideName}</span></div>
+      <div class="summary-row"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/></svg><span class="sr-label">Booking ID</span><span class="sr-val" style="font-family:'DM Mono',monospace;">${b.id}</span></div>
+      <div class="summary-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg><span class="sr-label">Status</span><span class="sr-val"><span class="badge status-${b.status}">${statusLabel}</span></span></div>
+    </div>
+    <div class="detail-section-label">Hiker List</div>
+    <div class="detail-hikers-list">
+      ${b.hikers.map(h => `<div class="detail-hiker-chip"><div class="dh-av">${h.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>${h}</div>`).join('')}
+    </div>
+    ${!b.hasReviewed && (b.status === 'completed' || b.status === 'finished') ? `
+    <div class="info-note" style="margin-top: 16px;">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>Don't forget to leave a review for this hike!</span>
+    </div>` : ''}
+    ${(b.status === 'pending' || b.status === 'confirmed' || b.status === 'active' || b.status === 'joined') ? `
+    <div class="info-note" style="margin-top:14px;">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>This hike is scheduled for ${b.date}. The Start Hike button will appear on the day of your hike.</span>
+    </div>` : ''}
+    <div style="margin-top: 20px;">
+      <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-full" style="margin-bottom: 8px;">
+        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Message Guide
+      </a>
+    </div>`;
+  
+  document.getElementById('viewJoinedModal').classList.add('open');
 }
 
 function updateNudgeDisplay() {
@@ -2552,6 +3202,30 @@ function switchTab(tab,el){
   el.classList.add('active');
   document.getElementById('tab-current').style.display=tab==='current'?'block':'none';
   document.getElementById('tab-history').style.display=tab==='history'?'block':'none';
+
+  // Reset filter & search
+  activeFilter = 'all';
+  searchQuery = '';
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchClear').classList.remove('show');
+
+  // Toggle chip visibility per tab
+  const currentChips = ['pending','confirmed','active','joined'];
+  const historyChips = ['finished','cancelled'];
+  document.querySelectorAll('.filter-chip[data-filter]').forEach(chip => {
+    const f = chip.dataset.filter;
+    if (f === 'all') { chip.style.display = ''; return; }
+    if (tab === 'current') {
+      chip.style.display = currentChips.includes(f) ? '' : 'none';
+    } else {
+      chip.style.display = historyChips.includes(f) ? '' : 'none';
+    }
+  });
+  // Reset active chip
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  document.querySelector('.filter-chip[data-filter="all"]').classList.add('active');
+
+  renderBookings();
 }
 
 function emptyState(){return`<div class="empty-state"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><p>No current bookings</p><button class="btn btn-primary" onclick="openBookingFlow()">Book your first hike</button></div>`;}
@@ -2582,7 +3256,6 @@ function createBooking() {
     const total = f.regFee * pax + (f.envFee ? f.envFee * pax : 0) + 
                   (isON ? f.guideON : f.guideDay) + 
                   ((isON && flowState.camping && f.campFee) ? f.campFee * pax : 0);
-
     const nb = {
         mountainId: m.id, mountain: m.name, date: flowState.date,
         time: flowState.time || '08:00', type: flowState.type, status: 'pending',
@@ -3193,6 +3866,42 @@ async function submitReview() {
         btn.disabled = false;
         btn.textContent = editingMtnReview || editingGuideReview ? 'Update Reviews' : 'Post Reviews';
     });
+}
+
+// ── SEARCH & FILTER STATE ──
+let activeFilter = 'all';
+let searchQuery = '';
+
+function setFilter(filter, el) {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    if (el) el.classList.add('active');
+    activeFilter = filter;
+    renderBookings();
+}
+
+function onSearchInput(val) {
+    searchQuery = val;
+    const clearBtn = document.getElementById('searchClear');
+    if (val.trim()) {
+        clearBtn.classList.add('show');
+    } else {
+        clearBtn.classList.remove('show');
+    }
+    renderBookings();
+}
+
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    onSearchInput('');
+    document.getElementById('searchInput').focus();
+}
+
+function noFilterResults() {
+    return `<div class="filter-no-results">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <p>No matching bookings found</p>
+        <span>Try adjusting your search or filters</span>
+    </div>`;
 }
 
 // Initial load

@@ -302,6 +302,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>LAKBAY — Explore</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="shared.css">
+ <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* ── RESET & TOKENS ── */
@@ -941,48 +943,12 @@ svg{display:block;flex-shrink:0;}
 </head>
 <body>
 
-<!-- ── DESKTOP NAV ── -->
-<nav class="desktop-nav">
-  <a href="../index.php" class="brand">
-    <svg viewBox="0 0 32 32" fill="none"><path d="M4 26L10 12L16 20L21 9L28 26H4Z" fill="#100600" opacity=".9"/><path d="M16 20L21 9L28 26H16V20Z" fill="#100600" opacity=".35"/></svg>
-    LAKBAY
-  </a>
-  <div class="tabs">
-    <a href="explore.php" class="tab-link active">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Explore
-    </a>
-    <a href="bookings.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings
-    </a>
-    <a href="quiz.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Quiz
-    </a>
-    <a href="messages.php" class="tab-link">
-      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages
-    </a>
-  </div>
-  <a href="hikerProfile.php" class="user-btn" style="<?= $currentUser && $currentUser['avatar'] ? 'background-image: url(' . htmlspecialchars($currentUser['avatar']) . '); background-size: cover; background-position: center;' : '' ?>">
-    <?= $currentUser && !$currentUser['avatar'] ? htmlspecialchars($userInitial) : ($currentUser && $currentUser['avatar'] ? '' : 'J') ?>
-  </a>
-</nav>
 
-<!-- ── MOBILE NAV ── -->
-<nav class="mobile-nav">
-  <div class="mobile-nav-inner">
-    <a href="explore.php" class="mob-nav-item active"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span>Explore</span></a>
-    <a href="bookings.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Bookings</span></a>
-    <a href="quiz.php" class="mob-nav-item quiz-center"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></a>
-    <a href="messages.php" class="mob-nav-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Messages</span></a>
-    <a href="hikerProfile.php" class="mob-nav-item">
-      <?php if ($currentUser && $currentUser['avatar']): ?>
-        <div class="avatar-small" style="background-image: url('<?= htmlspecialchars($currentUser['avatar']) ?>');"></div>
-      <?php else: ?>
-        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <?php endif; ?>
-      <span>Profile</span>
-    </a>
-  </div>
-</nav>
+<?php
+// Set current page for navbar highlighting
+$currentPage = 'explore'; // Change per page: 'explore', 'bookings', 'quiz', 'messages', 'hikerProfile'
+?>
+<?php include __DIR__ . '/../includes/navbar.php'; ?>
 
 <!-- ── HERO ── -->
 <div class="hero">
@@ -1387,8 +1353,8 @@ function renderGrid(list){
       <div class="mtn-img-wrap">
         <div class="mtn-img" style="background-image:url('${m.image}')"></div>
         <div class="mtn-img-overlay"></div>
-        <div class="mtn-badges"><span class="badge badge-${m.difficulty}">${diffLabel[m.difficulty]||m.difficulty}</span></div>
-        <div class="mtn-crowd">${crowdIcon[m.crowd]||''} ${crowdLabel[m.crowd]||''}</div>
+       <div class="mtn-badges"><span class="badge badge-${m.difficulty}">${diffLabel[m.difficulty]||m.difficulty}</span></div>
+        
       </div>
       <div class="mtn-body">
         <div class="mtn-name">${esc(m.name)}</div>

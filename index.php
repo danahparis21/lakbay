@@ -55,6 +55,7 @@ if (count($recentHikers) >= 3) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>LAKBAY — Your Gateway to the Mountains of Nasugbu</title>
+   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet">
   <style>
     * {
@@ -895,20 +896,45 @@ if (count($recentHikers) >= 3) {
   </div>
 </section>
 
-<!-- Testimonials Section - Dynamic from Database -->
-<section class="section">
+<?php
+// Fetch approved system reviews
+$stmt = $pdo->prepare("
+    SELECT * FROM system_reviews 
+    WHERE status = 'approved' 
+    ORDER BY created_at DESC 
+    LIMIT 6
+");
+$stmt->execute();
+$systemReviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+?>
+
+<!-- What Hikers Say Section -->
+<section class="testimonials">
   <div class="container">
-    <h2 class="section-title">What Hikers Say</h2>
-    <p class="section-subtitle">Real stories from adventurers who found their perfect trail with LAKBAY</p>
-    <div class="testimonial-grid">
-      <?php foreach ($testimonials as $t): ?>
+    <div class="section-header text-center">
+      <h2>What Hikers Say</h2>
+      <p>Real stories from adventurers who found their perfect trail with LAKBAY</p>
+    </div>
+    
+    <div class="testimonials-grid">
+      <?php foreach ($systemReviews as $review): ?>
       <div class="testimonial-card">
-        <div class="testimonial-text">"<?php echo htmlspecialchars($t['text']); ?>"</div>
+        <div class="testimonial-rating">
+          <?php echo str_repeat('★', $review['rating']) . str_repeat('☆', 5 - $review['rating']); ?>
+        </div>
+        <?php if ($review['title']): ?>
+        <h4 class="testimonial-title"><?php echo htmlspecialchars($review['title']); ?></h4>
+        <?php endif; ?>
+        <p class="testimonial-text">"<?php echo htmlspecialchars($review['comment']); ?>"</p>
         <div class="testimonial-author">
-          <div class="author-avatar"><?php echo htmlspecialchars($t['initial']); ?></div>
-          <div class="author-info">
-            <h4><?php echo htmlspecialchars($t['name']); ?></h4>
-            <p><?php echo htmlspecialchars($t['role']); ?></p>
+          <?php if ($review['user_avatar']): ?>
+          <img src="<?php echo htmlspecialchars($review['user_avatar']); ?>" alt="<?php echo htmlspecialchars($review['user_name']); ?>">
+          <?php else: ?>
+          <div class="author-avatar"><?php echo substr($review['user_name'], 0, 1); ?></div>
+          <?php endif; ?>
+          <div>
+            <div class="author-name"><?php echo htmlspecialchars($review['user_name']); ?></div>
+            <div class="author-verified">✓ Verified Hiker</div>
           </div>
         </div>
       </div>
