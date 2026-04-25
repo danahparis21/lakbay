@@ -204,6 +204,24 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
 .nav-item svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.8; flex-shrink: 0; }
 .nav-divider { height: 1px; background: rgba(16,6,0,0.08); margin: 8px 20px; }
 
+/* Log out button - red style */
+.nav-item.logout-red {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  color: #b91c1c;
+}
+.nav-item.logout-red:hover {
+  background: rgba(185, 28, 28, 0.08);
+  color: #b91c1c;
+}
+.nav-item.logout-red svg {
+  stroke: #b91c1c;
+}
+.nav-item.logout-red:hover svg {
+  stroke: #b91c1c;
+}
+
 .sidebar-footer {
   padding: 16px 20px; border-top: 1px solid rgba(16,6,0,0.08);
   display: flex; align-items: center; gap: 10px;
@@ -768,7 +786,7 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
 
 <!-- SIDEBAR - Desktop -->
 <aside class="sidebar" id="sidebar">
-  <a href="#" class="sidebar-brand">
+  <a href="dashboard.php" class="sidebar-brand">
     <div class="sidebar-logo">
       <svg viewBox="0 0 28 28" fill="none"><path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#100600" opacity=".9"/><path d="M14 16L18 8L24 22H14V16Z" fill="#100600" opacity=".35"/></svg>
     </div>
@@ -787,23 +805,28 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span class="nav-text">Dashboard</span>
     </a>
-    <a href="#" class="nav-item active">
+    <a href="bookings_manager.php" class="nav-item active">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       <span class="nav-text">Bookings</span>
     </a>
-    <a href="#" class="nav-item">
+    <a href="payments.php" class="nav-item">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
       <span class="nav-text">Payments</span>
     </a>
     <div class="nav-divider"></div>
-    <div class="nav-label">Reports</div>
-    <a href="#" class="nav-item">
+    <div class="nav-label">Mountain</div>
+    <a href="analytics.php" class="nav-item">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       <span class="nav-text">Analytics</span>
     </a>
-    <a href="#" class="nav-item">
+    <a href="advisories.php" class="nav-item">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
       <span class="nav-text">Advisories</span>
+    </a>
+    <!-- LOG OUT BUTTON - RED STYLE -->
+    <a href="logout.php" class="nav-item logout-red">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      <span class="nav-text">Log out</span>
     </a>
   </nav>
   <div class="sidebar-footer">
@@ -1000,21 +1023,21 @@ function showGreeting() {
   if (hour < 12) greeting = 'Good Morning!';
   else if (hour < 18) greeting = 'Good Afternoon!';
   else greeting = 'Good Evening!';
-  showToast(`${greeting} ${MANAGER.name.split(' ')[0]}!`);
+  showToast(`${greeting} <?= $MANAGER->name ?>!`);
 }
 
 function init() {
   const mountain = <?= json_encode(getManagerMountain()) ?>;
   document.getElementById('mtnBadge').innerHTML = `<div class="mountain-badge-name">${mountain.name}</div><div class="mountain-badge-role">${mountain.location}</div>`;
-  document.getElementById('sfName').textContent = MANAGER.name;
-  document.getElementById('topbarAvatar').textContent = MANAGER.initials;
-  document.getElementById('userAvatar').textContent = MANAGER.initials;
+  document.getElementById('sfName').textContent = '<?= $MANAGER->name ?>';
+  document.getElementById('topbarAvatar').textContent = '<?= $MANAGER->initials ?>';
+  document.getElementById('userAvatar').textContent = '<?= $MANAGER->initials ?>';
 
   allBookings = getMyBookings();
   applyFilters();
   updateStats();
   
-  setTimeout(() => showToast(`Welcome back, ${MANAGER.name.split(' ')[0]}!`), 500);
+  setTimeout(() => showToast(`Welcome back, <?= explode(' ', $MANAGER->name)[0] ?>!`), 500);
 }
 
 function updateStats() {
@@ -1363,7 +1386,7 @@ function saveChanges() {
   if (changesMade) {
     createConfetti();
     showToast('Payment status updated successfully!');
-    addLog(`${MANAGER.name} updated payment status for ${currentBooking.id}`, 'green');
+    addLog(`<?= $MANAGER->name ?> updated payment status for ${currentBooking.id}`, 'green');
   } else {
     showToast('No changes to save');
   }

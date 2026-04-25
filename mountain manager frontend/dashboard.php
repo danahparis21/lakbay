@@ -124,6 +124,24 @@
 .qa-icon svg { width: 18px; height: 18px; stroke: var(--ink); stroke-width: 1.8; }
 .qa-label { font-size: 12px; font-weight: 600; line-height: 1.3; }
 @media (max-width: 640px) { .quick-actions { grid-template-columns: repeat(2, 1fr); } }
+
+/* Logout button style - matches nav-item but with slight difference */
+.nav-item.logout {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  color: #b91c1c;
+}
+.nav-item.logout:hover {
+  background: rgba(185, 28, 28, 0.08);
+  color: #b91c1c;
+}
+.nav-item.logout svg {
+  stroke: #b91c1c;
+}
+.nav-item.logout:hover svg {
+  stroke: #b91c1c;
+}
 </style>
 </head>
 <body>
@@ -165,23 +183,22 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
       <span class="nav-text">Payments</span>
     </a>
-    <a href="hikers.php" class="nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      <span class="nav-text">Hikers</span>
-    </a>
+    <!-- HIKERS BUTTON REMOVED -->
     <div class="nav-divider"></div>
     <div class="nav-label">Mountain</div>
-    <a href="guides.php" class="nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <span class="nav-text">Guides</span>
-    </a>
-    <a href="reports.php" class="nav-item">
+    <!-- GUIDES BUTTON REMOVED -->
+    <a href="analytics.php" class="nav-item">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       <span class="nav-text">Reports</span>
     </a>
     <a href="advisories.php" class="nav-item">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       <span class="nav-text">Advisories</span>
+    </a>
+    <!-- LOG OUT BUTTON ADDED -->
+    <a href="logout.php" class="nav-item logout" id="logoutBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      <span class="nav-text">Log out</span>
     </a>
   </nav>
 
