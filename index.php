@@ -837,8 +837,8 @@ if (count($recentHikers) >= 3) {
       LAKBAY
     </a>
     <div class="nav-actions">
-      <a href="login and signup/login.php" class="btn-login">Log In</a>
-      <a href="login and signup/login.php?action=signup" class="btn-signup">Sign Up</a>
+      <a href="login-and-signup/login.php" class="btn-login">Log In</a>
+      <a href="login-and-signup/login.php?action=signup" class="btn-signup">Sign Up</a>
     </div>
   </div>
 </nav>
@@ -857,7 +857,7 @@ if (count($recentHikers) >= 3) {
     <div class="animated-quote">"Not all who wander are lost"</div>
     <p class="hero-description">Your trusted companion for discovering the perfect mountain trails in Nasugbu, Batangas. Smart recommendations, verified guides, and real-time safety — all in one platform.</p>
     <div class="hero-buttons">
-      <a href="login and signup/login.php?redirect=quiz" class="btn-primary" id="findTrailBtn">Find My Trail</a>
+      <a href="login-and-signup/login.php?redirect=quiz" class="btn-primary" id="findTrailBtn">Find My Trail</a>
       <a href="#" class="btn-secondary" id="exploreMountainsBtn">Explore Nasugbu Mountains →</a>
     </div>
     <div class="hero-stats">

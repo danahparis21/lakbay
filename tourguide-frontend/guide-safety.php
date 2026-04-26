@@ -1,682 +1,899 @@
+<?php
+// guide-safety.php - Safety Page with Alerts Management
+require_once __DIR__ . '/../config/db.php';
+date_default_timezone_set('Asia/Manila');
+session_start();
+
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
+$currentUserId = $_SESSION['user_id'];
+$currentUserName = $_SESSION['name'] ?? $_SESSION['user_name'] ?? '';
+$currentUserRole = $_SESSION['role'] ?? 'guide';
+
+// Get guide record if guide
+$guideId = null;
+try {
+    $stmt = $pdo->prepare("SELECT id FROM guides WHERE user_id = ?");
+    $stmt->execute([$currentUserId]);
+    $guide = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($guide) {
+        $guideId = $guide['id'];
+    }
+} catch (PDOException $e) {
+    error_log("Guide lookup error: " . $e->getMessage());
+}
+
+// Get active booking for this guide
+$activeBooking = null;
+if ($guideId) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT b.*, m.name as mountain_name, m.location as mountain_location
+            FROM bookings b
+            JOIN mountains m ON b.mountain_id = m.id
+            WHERE b.guide_id = ? AND b.status IN ('active', 'confirmed')
+            ORDER BY b.hike_date DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$guideId]);
+        $activeBooking = $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Booking lookup error: " . $e->getMessage());
+    }
+}
+
+// Handle alert creation via POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create_alert') {
+    $title = $_POST['title'] ?? '';
+    $description = $_POST['description'] ?? '';
+    $location = $_POST['location'] ?? '';
+    $trailName = $_POST['trail_name'] ?? '';
+    $type = $_POST['type'] ?? 'safety';
+    $severity = $_POST['severity'] ?? 'info';
+    $latitude = $_POST['latitude'] ?? null;
+    $longitude = $_POST['longitude'] ?? null;
+    $bookingNumber = $_POST['booking_number'] ?? ($activeBooking['booking_reference'] ?? null);
+    $userId = $_POST['user_id'] ?? $currentUserId;
+    
+    // Handle image upload
+    $imageUrl = null;
+    if (isset($_FILES['alert_image']) && $_FILES['alert_image']['error'] === UPLOAD_ERR_OK) {
+        $uploadDir = __DIR__ . '/../uploads/alerts/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+        $ext = pathinfo($_FILES['alert_image']['name'], PATHINFO_EXTENSION);
+        $filename = 'alert_' . time() . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $uploadPath = $uploadDir . $filename;
+        if (move_uploaded_file($_FILES['alert_image']['tmp_name'], $uploadPath)) {
+            $imageUrl = '/uploads/alerts/' . $filename;
+        }
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO alerts (title, description, location, trail_name, type, severity, status, 
+                                reported_by, reporter_name, reporter_role, latitude, longitude, 
+                                booking_number, user_id, image_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+        $stmt->execute([
+            $title, $description, $location, $trailName, $type, $severity,
+            $currentUserId, $currentUserName, $currentUserRole,
+            $latitude, $longitude, $bookingNumber, $userId, $imageUrl
+        ]);
+        $alertId = $pdo->lastInsertId();
+        $success = "Alert created successfully!";
+    } catch (PDOException $e) {
+        $error = "Failed to create alert: " . $e->getMessage();
+    }
+}
+
+// Fetch alerts
+$alerts = [];
+try {
+    $stmt = $pdo->prepare("
+        SELECT a.*, u.name as reporter_name 
+        FROM alerts a
+        LEFT JOIN users u ON a.reported_by = u.id
+        ORDER BY a.created_at DESC
+        LIMIT 50
+    ");
+    $stmt->execute();
+    $alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Alerts fetch error: " . $e->getMessage());
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LAKBAY Guide — Safety</title>
-  <link rel="stylesheet" href="guide-shared.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <style>
-    /* ── BACKGROUND ── */
-    .guide-content {
-      background:
-        radial-gradient(ellipse 50% 40% at 90% 5%, rgba(184,49,42,0.04) 0%, transparent 60%),
-        radial-gradient(ellipse 50% 50% at 5% 90%, rgba(16,6,0,0.03) 0%, transparent 60%);
-    }
-
-    /* ── SAFETY BANNER ── */
-    .safety-banner {
-      background: var(--primary-bg);
-      border-radius: var(--r-2xl);
-      padding: 26px 30px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 24px;
-      gap: 16px;
-      position: relative;
-      overflow: hidden;
-      box-shadow: 0 8px 32px rgba(16,6,0,0.28), 0 2px 8px rgba(16,6,0,0.16);
-    }
-    .safety-banner::before {
-      content: '';
-      position: absolute;
-      top: -50px; right: -50px;
-      width: 200px; height: 200px;
-      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
-      border-radius: 50%;
-      pointer-events: none;
-    }
-    .safety-banner::after {
-      content: '';
-      position: absolute;
-      bottom: -70px; left: 30%;
-      width: 260px; height: 260px;
-      background: radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 70%);
-      border-radius: 50%;
-      pointer-events: none;
-    }
-    .safety-banner-content {
-      position: relative;
-      z-index: 1;
-      flex: 1;
-    }
-    .safety-banner-eyebrow {
-      font-family: 'DM Mono', monospace;
-      font-size: 0.6rem;
-      letter-spacing: 1.8px;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.4);
-      margin-bottom: 6px;
-    }
-    .safety-banner-text h3 {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: white;
-      letter-spacing: -0.3px;
-      margin-bottom: 6px;
-    }
-    .safety-banner-text p {
-      font-size: 0.82rem;
-      color: rgba(255,255,255,0.58);
-      line-height: 1.4;
-    }
-    .safety-banner-pills {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 12px;
-    }
-    .safety-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(255,255,255,0.1);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.16);
-      padding: 5px 12px;
-      border-radius: 40px;
-      font-size: 0.72rem;
-      font-weight: 500;
-      color: rgba(255,255,255,0.85);
-    }
-    .safety-banner-actions {
-      position: relative;
-      z-index: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-    .emergency-big-btn {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      background: rgba(184,49,42,0.92);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255,255,255,0.18);
-      color: white;
-      border-radius: var(--r-lg);
-      padding: 12px 22px;
-      font-size: 0.84rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.18s;
-      box-shadow: 0 4px 20px rgba(184,49,42,0.45);
-      font-family: 'DM Sans', sans-serif;
-      white-space: nowrap;
-    }
-    .emergency-big-btn:hover {
-      background: var(--red);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 28px rgba(184,49,42,0.55);
-    }
-
-    /* ── SESSION SELECTOR ── */
-    .session-select-bar {
-      background: var(--glass-bg);
-      backdrop-filter: var(--glass-blur);
-      -webkit-backdrop-filter: var(--glass-blur);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--r-lg);
-      padding: 13px 18px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
-      box-shadow: var(--glass-shadow);
-    }
-    .session-select-label {
-      font-size: 0.68rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: var(--ink-4);
-      white-space: nowrap;
-    }
-    .session-select-bar select {
-      flex: 1;
-      border: 1.5px solid var(--line);
-      border-radius: var(--r-md);
-      padding: 7px 13px;
-      font-size: 0.82rem;
-      font-family: 'DM Sans', sans-serif;
-      color: var(--ink);
-      background: rgba(255,255,255,0.6);
-      backdrop-filter: blur(4px);
-      outline: none;
-      min-width: 180px;
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B6B63' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 12px center;
-      cursor: pointer;
-      transition: border-color 0.15s;
-    }
-    .session-select-bar select:focus { border-color: var(--primary); outline: none; }
-
-    /* ── SAFETY GRID ── */
-    .safety-layout {
-      display: grid;
-      grid-template-columns: 1fr 300px;
-      gap: 20px;
-    }
-
-    /* ── HIKER SAFETY CARDS ── */
-    .hiker-safety-list { display: flex; flex-direction: column; gap: 10px; }
-    .hiker-safety-card {
-      background: var(--glass-bg);
-      backdrop-filter: var(--glass-blur);
-      -webkit-backdrop-filter: var(--glass-blur);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--r-lg);
-      padding: 14px 16px;
-      display: flex;
-      align-items: center;
-      gap: 13px;
-      transition: all 0.18s;
-      box-shadow: var(--shadow-sm);
-      position: relative;
-      overflow: hidden;
-    }
-    .hiker-safety-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); background: white; }
-    .hiker-safety-card.card-safe   { border-left: 3px solid var(--green); }
-    .hiker-safety-card.card-unsafe { border-left: 3px solid var(--red); }
-    .hiker-safety-card.card-unknown { border-left: 3px solid var(--stone-3); }
-    .hs-avatar {
-      width: 42px; height: 42px;
-      border-radius: 50%;
-      background: var(--primary-soft);
-      color: var(--primary);
-      display: flex; align-items: center; justify-content: center;
-      font-family: 'Playfair Display', serif;
-      font-size: 0.9rem;
-      font-weight: 700;
-      flex-shrink: 0;
-      border: 2px solid rgba(16,6,0,0.08);
-    }
-    .hs-info { flex: 1; min-width: 0; }
-    .hs-name { font-size: 0.87rem; font-weight: 600; color: var(--ink); }
-    .hs-meta { font-size: 0.7rem; color: var(--ink-4); margin-top: 2px; }
-    .hs-checkpoint {
-      font-size: 0.68rem;
-      color: var(--ink-3);
-      margin-top: 4px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .hs-actions { flex-shrink: 0; }
-    .safety-toggle {
-      display: flex;
-      background: var(--stone-2);
-      border-radius: 40px;
-      padding: 3px;
-      gap: 2px;
-    }
-    .stoggle-btn {
-      padding: 5px 12px;
-      border-radius: 40px;
-      border: none;
-      font-size: 0.7rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-      background: transparent;
-      color: var(--ink-3);
-      font-family: 'DM Sans', sans-serif;
-    }
-    .stoggle-btn.active-safe   { background: var(--green); color: white; box-shadow: 0 2px 8px rgba(27,112,69,0.3); }
-    .stoggle-btn.active-unsafe { background: var(--red);   color: white; box-shadow: 0 2px 8px rgba(184,49,42,0.3); }
-
-    /* ── CHECKPOINT CARD ── */
-    .checkpoint-card {
-      background: var(--glass-bg);
-      backdrop-filter: var(--glass-blur);
-      -webkit-backdrop-filter: var(--glass-blur);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--r-xl);
-      padding: 18px 20px;
-      margin-bottom: 16px;
-      box-shadow: var(--glass-shadow);
-    }
-    .cp-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-    }
-    .cp-title {
-      font-family: 'Playfair Display', serif;
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: var(--ink);
-    }
-    .cp-progress-track {
-      position: relative;
-      padding-left: 18px;
-    }
-    .cp-progress-track::before {
-      content: '';
-      position: absolute;
-      left: 7px; top: 8px; bottom: 8px;
-      width: 2px;
-      background: var(--line);
-      border-radius: 1px;
-    }
-    .cp-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 7px 0;
-      position: relative;
-    }
-    .cp-dot {
-      width: 14px; height: 14px;
-      border-radius: 50%;
-      border: 2px solid var(--line);
-      background: white;
-      flex-shrink: 0;
-      margin-left: -18px;
-      z-index: 1;
-      position: relative;
-      transition: all 0.2s;
-    }
-    .cp-dot.reached { background: var(--green); border-color: var(--green); box-shadow: 0 0 0 3px var(--green-lt); }
-    .cp-dot.current { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-lt); }
-    .cp-item-name { font-size: 0.82rem; font-weight: 600; color: var(--ink); }
-    .cp-item-sub  { font-size: 0.66rem; color: var(--ink-4); margin-top: 1px; }
-    .cp-item-count {
-      margin-left: auto;
-      font-size: 0.66rem;
-      font-weight: 600;
-      color: var(--ink-4);
-      white-space: nowrap;
-    }
-
-    /* ── INCIDENT LOG ── */
-    .incident-list { display: flex; flex-direction: column; gap: 8px; }
-    .incident-wrapper {
-      background: var(--glass-bg);
-      backdrop-filter: var(--glass-blur);
-      -webkit-backdrop-filter: var(--glass-blur);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--r-xl);
-      padding: 16px 18px;
-      box-shadow: var(--glass-shadow);
-    }
-    .incident-item {
-      background: rgba(184,49,42,0.06);
-      border: 1px solid rgba(184,49,42,0.12);
-      border-radius: var(--r-md);
-      padding: 11px 13px;
-    }
-    .incident-header { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-    .incident-type { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--red); }
-    .incident-time { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--ink-5); margin-left: auto; }
-    .incident-text { font-size: 0.77rem; color: var(--ink-2); line-height: 1.5; }
-    #noIncidents {
-      font-size: 0.78rem;
-      color: var(--ink-4);
-      padding: 16px 0;
-      text-align: center;
-    }
-
-    /* Mark All Safe btn */
-    .btn-forest {
-      background: var(--green);
-      color: white;
-      box-shadow: 0 3px 10px rgba(27,112,69,0.25);
-    }
-    .btn-forest:hover { background: #155c38; box-shadow: 0 5px 16px rgba(27,112,69,0.35); transform: translateY(-1px); }
-
-    @media (max-width: 1024px) { .safety-layout { grid-template-columns: 1fr; } }
-    @media (max-width: 640px) {
-      .safety-banner { flex-direction: column; align-items: flex-start; }
-      .safety-banner-actions { align-items: flex-start; flex-direction: row; }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LAKBAY Guide - Safety & Alerts</title>
+    <link rel="stylesheet" href="guide-shared.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .safety-container {
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .safety-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        
+        .safety-header h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #100600;
+        }
+        
+        .btn-primary {
+            background: #100600;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary:hover {
+            background: #2a1a0f;
+            transform: translateY(-1px);
+        }
+        
+        .btn-danger {
+            background: #B8312A;
+        }
+        
+        .btn-danger:hover {
+            background: #8B1A14;
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #100600;
+            color: #100600;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border: 1px solid rgba(0,0,0,0.06);
+        }
+        
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #100600;
+        }
+        
+        .stat-card .stat-label {
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+        
+        .alert-filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-btn {
+            padding: 6px 16px;
+            border-radius: 30px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        
+        .filter-btn.active {
+            background: #100600;
+            color: white;
+            border-color: #100600;
+        }
+        
+        .alerts-table-container {
+            background: white;
+            border-radius: 16px;
+            overflow-x: auto;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        
+        .alerts-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+        
+        .alerts-table th,
+        .alerts-table td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .alerts-table th {
+            background: #faf9f7;
+            font-weight: 600;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+        }
+        
+        .alerts-table tr:hover {
+            background: #faf9f7;
+        }
+        
+        .severity-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        
+        .severity-critical { background: rgba(184,49,42,0.15); color: #B8312A; }
+        .severity-high { background: rgba(231,76,60,0.15); color: #E74C3C; }
+        .severity-medium { background: rgba(241,196,15,0.15); color: #F1C40F; }
+        .severity-low { background: rgba(52,152,219,0.15); color: #3498DB; }
+        .severity-info { background: rgba(27,112,69,0.15); color: #1B7045; }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        
+        .status-active { background: #FEF3C7; color: #D97706; }
+        .status-acknowledged { background: #DBEAFE; color: #2563EB; }
+        .status-resolved { background: #D1FAE5; color: #059669; }
+        
+        .alert-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        
+        .action-btn:hover {
+            background: #eee;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.open {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        
+        .modal-content h3 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: #100600;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .modal-buttons button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 30px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        .alert-detail-modal .modal-content {
+            max-width: 600px;
+        }
+        
+        .alert-image {
+            max-width: 100%;
+            border-radius: 12px;
+            margin-top: 12px;
+        }
+        
+        .quick-report {
+            background: linear-gradient(135deg, #100600, #2a1a0f);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+            color: white;
+        }
+        
+        .quick-report h3 {
+            margin-bottom: 12px;
+            font-size: 1rem;
+        }
+        
+        .quick-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .quick-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .quick-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        @media (max-width: 768px) {
+            .safety-container {
+                padding: 16px;
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+    <?php if (isset($_GET['embed']) && $_GET['embed'] == '1'): ?>
+    <style>
+        /* Override styles when embedded inside guide-map.php */
+        .guide-main { margin-left: 0 !important; min-height: auto !important; }
+        .guide-topbar { display: none !important; }
+        body { background: transparent !important; }
+    </style>
+    <?php endif; ?>
 </head>
 <body>
 <div class="guide-app">
-  <aside class="guide-sidebar">
-    <div class="sidebar-logo">
-      <svg viewBox="0 0 28 28" fill="none">
-        <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#100600" opacity="0.9"/>
-        <path d="M14 16L18 8L24 22H14V16Z" fill="#100600" opacity="0.3"/>
-      </svg>
-      <div><div class="sidebar-logo-text">LAKBAY</div><div class="sidebar-logo-sub">Guide Portal</div></div>
-    </div>
-    <nav class="sidebar-nav">
-      <div class="sidebar-section-label">Main</div>
-      <ul>
-        <li><a href="guide-dashboard.html"><i class="fas fa-house"></i> Dashboard</a></li>
-        <li><a href="guide-map.html"><i class="fas fa-map-location-dot"></i> Trail Map</a></li>
-        <li><a href="guide-communication.html"><i class="fas fa-comments"></i> Communication</a></li>
-        <li><a href="guide-safety.html" class="active"><i class="fas fa-shield-halved"></i> Safety</a></li>
-      </ul>
-      <div class="sidebar-divider"></div>
-      <div class="sidebar-section-label">Account</div>
-      <ul><li><a href="guide-profile.html"><i class="fas fa-circle-user"></i> My Profile</a></li></ul>
-    </nav>
-    <div class="sidebar-profile">
-      <div class="sidebar-avatar">JD</div>
-      <div class="sidebar-profile-info">
-        <div class="sidebar-profile-name">John Dela Cruz</div>
-        <div class="sidebar-profile-role">Senior Trail Guide</div>
-      </div>
-    </div>
-  </aside>
-
-  <div class="guide-main">
-    <div class="guide-topbar">
-      <div class="topbar-title">Safety Reporting</div>
-      <div class="topbar-right">
-        <div class="topbar-time" id="liveTime"></div>
-        <button class="topbar-icon-btn" onclick="openModal('incidentModal')" title="Report Incident"><i class="fas fa-circle-exclamation"></i></button>
-      </div>
-    </div>
-
-    <div class="guide-content">
-
-      <!-- SAFETY BANNER -->
-      <div class="safety-banner">
-        <div class="safety-banner-content">
-          <div class="safety-banner-eyebrow"><i class="fas fa-shield-halved" style="margin-right:5px;"></i>Safety Command Center</div>
-          <div class="safety-banner-text">
-            <h3>Hiker Safety Dashboard</h3>
-            <p>Monitor all hikers in real-time and report incidents instantly.</p>
-          </div>
-          <div class="safety-banner-pills">
-            <span class="safety-pill"><i class="fas fa-users" style="font-size:0.7rem;"></i> 3 Active Hikers</span>
-            <span class="safety-pill"><i class="fas fa-location-dot" style="font-size:0.7rem;"></i> Ridge Junction</span>
-            <span class="safety-pill"><i class="fas fa-clock" style="font-size:0.7rem;"></i> In Progress</span>
-          </div>
-        </div>
-        <div class="safety-banner-actions">
-          <button class="emergency-big-btn" onclick="openModal('emergencyModal')">
-            <i class="fas fa-triangle-exclamation"></i> Emergency Alert
-          </button>
-        </div>
-      </div>
-
-      <!-- SESSION SELECTOR -->
-      <div class="session-select-bar">
-        <span class="session-select-label"><i class="fas fa-route" style="margin-right:5px;"></i> Active Hike</span>
-        <select id="sessionSelect" onchange="showToast('Loading hike session…')">
-          <option>BK-001 — Lea Santiago · Mt. Batulao · Apr 25 (3 pax)</option>
-          <option>BK-002 — Ben Torres · Mt. Talamitam · Apr 27 (5 pax)</option>
-          <option>BK-003 — Nina Cruz · Mt. Batulao · Apr 30 (2 pax)</option>
-        </select>
-        <span class="badge badge-green"><span style="width:5px;height:5px;background:var(--green);border-radius:50%;display:inline-block;"></span> In Progress</span>
-      </div>
-
-      <div class="safety-layout">
-        <!-- LEFT: HIKER STATUS -->
-        <div>
-          <div class="section-header">
-            <div class="section-title">Hiker Safety Status</div>
-            <button class="btn btn-forest btn-sm" onclick="markAllSafe()"><i class="fas fa-shield-check"></i> Mark All Safe</button>
-          </div>
-          <div class="hiker-safety-list" id="hikerSafetyList"></div>
-        </div>
-
-        <!-- RIGHT: CHECKPOINT + INCIDENT LOG -->
-        <div style="display:flex;flex-direction:column;gap:16px;">
-
-          <!-- CHECKPOINT PROGRESS -->
-          <div class="checkpoint-card">
-            <div class="cp-header">
-              <div class="cp-title">Trail Checkpoints</div>
-              <span class="badge badge-amber"><i class="fas fa-location-dot" style="font-size:0.55rem;"></i> 2 / 4</span>
+    <div class="guide-main">
+        <div class="guide-topbar">
+            <div class="topbar-title">
+                <i class="fas fa-shield-alt"></i> Safety & Alerts Center
             </div>
-            <div class="cp-progress-track">
-              <div class="cp-item">
-                <div class="cp-dot reached"></div>
-                <div style="flex:1;">
-                  <div class="cp-item-name">Jump-off Point</div>
-                  <div class="cp-item-sub">5:00 AM · All present</div>
-                </div>
-                <div class="cp-item-count" style="color:var(--green);">3/3 ✓</div>
-              </div>
-              <div class="cp-item">
-                <div class="cp-dot reached"></div>
-                <div style="flex:1;">
-                  <div class="cp-item-name">Lower Ridge</div>
-                  <div class="cp-item-sub">6:45 AM · All accounted</div>
-                </div>
-                <div class="cp-item-count" style="color:var(--green);">3/3 ✓</div>
-              </div>
-              <div class="cp-item">
-                <div class="cp-dot current"></div>
-                <div style="flex:1;">
-                  <div class="cp-item-name">Ridge Junction</div>
-                  <div class="cp-item-sub">Current position</div>
-                </div>
-                <div class="cp-item-count" style="color:var(--amber);">2/3 ⚠</div>
-              </div>
-              <div class="cp-item">
-                <div class="cp-dot"></div>
-                <div style="flex:1;">
-                  <div class="cp-item-name">Summit</div>
-                  <div class="cp-item-sub">Est. 9:30 AM</div>
-                </div>
-                <div class="cp-item-count">—</div>
-              </div>
+            <div class="topbar-right">
+                <button class="topbar-icon-btn" onclick="refreshAlerts()" title="Refresh">
+                    <i class="fas fa-rotate"></i>
+                </button>
             </div>
-            <button class="btn btn-outline btn-sm" style="margin-top:12px;width:100%;justify-content:center;" onclick="showToast('Checkpoint logged! ✓')">
-              <i class="fas fa-flag"></i> Log Current Checkpoint
-            </button>
-          </div>
-
-          <!-- INCIDENT LOG -->
-          <div class="incident-wrapper">
-            <div class="section-header" style="margin-bottom:12px;">
-              <div class="section-title" style="margin-bottom:0;">Incident Log</div>
-              <button class="btn btn-ghost btn-sm" onclick="openModal('incidentModal')"><i class="fas fa-plus"></i> Report</button>
-            </div>
-            <div class="incident-list" id="incidentList"></div>
-            <div id="noIncidents" style="font-size:0.78rem;color:var(--ink-4);padding:16px 0;text-align:center;display:none;">
-              <i class="fas fa-check-circle" style="color:var(--green);margin-right:5px;"></i>No incidents reported
-            </div>
-          </div>
-
         </div>
-      </div>
-
+        
+        <div class="safety-container">
+            <!-- Quick Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalAlerts">0</div>
+                    <div class="stat-label">Total Alerts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="activeAlerts">0</div>
+                    <div class="stat-label">Active</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="criticalAlerts">0</div>
+                    <div class="stat-label">Critical</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="resolvedAlerts">0</div>
+                    <div class="stat-label">Resolved</div>
+                </div>
+            </div>
+            
+            <!-- Quick Report Buttons -->
+            <div class="quick-report">
+                <h3><i class="fas fa-bolt"></i> Quick Report</h3>
+                <div class="quick-buttons">
+                    <button class="quick-btn" onclick="openAlertModal('emergency', 'critical')">
+                        <i class="fas fa-ambulance"></i> Emergency
+                    </button>
+                    <button class="quick-btn" onclick="openAlertModal('injury', 'high')">
+                        <i class="fas fa-band-aid"></i> Injury
+                    </button>
+                    <button class="quick-btn" onclick="openAlertModal('lost_hiker', 'high')">
+                        <i class="fas fa-person-walking-arrow-right"></i> Lost Hiker
+                    </button>
+                    <button class="quick-btn" onclick="openAlertModal('weather', 'medium')">
+                        <i class="fas fa-cloud-rain"></i> Weather Alert
+                    </button>
+                    <button class="quick-btn" onclick="openAlertModal('crowd', 'low')">
+                        <i class="fas fa-users"></i> Crowd Issue
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Alert Filters -->
+            <div class="alert-filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="active">Active</button>
+                <button class="filter-btn" data-filter="acknowledged">Acknowledged</button>
+                <button class="filter-btn" data-filter="resolved">Resolved</button>
+                <button class="filter-btn" data-filter="critical">Critical</button>
+            </div>
+            
+            <!-- Alerts Table -->
+            <div class="alerts-table-container">
+                <table class="alerts-table" id="alertsTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Severity</th>
+                            <th>Location</th>
+                            <th>Reported By</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($alerts as $alert): ?>
+                        <tr data-status="<?= htmlspecialchars($alert['status']) ?>" data-severity="<?= htmlspecialchars($alert['severity']) ?>">
+                            <td><?= $alert['id'] ?></td>
+                            <td><strong><?= htmlspecialchars($alert['title']) ?></strong></td>
+                            <td><?= htmlspecialchars($alert['type']) ?></td>
+                            <td><span class="severity-badge severity-<?= $alert['severity'] ?>"><?= ucfirst($alert['severity']) ?></span></td>
+                            <td><?= htmlspecialchars($alert['location'] ?: 'N/A') ?></td>
+                            <td><?= htmlspecialchars($alert['reporter_name'] ?: $alert['reporter_name']) ?></td>
+                            <td><span class="status-badge status-<?= $alert['status'] ?>"><?= ucfirst($alert['status']) ?></span></td>
+                            <td><?= date('M d, H:i', strtotime($alert['created_at'])) ?></td>
+                            <td class="alert-actions">
+                                <button class="action-btn" onclick="viewAlert(<?= $alert['id'] ?>)" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <?php if ($alert['status'] === 'active'): ?>
+                                <button class="action-btn" onclick="acknowledgeAlert(<?= $alert['id'] ?>)" title="Acknowledge">
+                                    <i class="fas fa-check-circle"></i>
+                                </button>
+                                <?php endif; ?>
+                                <?php if ($alert['status'] !== 'resolved'): ?>
+                                <button class="action-btn" onclick="resolveAlert(<?= $alert['id'] ?>)" title="Resolve">
+                                    <i class="fas fa-check-double"></i>
+                                </button>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($alerts)): ?>
+                        <tr>
+                            <td colspan="9" style="text-align: center; padding: 40px;">No alerts found</td>
+                        </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
-  </div>
-
-  <nav class="guide-bottom-nav">
-    <div class="bottom-nav-inner">
-      <a href="guide-dashboard.html" class="bnav-item"><i class="fas fa-house"></i><span>Home</span></a>
-      <a href="guide-map.html" class="bnav-item"><i class="fas fa-map-location-dot"></i><span>Map</span></a>
-      <a href="guide-communication.html" class="bnav-item"><i class="fas fa-comments"></i><span>Chats</span></a>
-      <a href="guide-safety.html" class="bnav-item active"><i class="fas fa-shield-halved"></i><span>Safety</span></a>
-      <a href="guide-profile.html" class="bnav-item"><i class="fas fa-circle-user"></i><span>Profile</span></a>
-    </div>
-  </nav>
 </div>
 
-<!-- EMERGENCY MODAL -->
-<div class="modal-overlay" id="emergencyModal">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-header">
-      <div class="modal-title" style="color:var(--red);"><i class="fas fa-triangle-exclamation" style="margin-right:8px;"></i>Emergency Alert</div>
-      <button class="modal-close" onclick="closeModal('emergencyModal')"><i class="fas fa-xmark"></i></button>
+<!-- Create Alert Modal -->
+<div class="modal" id="alertModal">
+    <div class="modal-content">
+        <h3><i class="fas fa-exclamation-triangle"></i> Report Alert</h3>
+        <form id="alertForm" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="create_alert">
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" name="title" id="alertTitle" required>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea name="description" id="alertDescription" required></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Location</label>
+                    <input type="text" name="location" id="alertLocation" placeholder="e.g., Trail section, summit">
+                </div>
+                <div class="form-group">
+                    <label>Trail Name</label>
+                    <input type="text" name="trail_name" id="alertTrailName" value="<?= htmlspecialchars($activeBooking['mountain_name'] ?? '') ?>">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Type</label>
+                    <select name="type" id="alertType">
+                        <option value="safety">Safety</option>
+                        <option value="emergency">Emergency</option>
+                        <option value="injury">Injury</option>
+                        <option value="weather">Weather</option>
+                        <option value="lost_hiker">Lost Hiker</option>
+                        <option value="crowd">Crowd</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Severity</label>
+                    <select name="severity" id="alertSeverity">
+                        <option value="info">Info</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Latitude</label>
+                    <input type="text" name="latitude" id="alertLatitude" placeholder="Auto-filled from GPS">
+                </div>
+                <div class="form-group">
+                    <label>Longitude</label>
+                    <input type="text" name="longitude" id="alertLongitude" placeholder="Auto-filled from GPS">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Booking Number</label>
+                <input type="text" name="booking_number" id="alertBookingNumber" value="<?= htmlspecialchars($activeBooking['booking_reference'] ?? '') ?>">
+            </div>
+            <div class="form-group">
+                <label>Image (optional)</label>
+                <input type="file" name="alert_image" accept="image/*">
+            </div>
+            <div class="modal-buttons">
+                <button type="button" class="btn-outline" onclick="closeAlertModal()">Cancel</button>
+                <button type="submit" class="btn-primary">Submit Alert</button>
+            </div>
+        </form>
     </div>
-    <div class="modal-body">
-      <div style="font-size:0.8rem;color:var(--ink-3);margin-bottom:16px;line-height:1.65;background:var(--red-lt);padding:10px 14px;border-radius:var(--r-md);border-left:3px solid var(--red);">
-        <strong style="color:var(--red);">⚠ Immediate notification</strong> — Admin and all emergency contacts will be alerted.
-      </div>
-      <div class="form-group">
-        <label class="form-label">Situation Type</label>
-        <select class="form-control"><option>Medical Emergency</option><option>Lost Hiker</option><option>Weather Hazard</option><option>Trail Accident</option><option>Wildlife Encounter</option><option>Other</option></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Hiker Involved</label>
-        <select class="form-control"><option>All hikers</option><option>Lea Santiago</option><option>Marco Reyes</option><option>Ana Bautista</option></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Location / Checkpoint</label>
-        <input type="text" class="form-control" placeholder="e.g. Ridge Junction km 3.2">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Description</label>
-        <textarea class="form-control" rows="3" placeholder="Describe the situation…"></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('emergencyModal')">Cancel</button>
-      <button class="btn btn-danger" onclick="sendEmergency()"><i class="fas fa-paper-plane"></i> Send Alert Now</button>
-    </div>
-  </div>
 </div>
 
-<!-- INCIDENT MODAL -->
-<div class="modal-overlay" id="incidentModal">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-header">
-      <div class="modal-title"><i class="fas fa-circle-exclamation" style="margin-right:8px;color:var(--amber);"></i>Report Incident</div>
-      <button class="modal-close" onclick="closeModal('incidentModal')"><i class="fas fa-xmark"></i></button>
+<!-- View Alert Modal -->
+<div class="modal alert-detail-modal" id="viewAlertModal">
+    <div class="modal-content">
+        <h3>Alert Details</h3>
+        <div id="alertDetailContent"></div>
+        <div class="modal-buttons">
+            <button type="button" class="btn-outline" onclick="closeViewModal()">Close</button>
+        </div>
     </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">Incident Type</label>
-        <select class="form-control" id="incType"><option>Minor Injury</option><option>Hiker Fatigue</option><option>Lost Trail</option><option>Weather Issue</option><option>Equipment Problem</option><option>Other</option></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Location</label>
-        <input type="text" class="form-control" id="incLocation" placeholder="e.g. Lower Ridge, km 1.8">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Description</label>
-        <textarea class="form-control" id="incDesc" rows="3" placeholder="What happened?"></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Notify Admin?</label>
-        <select class="form-control" id="incNotify"><option value="yes">Yes — notify admin</option><option value="no">No — log only</option></select>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('incidentModal')">Cancel</button>
-      <button class="btn btn-amber" onclick="submitIncident()"><i class="fas fa-flag"></i> Submit Report</button>
-    </div>
-  </div>
 </div>
-
-<div class="toast" id="toast"></div>
 
 <script>
-const hikers = [
-  { id:0, name:'Lea Santiago',  initials:'LS', trail:'BK-001 · Mt. Batulao', checkpoint:'Ridge Junction', safe:true },
-  { id:1, name:'Marco Reyes',   initials:'MR', trail:'BK-001 · Mt. Batulao', checkpoint:'Ridge Junction', safe:true },
-  { id:2, name:'Ana Bautista',  initials:'AB', trail:'BK-001 · Mt. Batulao', checkpoint:'Lower Ridge',    safe:null },
-];
-const incidents = [];
+// Alert data from PHP
+const alertsData = <?= json_encode($alerts) ?>;
+let currentFilter = 'all';
 
-function renderHikerSafety() {
-  const el = document.getElementById('hikerSafetyList');
-  el.innerHTML = '';
-  hikers.forEach((h, i) => {
-    const status = h.safe === true ? 'card-safe' : h.safe === false ? 'card-unsafe' : 'card-unknown';
-    const div = document.createElement('div');
-    div.className = `hiker-safety-card ${status}`;
-    div.innerHTML = `
-      <div class="hs-avatar">${h.initials}</div>
-      <div class="hs-info">
-        <div class="hs-name">${h.name}</div>
-        <div class="hs-meta">${h.trail}</div>
-        <div class="hs-checkpoint"><i class="fas fa-location-dot" style="font-size:0.58rem;color:var(--ink-5);"></i>${h.checkpoint}</div>
-      </div>
-      <div class="hs-actions">
-        <div class="safety-toggle">
-          <button class="stoggle-btn ${h.safe===true?'active-safe':''}" onclick="setSafe(${i},true)"><i class="fas fa-shield-check"></i> Safe</button>
-          <button class="stoggle-btn ${h.safe===false?'active-unsafe':''}" onclick="setSafe(${i},false)"><i class="fas fa-circle-xmark"></i> Unsafe</button>
+// Update stats
+function updateStats() {
+    const total = alertsData.length;
+    const active = alertsData.filter(a => a.status === 'active').length;
+    const critical = alertsData.filter(a => a.severity === 'critical' && a.status !== 'resolved').length;
+    const resolved = alertsData.filter(a => a.status === 'resolved').length;
+    
+    document.getElementById('totalAlerts').textContent = total;
+    document.getElementById('activeAlerts').textContent = active;
+    document.getElementById('criticalAlerts').textContent = critical;
+    document.getElementById('resolvedAlerts').textContent = resolved;
+}
+
+// Filter alerts
+function filterAlerts() {
+    const rows = document.querySelectorAll('#alertsTable tbody tr');
+    rows.forEach(row => {
+        if (row.querySelector('td') && row.querySelector('td').textContent === 'No alerts found') return;
+        
+        const status = row.dataset.status;
+        const severity = row.dataset.severity;
+        
+        let show = true;
+        if (currentFilter === 'active') show = status === 'active';
+        else if (currentFilter === 'acknowledged') show = status === 'acknowledged';
+        else if (currentFilter === 'resolved') show = status === 'resolved';
+        else if (currentFilter === 'critical') show = severity === 'critical' && status !== 'resolved';
+        
+        row.style.display = show ? '' : 'none';
+    });
+}
+
+// Modal functions
+function openAlertModal(type = null, severity = null) {
+    const modal = document.getElementById('alertModal');
+    if (type) {
+        document.getElementById('alertType').value = type;
+        const titles = {
+            emergency: '🚨 EMERGENCY',
+            injury: '⚠️ Injury Report',
+            lost_hiker: '🔍 Lost Hiker',
+            weather: '🌧️ Weather Alert',
+            crowd: '👥 Crowd Issue'
+        };
+        if (titles[type]) {
+            document.getElementById('alertTitle').value = titles[type];
+        }
+    }
+    if (severity) {
+        document.getElementById('alertSeverity').value = severity;
+    }
+    // Try to get current location
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+            document.getElementById('alertLatitude').value = pos.coords.latitude;
+            document.getElementById('alertLongitude').value = pos.coords.longitude;
+        }, () => {});
+    }
+    modal.classList.add('open');
+}
+
+function closeAlertModal() {
+    document.getElementById('alertModal').classList.remove('open');
+    document.getElementById('alertForm').reset();
+}
+
+function closeViewModal() {
+    document.getElementById('viewAlertModal').classList.remove('open');
+}
+
+function viewAlert(id) {
+    const alert = alertsData.find(a => a.id == id);
+    if (!alert) return;
+    
+    const content = `
+        <div class="form-group">
+            <label>Title</label>
+            <div><strong>${escapeHtml(alert.title)}</strong></div>
         </div>
-      </div>`;
-    el.appendChild(div);
-  });
+        <div class="form-group">
+            <label>Description</label>
+            <div>${escapeHtml(alert.description)}</div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Location</label>
+                <div>${escapeHtml(alert.location || 'N/A')}</div>
+            </div>
+            <div class="form-group">
+                <label>Trail</label>
+                <div>${escapeHtml(alert.trail_name || 'N/A')}</div>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Type</label>
+                <div>${escapeHtml(alert.type)}</div>
+            </div>
+            <div class="form-group">
+                <label>Severity</label>
+                <div><span class="severity-badge severity-${alert.severity}">${alert.severity.toUpperCase()}</span></div>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Coordinates</label>
+                <div>${alert.latitude ? alert.latitude + ', ' + alert.longitude : 'N/A'}</div>
+            </div>
+            <div class="form-group">
+                <label>Booking #</label>
+                <div>${escapeHtml(alert.booking_number || 'N/A')}</div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Reported By</label>
+            <div>${escapeHtml(alert.reporter_name)} (${escapeHtml(alert.reporter_role)})</div>
+        </div>
+        <div class="form-group">
+            <label>Created</label>
+            <div>${new Date(alert.created_at).toLocaleString()}</div>
+        </div>
+        ${alert.image_url ? `<div class="form-group"><label>Image</label><br><img src="${alert.image_url}" class="alert-image" onclick="window.open(this.src)"></div>` : ''}
+        ${alert.acknowledged_at ? `<div class="form-group"><label>Acknowledged</label><div>${new Date(alert.acknowledged_at).toLocaleString()}</div></div>` : ''}
+        ${alert.resolved_at ? `<div class="form-group"><label>Resolved</label><div>${new Date(alert.resolved_at).toLocaleString()}</div></div>` : ''}
+    `;
+    
+    document.getElementById('alertDetailContent').innerHTML = content;
+    document.getElementById('viewAlertModal').classList.add('open');
 }
 
-function setSafe(i, val) {
-  hikers[i].safe = val;
-  renderHikerSafety();
-  const label = val ? '✅ Marked safe' : '⚠️ Marked unsafe';
-  showToast(`${label}: ${hikers[i].name}`);
-  if (!val) setTimeout(() => openModal('emergencyModal'), 350);
+async function acknowledgeAlert(id) {
+    if (!confirm('Acknowledge this alert?')) return;
+    
+    try {
+        const res = await fetch('../api/update_alert.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, action: 'acknowledge' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Alert acknowledged');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Error: ' + data.message);
+        }
+    } catch (e) {
+        showToast('Network error');
+    }
 }
 
-function markAllSafe() {
-  hikers.forEach(h => h.safe = true);
-  renderHikerSafety();
-  showToast('All hikers marked safe ✅');
+async function resolveAlert(id) {
+    if (!confirm('Mark this alert as resolved?')) return;
+    
+    try {
+        const res = await fetch('../api/update_alert.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, action: 'resolve' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Alert resolved');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Error: ' + data.message);
+        }
+    } catch (e) {
+        showToast('Network error');
+    }
 }
 
-function renderIncidents() {
-  const el = document.getElementById('incidentList');
-  const noEl = document.getElementById('noIncidents');
-  el.innerHTML = '';
-  if (!incidents.length) { noEl.style.display = 'block'; return; }
-  noEl.style.display = 'none';
-  incidents.forEach(inc => {
-    const div = document.createElement('div');
-    div.className = 'incident-item';
-    div.innerHTML = `
-      <div class="incident-header">
-        <span class="incident-type"><i class="fas fa-circle-exclamation" style="margin-right:4px;"></i>${inc.type}</span>
-        <span class="incident-time">${inc.time}</span>
-      </div>
-      <div class="incident-text">${inc.location ? '<strong>' + inc.location + '</strong> — ' : ''}${inc.desc}</div>`;
-    el.appendChild(div);
-  });
+function refreshAlerts() {
+    location.reload();
 }
 
-function submitIncident() {
-  const type   = document.getElementById('incType').value;
-  const loc    = document.getElementById('incLocation').value;
-  const desc   = document.getElementById('incDesc').value || 'No description.';
-  const notify = document.getElementById('incNotify').value;
-  incidents.unshift({ type, location: loc, desc, time: new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) });
-  renderIncidents();
-  closeModal('incidentModal');
-  showToast(notify==='yes' ? '📋 Incident logged & admin notified.' : '📋 Incident logged.');
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function sendEmergency() { closeModal('emergencyModal'); showToast('🚨 Emergency alert sent to admin!'); }
-
-function openModal(id)  { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if(e.target===o) closeModal(o.id); }));
-
+let toastTimer;
 function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2800);
+    let t = document.getElementById('toast');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'toast';
+        t.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#100600;color:white;padding:10px20px;border-radius:40px;font-size:0.8rem;z-index:3000;opacity:0;transition:opacity0.3s;pointer-events:none;white-space:nowrap;';
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('show');
+    t.style.opacity = '1';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.style.opacity = '0', 2800);
 }
 
-function updateTime() {
-  document.getElementById('liveTime').textContent = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
-}
-updateTime(); setInterval(updateTime, 1000);
-renderHikerSafety();
-renderIncidents();
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    updateStats();
+    
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentFilter = btn.dataset.filter;
+            filterAlerts();
+        });
+    });
+    
+    // Handle form submission
+    document.getElementById('alertForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        
+        try {
+            const res = await fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            });
+            const html = await res.text();
+            if (html.includes('success') || html.includes('Alert created')) {
+                showToast('Alert created successfully!');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast('Error creating alert');
+            }
+        } catch (err) {
+            showToast('Network error');
+        }
+    });
+});
+
+// Add style for toast
+const style = document.createElement('style');
+style.textContent = `
+    #toast.show { opacity: 1; }
+    #toast { transition: opacity 0.3s; }
+`;
+document.head.appendChild(style);
 </script>
 </body>
 </html>

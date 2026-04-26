@@ -1,6 +1,8 @@
 <?php
 // api/export_history.php - Export hiking history as story
 require_once __DIR__ . '/../config/db.php';
+date_default_timezone_set('Asia/Manila');
+ini_set('date.timezone', 'Asia/Manila');
 session_start();
 
 header('Content-Type: application/json');

@@ -15,6 +15,6 @@ if (isset($_COOKIE[session_name()])) {
 session_destroy();
 
 // Redirect to login page (go back one directory then into login and signup folder)
-header('Location: ../login and signup/login.php');
+header('Location: ../login-and-signup/login.php');
 exit;
 ?>

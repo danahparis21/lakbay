@@ -31,12 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Determine redirect URL based on role
             $roleMap = [
-                'hiker'   => '../hiker frontend/explore.php',
-                'guide'   => '../../pages/dashboard-guide.php',
+                'hiker'   => '../hiker-frontend/explore.php',
+                'guide'   => '../tourguide-frontend/guide-dashboard.php',
                 'manager' => '../../pages/dashboard-manager.php',
                 'admin'   => '../../pages/dashboard-admin.php',
             ];
-            $redirect_url = $roleMap[$user['role']] ?? '../hiker frontend/explore.php';
+            $redirect_url = $roleMap[$user['role']] ?? '../hiker-frontend/explore.php';
             $success_redirect = true;
         } else {
             $error = 'Invalid email or password.';

@@ -13,6 +13,6 @@ if (isset($_COOKIE[session_name()])) {
 session_destroy();
 
 // Redirect to login page - without /lakbay prefix since it's already in the URL
-header('Location: /pages/modals/login.php');
+header('Location: /login-and-signup/login.php');
 exit;
 ?>

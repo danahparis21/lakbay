@@ -27,6 +27,8 @@ $trailData = null;
 $currentUserName = $_SESSION['name'] ?? $_SESSION['user_name'] ?? '';
 
 try {
+    $currentUserName = $_SESSION['user_name'] ?? $_SESSION['name'] ?? '';
+    
     if (!empty($bookingNumber)) {
         $stmt = $pdo->prepare("
             SELECT b.*, m.name as mountain_name, m.location, m.difficulty,
@@ -35,10 +37,11 @@ try {
                    u.name as guide_name, u.avatar as guide_avatar
             FROM bookings b
             JOIN mountains m ON b.mountain_id = m.id
-            JOIN guides g ON b.guide_id = g.user_id
+            JOIN guides g ON b.guide_id = g.id
             JOIN users u ON g.user_id = u.id
-            LEFT JOIN booking_hikers bh ON b.id = bh.booking_id
-            WHERE b.booking_number = ? AND (b.user_id = ? OR bh.hiker_name = ?)
+            WHERE b.booking_number = ? AND (b.user_id = ? OR EXISTS (
+                SELECT 1 FROM booking_hikers bh WHERE bh.booking_id = b.id AND bh.hiker_name = ?
+            ))
         ");
         $stmt->execute([$bookingNumber, $currentUserId, $currentUserName]);
     } else {
@@ -49,10 +52,11 @@ try {
                    u.name as guide_name, u.avatar as guide_avatar
             FROM bookings b
             JOIN mountains m ON b.mountain_id = m.id
-            JOIN guides g ON b.guide_id = g.user_id
+            JOIN guides g ON b.guide_id = g.id
             JOIN users u ON g.user_id = u.id
-            LEFT JOIN booking_hikers bh ON b.id = bh.booking_id
-            WHERE b.id = ? AND (b.user_id = ? OR bh.hiker_name = ?)
+            WHERE b.id = ? AND (b.user_id = ? OR EXISTS (
+                SELECT 1 FROM booking_hikers bh WHERE bh.booking_id = b.id AND bh.hiker_name = ?
+            ))
         ");
         $stmt->execute([$bookingId, $currentUserId, $currentUserName]);
     }
@@ -61,6 +65,12 @@ try {
 
     if (!$hike) {
         header('Location: bookings.php?error=invalid_hike');
+        exit;
+    }
+
+    // Only allow active or confirmed bookings to be started
+    if ($hike['status'] !== 'active' && $hike['status'] !== 'confirmed') {
+        header('Location: bookings.php?error=booking_not_active');
         exit;
     }
 
@@ -97,46 +107,41 @@ try {
         }
 
         if (count($trackPoints) > 0) {
-            $coordinates = [];
-            foreach ($trackPoints as $point) {
-                $coordinates[] = [(float)$point['lon'], (float)$point['lat']];
-            }
-            $trailData = ['type' => 'LineString', 'coordinates' => $coordinates];
+    $coordinates = [];
+    foreach ($trackPoints as $point) {
+        $coordinates[] = [(float)$point['lon'], (float)$point['lat']];
+    }
+    $trailData = ['type' => 'LineString', 'coordinates' => $coordinates];
 
-            $totalLength = 0;
-            for ($i = 0; $i < count($trackPoints) - 1; $i++) {
-                $lat1 = $trackPoints[$i]['lat']; $lon1 = $trackPoints[$i]['lon'];
-                $lat2 = $trackPoints[$i+1]['lat']; $lon2 = $trackPoints[$i+1]['lon'];
-                $R = 6371;
-                $dLat = deg2rad($lat2 - $lat1); $dLon = deg2rad($lon2 - $lon1);
-                $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon/2) * sin($dLon/2);
-                $c = 2 * atan2(sqrt($a), sqrt(1-$a));
-                $totalLength += $R * $c;
-            }
-            $hike['trail_length_km'] = round($totalLength, 2);
+    $totalLength = 0;
+    for ($i = 0; $i < count($trackPoints) - 1; $i++) {
+        $lat1 = $trackPoints[$i]['lat']; $lon1 = $trackPoints[$i]['lon'];
+        $lat2 = $trackPoints[$i+1]['lat']; $lon2 = $trackPoints[$i+1]['lon'];
+        $R = 6371;
+        $dLat = deg2rad($lat2 - $lat1); $dLon = deg2rad($lon2 - $lon1);
+        $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon/2) * sin($dLon/2);
+        $c = 2 * atan2(sqrt($a), sqrt(1-$a));
+        $totalLength += $R * $c;
+    }
+    $hike['trail_length_km'] = round($totalLength, 2);
+}
 
-            $waypointInterval = max(1, floor(count($trackPoints) / 8));
-            $generatedWaypoints = [];
-            $pointTypes = ['start', 'viewpoint', 'rest', 'viewpoint', 'rest', 'viewpoint', 'summit', 'end'];
-            for ($i = 0; $i < count($trackPoints); $i += $waypointInterval) {
-                $point = $trackPoints[$i];
-                $type = $pointTypes[min(floor($i / $waypointInterval), count($pointTypes)-1)];
-                $generatedWaypoints[] = [
-                    'name' => $type == 'start' ? 'Trailhead' : ($type == 'summit' ? 'Summit' : ($type == 'end' ? 'Exit Point' : ucfirst($type) . ' Point')),
-                    'type' => $type, 'latitude' => $point['lat'], 'longitude' => $point['lon'],
-                    'description' => $type == 'start' ? 'Starting point.' : ($type == 'summit' ? 'Summit!' : 'Point of interest.'),
-                    'order_index' => $i
-                ];
-            }
-            $hike['waypoints'] = $generatedWaypoints;
-        } else {
-            $stmt = $pdo->prepare("SELECT name, type, latitude, longitude, description FROM trail_waypoints WHERE mountain_id = ? AND is_active = 1 ORDER BY order_index ASC");
-            $stmt->execute([$hike['mountain_id']]);
-            $hike['waypoints'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            if (!empty($hike['trail_data'])) {
-                $trailData = json_decode($hike['trail_data'], true);
-            }
-        }
+// ALWAYS fetch waypoints from database (don't generate fake ones!)
+$waypointsFromDb = [];
+try {
+    $stmt = $pdo->prepare("SELECT id, name, type, latitude, longitude, elevation, description, order_index FROM trail_waypoints WHERE mountain_id = ? AND is_active = 1 ORDER BY order_index ASC");
+    $stmt->execute([$hike['mountain_id']]);
+    $waypointsFromDb = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("Error fetching waypoints: " . $e->getMessage());
+}
+
+// Use database waypoints if available, otherwise fallback to empty array
+$hike['waypoints'] = $waypointsFromDb;
+
+if (!empty($hike['trail_data']) && empty($trailData)) {
+    $trailData = json_decode($hike['trail_data'], true);
+}
     } catch (Exception $e) {
         error_log("Error processing track data: " . $e->getMessage());
     }
@@ -146,19 +151,39 @@ try {
     die("Database error: " . $e->getMessage());
 }
 
-$stmt = $pdo->prepare("
-    SELECT id, session_token, start_time, last_location_update
-    FROM active_hike_sessions
-    WHERE booking_id = ? AND user_id = ? AND status = 'active'
-");
-$stmt->execute([$hike['id'], $currentUserId]);
-$activeSession = $stmt->fetch(PDO::FETCH_ASSOC);
+// Check/create active session - make sure table exists first
+$activeSession = null;
+try {
+    $stmt = $pdo->prepare("
+        SELECT id, session_token, start_time, last_location_update
+        FROM active_hike_sessions
+        WHERE booking_id = ? AND user_id = ? AND status = 'active'
+    ");
+    $stmt->execute([$hike['id'], $currentUserId]);
+    $activeSession = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    // Table might not exist, create it
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS active_hike_sessions (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            booking_id INT NOT NULL,
+            user_id INT NOT NULL,
+            session_token VARCHAR(255) NOT NULL,
+            start_time DATETIME NOT NULL,
+            last_location_update DATETIME,
+            status ENUM('active', 'completed', 'abandoned') DEFAULT 'active',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (booking_id) REFERENCES bookings(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ");
+    $activeSession = null;
+}
 
 if (!$activeSession) {
     $sessionToken = bin2hex(random_bytes(32));
     $stmt = $pdo->prepare("INSERT INTO active_hike_sessions (booking_id, user_id, session_token, start_time, status) VALUES (?, ?, ?, NOW(), 'active')");
     $stmt->execute([$hike['id'], $currentUserId, $sessionToken]);
-    $activeSession = ['session_token' => $sessionToken];
 } else {
     $sessionToken = $activeSession['session_token'];
 }
@@ -170,6 +195,7 @@ if (!$activeSession) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Active Hike — <?= htmlspecialchars($hike['mountain_name']) ?> | LAKBAY</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
     
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1325,6 +1351,115 @@ if (!$activeSession) {
         left: 20px !important;
     }
 }
+/* ── HEATMAP LEGEND ── */
+.heatmap-legend {
+    position: absolute;
+    bottom: 20px;
+    right: 12px;
+    z-index: 10;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(8px);
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border: 1px solid rgba(0,0,0,0.08);
+    font-family: 'DM Sans', sans-serif;
+    min-width: 130px;
+    opacity: 0;
+    transform: translateX(10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+}
+
+.heatmap-legend.visible {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+.heatmap-legend-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #100600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.heatmap-legend-title i {
+    font-size: 0.7rem;
+    color: #F59E0B;
+}
+
+.heatmap-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 0.65rem;
+    color: #555;
+}
+
+.heatmap-legend-color {
+    width: 20px;
+    height: 10px;
+    border-radius: 3px;
+}
+
+.heatmap-legend-note {
+    font-size: 0.55rem;
+    color: #999;
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    text-align: center;
+}
+.fab-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #EF4444;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+}
+/* Mock hiker special styling */
+.real-hiker-marker.mock-hiker {
+    animation: mock-pulse 2s ease-in-out infinite;
+    border: 2px solid #ffd700;
+}
+
+@keyframes mock-pulse {
+    0%, 100% { 
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        transform: scale(1);
+    }
+    50% { 
+        box-shadow: 0 0 0 6px rgba(155,89,182,0.4);
+        transform: scale(1.05);
+    }
+}
+
+.real-hiker-marker.mock-hiker .hiker-initials {
+    font-size: 10px;
+}
+
+.real-hiker-marker.mock-hiker .hiker-status-dot {
+    background: #ffd700;
+    animation: blink-gold 1s ease-in-out infinite;
+}
+
+@keyframes blink-gold {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
 
 /* For very large screens, keep FABs at a reasonable position */
 @media (min-width: 1200px) {
@@ -1394,15 +1529,56 @@ if (!$activeSession) {
     <button class="fab" id="arrowsBtn" onclick="toggleArrows()" title="Trail Markers">
         <svg viewBox="0 0 24 24"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>
     </button>
+   <button class="fab" id="waypointsBtn" onclick="toggleWaypoints()" title="Toggle Waypoints">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+        <circle cx="12" cy="10" r="3"/>
+    </svg>
+</button>
     <button class="fab" id="metricsBtn" onclick="toggleMetrics()" title="Hide Metrics">
         <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 9l-5 5-2-2-4 4"/></svg>
     </button>
     <button class="fab" id="hikersBtn" onclick="toggleHikers()" title="Toggle Other Hikers">
-        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-    </button>
-    <button class="fab" id="heatmapBtn" onclick="toggleHeatmapFab()" title="Heatmap">
-        <svg viewBox="0 0 24 24"><path d="M12 2c-4 0-8 3-8 8 0 5 8 12 8 12s8-7 8-12c0-5-4-8-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
-    </button>
+    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    <span id="nearbyHikerCount" class="fab-badge" style="display: none;">0</span>
+</button>
+    
+   <button class="fab" id="heatmapBtn" onclick="toggleHeatmapFab()" title="Heatmap">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+    </svg>
+</button>
+    
+ 
+</div>
+   <!-- Heatmap Legend -->
+<div class="heatmap-legend" id="heatmapLegend">
+    <div class="heatmap-legend-title">
+        <i class="fas fa-fire"></i> Crowd Density
+    </div>
+    <div class="heatmap-legend-item">
+        <div class="heatmap-legend-color" style="background: #10B981;"></div>
+        <span>Low</span>
+    </div>
+    <div class="heatmap-legend-item">
+        <div class="heatmap-legend-color" style="background: #84CC16;"></div>
+        <span>Light</span>
+    </div>
+    <div class="heatmap-legend-item">
+        <div class="heatmap-legend-color" style="background: #F59E0B;"></div>
+        <span>Moderate</span>
+    </div>
+    <div class="heatmap-legend-item">
+        <div class="heatmap-legend-color" style="background: #EF4444;"></div>
+        <span>High</span>
+    </div>
+    <div class="heatmap-legend-item">
+        <div class="heatmap-legend-color" style="background: #7F1D1D;"></div>
+        <span>Very High</span>
+    </div>
+    <div class="heatmap-legend-note">
+        <i class="fas fa-chart-line"></i> Based on live hiker locations
+    </div>
 </div>
 
 <!-- ── HIKE METRICS PANEL ─────────────────────────────── -->
@@ -1533,6 +1709,7 @@ if (!$activeSession) {
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
 <script>
+
 // ── PHP → JS DATA ──────────────────────────────────────
 const mountainName   = <?= json_encode($hike['mountain_name']) ?>;
 const startPoint     = { lat: <?= $hike['start_point_lat'] ?? 14.1147 ?>, lng: <?= $hike['start_point_lng'] ?? 120.8892 ?> };
@@ -1546,6 +1723,7 @@ const mountainLat    = <?= $hike['start_point_lat'] ?? 14.1147 ?>;
 const mountainLng    = <?= $hike['start_point_lng'] ?? 120.8892 ?>;
 const hikeType       = <?= json_encode($hike['hike_type'] ?? 'day_hike') ?>;
 const hikeDate       = <?= json_encode($hike['hike_date'] ?? date('Y-m-d')) ?>;
+const MOUNTAIN_ID = <?= json_encode($hike['mountain_id'] ?? null) ?>;
 
 // ── STATE ───────────────────────────────────────────────
 let map, userMarker, trailLayer, traveledLayer;
@@ -1554,7 +1732,9 @@ let heatmapLayer;
 let watchId = null, updateInterval = null;
 let currentPosition = null, lastPosition = null;
 let totalDistance = 0, trailCoords = [], reachedCheckpoints = new Set();
-let locationEnabled = false, arrowsVisible = true, hikersVisible = true;
+let locationEnabled = false, arrowsVisible = false;  // OFF by default
+let hikersVisible = false;  // OFF by default
+let waypointsVisible = true;  // Keep waypoints visible, they're essential
 let panelCollapsed = false, metricsHidden = false;
 let startTime = Date.now();
 let weatherOpen = false, weatherLoaded = false;
@@ -1562,6 +1742,8 @@ let badgeTimeout = null;
 let hikeFinished = false;
 let nudgeDismissed = false;
 let nudgeShown = false;
+let heatmapEnabled = false;  // <-- ADD THIS LINE
+
 
 const BADGES = {
     'Mt. Apayang': {
@@ -1597,10 +1779,13 @@ function initMap() {
     }).addTo(map);
 
     drawTrail();
-    placeWaypoints();
+    placeWaypointMarkersFromDB();
     placeStartMarker();
+    
+    // Build heatmap from real data (not mock)
     buildHeatmap();
-    placeMockHikers();
+    
+    fetchNearbyHikers();
     checkLocationPermission();
     fetchWeather();
 
@@ -1611,7 +1796,221 @@ function initMap() {
     setInterval(tickTimer, 1000);
     loadStoredBadges();
     updateBadgeCounter();
+
+    // Set FAB button states to reflect OFF by default
+    document.getElementById('arrowsBtn')?.classList.add('fab-off');
+    document.getElementById('hikersBtn')?.classList.add('fab-off');
+    document.getElementById('heatmapBtn')?.classList.add('fab-off');
 }
+
+// ── DATABASE WAYPOINTS (same as guide map!) ──────────────
+function placeWaypointMarkersFromDB() {
+    if (!waypoints || !waypoints.length) return;
+    
+    // Define icon styles based on type - NO LABELS, just icons
+    const getIconHtml = (type) => {
+        const icons = {
+            'summit': '<i class="fas fa-mountain"></i>',
+            'campsite': '<i class="fas fa-campground"></i>',
+            'viewpoint': '<i class="fas fa-eye"></i>',
+            'information': '<i class="fas fa-info-circle"></i>',
+            'peak': '<i class="fas fa-flag-checkered"></i>',
+            'mountain_pass': '<i class="fas fa-road"></i>',
+            'tree': '<i class="fas fa-tree"></i>',
+            'water_source': '<i class="fas fa-water"></i>',
+            'rest': '<i class="fas fa-chair"></i>',
+            'danger': '<i class="fas fa-triangle-exclamation"></i>',
+            'start': '<i class="fas fa-flag"></i>'
+        };
+        const iconHtml = icons[type] || '<i class="fas fa-map-pin"></i>';
+        return `<div class="waypoint-marker ${type}-marker">${iconHtml}</div>`;
+    };
+    
+    const getIconColorClass = (type) => {
+        const colors = {
+            'summit': 'summit-marker',
+            'campsite': 'campsite-marker',
+            'viewpoint': 'viewpoint-marker',
+            'information': 'information-marker',
+            'peak': 'peak-marker',
+            'mountain_pass': 'mountain_pass-marker',
+            'tree': 'tree-marker',
+            'water_source': 'water-marker',
+            'rest': 'rest-marker',
+            'danger': 'danger-marker',
+            'start': 'start-marker'
+        };
+        return colors[type] || 'default-marker';
+    };
+    
+    const getDisplayType = (type) => {
+        const typeMap = {
+            'summit': 'Summit',
+            'campsite': 'Campsite',
+            'viewpoint': 'Viewpoint',
+            'information': 'Information Point',
+            'peak': 'Peak',
+            'mountain_pass': 'Mountain Pass',
+            'tree': 'Tree',
+            'start': 'Starting Point',
+            'rest': 'Rest Area',
+            'danger': 'Danger Zone',
+            'water_source': 'Water Source'
+        };
+        return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
+    };
+    
+    waypoints.forEach((wp, idx) => {
+        const lat = parseFloat(wp.latitude);
+        const lng = parseFloat(wp.longitude);
+        const type = wp.type || 'viewpoint';
+        const colorClass = getIconColorClass(type);
+        
+        const icon = L.divIcon({
+            html: `<div class="waypoint-marker ${colorClass}">
+                        <i class="fas ${getIconForType(type)}"></i>
+                    </div>`,
+            className: 'custom-waypoint-icon',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -15]
+        });
+        
+        // Build elevation text
+        let elevationText = '';
+        if (wp.elevation) {
+            elevationText = ` · ${Math.round(wp.elevation)}m`;
+        } else if (wp.description && wp.description.match(/elevation:?\s*(\d+(?:\.\d+)?)\s*m/i)) {
+            const match = wp.description.match(/elevation:?\s*(\d+(?:\.\d+)?)\s*m/i);
+            if (match) elevationText = ` · ${Math.round(parseFloat(match[1]))}m`;
+        }
+        
+        const isReached = reachedCheckpoints.has(`${wp.type}-${idx}`);
+        
+        const popupContent = `
+            <div class="waypoint-popup">
+                <strong><i class="fas ${getIconForType(type)}"></i> ${escapeHtml(wp.name)}</strong>
+                <div class="popup-detail">
+                    ${getDisplayType(type)}${elevationText}
+                    ${wp.description ? `<br><span class="popup-desc">📝 ${escapeHtml(wp.description)}</span>` : ''}
+                </div>
+                <div class="popup-coords">
+                    📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}
+                    ${wp.elevation ? `<br>📊 Elevation: ${Math.round(wp.elevation)}m` : ''}
+                </div>
+                ${!isReached ? `<button class="popup-btn" onclick="window.forceAchieve(${idx})">🎯 Mark as Reached</button>` : '<div class="popup-achieved">✓ Checkpoint reached!</div>'}
+            </div>
+        `;
+        
+        const marker = L.marker([lat, lng], { icon })
+            .bindPopup(popupContent)
+            .addTo(map);
+        
+        waypointMarkers.push(marker);
+    });
+    
+    console.log(`✅ Loaded ${waypoints.length} waypoints for ${mountainName}`);
+}
+
+function getIconForType(type) {
+    const icons = {
+        'summit': 'fa-mountain',
+        'campsite': 'fa-campground',
+        'viewpoint': 'fa-eye',
+        'information': 'fa-info-circle',
+        'peak': 'fa-flag-checkered',
+        'mountain_pass': 'fa-road',
+        'tree': 'fa-tree',
+        'start': 'fa-flag',
+        'rest': 'fa-chair',
+        'danger': 'fa-triangle-exclamation',
+        'water_source': 'fa-water'
+    };
+    return icons[type] || 'fa-map-pin';
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Add CSS for waypoint markers (append to existing style)
+const waypointStyle = document.createElement('style');
+waypointStyle.textContent = `
+    .custom-waypoint-icon {
+        background: transparent;
+        border: none;
+    }
+    .waypoint-marker {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 0.1s ease;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    }
+    .waypoint-marker:hover {
+        transform: scale(1.15);
+    }
+    .waypoint-marker i {
+        font-size: 24px;
+    }
+    .summit-marker i { color: #E74C3C; text-shadow: 0 0 4px rgba(231,76,60,0.3); }
+    .campsite-marker i { color: #F39C12; }
+    .viewpoint-marker i { color: #3498DB; }
+    .information-marker i { color: #1ABC9C; }
+    .peak-marker i { color: #2ECC71; }
+    .mountain_pass-marker i { color: #9B59B6; }
+    .tree-marker i { color: #27AE60; }
+    .water-marker i { color: #3498DB; }
+    .rest-marker i { color: #E67E22; }
+    .danger-marker i { color: #E74C3C; }
+    .start-marker i { color: #1ABC9C; }
+    .default-marker i { color: #95A5A6; }
+    .waypoint-popup {
+        min-width: 180px;
+        max-width: 260px;
+    }
+    .waypoint-popup strong {
+        font-size: 0.9rem;
+        color: var(--mint);
+        display: block;
+        margin-bottom: 6px;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        padding-bottom: 4px;
+    }
+    .popup-detail {
+        font-size: 0.72rem;
+        color: rgba(255,255,255,0.65);
+        padding-top: 4px;
+        line-height: 1.5;
+    }
+    .popup-desc {
+        font-size: 0.68rem;
+        color: rgba(255,255,255,0.5);
+        font-style: italic;
+        display: inline-block;
+        margin-top: 4px;
+    }
+    .popup-coords {
+        font-size: 0.6rem;
+        color: rgba(255,255,255,0.4);
+        margin-top: 8px;
+        padding-top: 5px;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        font-family: monospace;
+    }
+    .popup-achieved {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--success);
+        font-weight: 600;
+        margin-top: 8px;
+    }
+`;
+document.head.appendChild(waypointStyle);
 
 // ── TIMER ───────────────────────────────────────────────
 function tickTimer() {
@@ -1629,17 +2028,15 @@ function drawTrail() {
     if (trailData && trailData.type === 'LineString') {
         lls = trailData.coordinates.map(c => [c[1], c[0]]);
     } else if (waypoints.length >= 2) {
-        lls = waypoints.map(w => [w.latitude, w.longitude]);
+        lls = waypoints.map(w => [parseFloat(w.latitude), parseFloat(w.longitude)]);
     }
     if (!lls.length) return;
 
-    // Dim base trail
     trailLayer = L.polyline(lls, {
         color: 'rgba(255,255,255,0.25)',
         weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round'
     }).addTo(map);
 
-    // Glowing traveled overlay
     traveledLayer = L.polyline([], {
         color: '#00e5b4', weight: 6, opacity: 1,
         lineCap: 'round', lineJoin: 'round'
@@ -1662,6 +2059,8 @@ function addArrows(coords) {
         });
         arrowMarkers.push(L.marker(p1, { icon, interactive: false }).addTo(map));
     }
+    // Hide arrows by default
+    if (!arrowsVisible) arrowMarkers.forEach(m => map.removeLayer(m));
 }
 
 function addDistBadges(coords) {
@@ -1673,7 +2072,10 @@ function addDistBadges(coords) {
                 html: `<div class="dist-badge">${next.toFixed(1)} km</div>`,
                 className: '', iconSize: [50, 18]
             });
-            distanceMarkers.push(L.marker(coords[i], { icon, interactive: false }).addTo(map));
+            const marker = L.marker(coords[i], { icon, interactive: false });
+            distanceMarkers.push(marker);
+            // Only add to map if arrowsVisible is true
+            if (arrowsVisible) marker.addTo(map);
             next += 0.5;
         }
         last = coords[i];
@@ -1698,39 +2100,11 @@ function checkCheckpoints(path) {
         const key = `${wp.type}-${i}`;
         if (reachedCheckpoints.has(key)) return;
         for (const p of path) {
-            if (calcDist(p[0], p[1], wp.latitude, wp.longitude) < 0.02) {
+            if (calcDist(p[0], p[1], parseFloat(wp.latitude), parseFloat(wp.longitude)) < 0.02) {
                 reachCheckpoint(wp, i);
                 break;
             }
         }
-    });
-}
-
-// ── WAYPOINTS ───────────────────────────────────────────
-function placeWaypoints() {
-    waypoints.forEach((wp, i) => {
-        const key = `${wp.type}-${i}`;
-        const done = reachedCheckpoints.has(key);
-        const pinClass = done ? 'achieved' : (wp.type === 'summit' ? 'summit' : wp.type === 'start' ? 'start' : '');
-        const icon = L.divIcon({
-            html: `<div class="wp-marker">
-                <div class="wp-pin ${pinClass}"></div>
-                <div class="wp-label ${done ? 'achieved' : ''}">${done ? '✓' : ''} ${wp.name}</div>
-            </div>`,
-            className: '', iconSize: [60, 36], iconAnchor: [30, 9], popupAnchor: [0, -10]
-        });
-        const m = L.marker([wp.latitude, wp.longitude], { icon })
-            .bindPopup(() => {
-                const isDone = reachedCheckpoints.has(key);
-                return `<div class="popup-title">${wp.name}</div>
-                <div class="popup-body">${wp.description || 'Waypoint on the trail'}</div>
-                ${isDone
-                    ? `<div class="popup-achieved">✓ Checkpoint reached!</div>`
-                    : `<button class="popup-btn" onclick="window.forceAchieve(${i})">🎯 Mark as Reached</button>`
-                }`;
-            });
-        m.addTo(map);
-        waypointMarkers.push(m);
     });
 }
 
@@ -1744,16 +2118,6 @@ function reachCheckpoint(wp, i) {
     reachedCheckpoints.add(key);
 
     const badge = activeBadges[wp.type] || activeBadges.viewpoint;
-
-    // Update marker
-    const icon = L.divIcon({
-        html: `<div class="wp-marker">
-            <div class="wp-pin achieved"></div>
-            <div class="wp-label achieved">✓ ${wp.name}</div>
-        </div>`,
-        className: '', iconSize: [60, 36], iconAnchor: [30, 9]
-    });
-    if (waypointMarkers[i]) waypointMarkers[i].setIcon(icon);
 
     showBadge(badge.name, badge.icon, badge.msg, wp.name);
     saveBadgeDB(badge.name, badge.icon, wp.name, wp.type);
@@ -1789,7 +2153,7 @@ function placeMockHikers() {
     if (!trailCoords.length) return;
 
     const names = ['Maria S.', 'John R.', 'Lisa C.', 'Mike T.', 'Anna G.', 'Carlos L.'];
-    const positions = [0.08, 0.2, 0.37, 0.52, 0.68, 0.82]; // fractions along trail
+    const positions = [0.08, 0.2, 0.37, 0.52, 0.68, 0.82];
 
     names.forEach((name, idx) => {
         const frac = positions[idx];
@@ -1806,6 +2170,9 @@ function placeMockHikers() {
         m.addTo(map);
         hikerMarkers.push(m);
     });
+    
+    // Hide hikers by default
+    if (!hikersVisible) hikerMarkers.forEach(m => map.removeLayer(m));
 }
 
 // ── LOCATION ─────────────────────────────────────────────
@@ -1815,7 +2182,6 @@ function checkLocationPermission() {
     }
     navigator.permissions.query({ name: 'geolocation' }).then(res => {
         if (res.state === 'granted') {
-            // Slight delay so overlay is visible briefly
             setTimeout(() => enableLocation(), 800);
         } else {
             document.getElementById('permOverlay').style.display = 'flex';
@@ -1824,20 +2190,23 @@ function checkLocationPermission() {
         document.getElementById('permOverlay').style.display = 'flex';
     });
 }
-
 function enableLocation() {
     locationEnabled = true;
     document.getElementById('permOverlay').style.display = 'none';
     document.getElementById('gpsStatus').textContent = 'ACTIVE';
-    // document.getElementById('heatmapToggle').style.display = 'flex';
 
     watchId = navigator.geolocation.watchPosition(onLocationUpdate, onLocationError, {
         enableHighAccuracy: true, timeout: 10000, maximumAge: 0
     });
     startReporting();
+    
+    // Start polling for nearby hikers
+    if (!nearbyHikerPollId) {
+        startNearbyHikerPolling();
+    }
+    
     showToast('📍 GPS live — your path is being recorded');
 }
-
 function declineLocation() {
     document.getElementById('permOverlay').style.display = 'none';
     document.getElementById('gpsStatus').textContent = 'OFF';
@@ -1852,7 +2221,6 @@ function onLocationUpdate(pos) {
     if (altitude) document.getElementById('elevation').textContent = Math.round(altitude);
     if (speed != null) document.getElementById('speed').textContent = (speed * 3.6).toFixed(1);
 
-    // User marker
     if (!userMarker) {
         const icon = L.divIcon({
             html: `<div class="user-pin"><div class="user-dot">🧗</div><div class="user-chip">YOU</div></div>`,
@@ -1905,35 +2273,116 @@ function startReporting() {
 }
 
 // ── HEATMAP ──────────────────────────────────────────────
-function buildHeatmap() {
-    if (!trailCoords.length) return;
-    const pts = [0.1, 0.25, 0.45, 0.6, 0.8, 0.95].map(f => {
-        const idx = Math.floor(f * trailCoords.length);
-        return [...trailCoords[idx], f > 0.7 ? 1.0 : 0.6];
-    });
-    heatmapLayer = L.heatLayer(pts, {
-        radius: 35, blur: 20, maxZoom: 18,
-        gradient: { 0.2: 'blue', 0.5: 'cyan', 0.75: 'lime', 0.9: 'yellow', 1.0: 'red' }
-    });
+let heatmapPoints = [];
+let heatmapAutoRefresh = null;
+
+async function buildHeatmap() {
+    if (!trailCoords.length || !mountainLat) return;
+    
+    try {
+       const res = await fetch(`../api/detect_crowd_hotspots.php?mountain_id=${MOUNTAIN_ID}`);
+       const data = await res.json();
+        
+        console.log('Heatmap data received:', data);
+        
+        if (data.success && data.points && data.points.length) {
+            // Convert points for heatmap
+            heatmapPoints = data.points.map(p => [p.latitude, p.longitude, p.intensity]);
+            
+            if (heatmapLayer) {
+                map.removeLayer(heatmapLayer);
+            }
+            
+            heatmapLayer = L.heatLayer(heatmapPoints, { 
+                radius: 45, 
+                blur: 20, 
+                maxZoom: 18,
+                minOpacity: 0.4,
+                gradient: { 
+                    0.2: '#10B981',  // Low - green
+                    0.4: '#84CC16',  // Low-medium - lime
+                    0.6: '#F59E0B',  // Medium - orange  
+                    0.8: '#EF4444',  // High - red
+                    1.0: '#7F1D1D'   // Very high - dark red
+                }
+            });
+            
+            if (heatmapEnabled) {
+                heatmapLayer.addTo(map);
+                showToast(`🔥 Heatmap showing ${data.points.length} crowded area(s)`);
+            }
+            
+            // Update crowd badge in status bar (optional - add if you have one)
+            const highPoints = data.points.filter(p => p.intensity >= 0.7);
+            const medPoints = data.points.filter(p => p.intensity >= 0.4 && p.intensity < 0.7);
+            
+            let overallLevel = 'Low';
+            if (highPoints.length > 0) overallLevel = 'High';
+            else if (medPoints.length > 0) overallLevel = 'Medium';
+            
+            // You can add a crowd badge display in your header if desired
+        } else {
+            if (heatmapLayer && heatmapEnabled) {
+                map.removeLayer(heatmapLayer);
+            }
+            heatmapPoints = [];
+            if (heatmapEnabled) {
+                showToast('No crowd data available');
+            }
+        }
+    } catch (e) {
+        console.error('Heatmap fetch error:', e);
+        showToast('Error loading crowd data');
+    }
 }
 
-let heatmapEnabled = false;
-
+// Auto-refresh heatmap every 2 minutes
+function startHeatmapAutoRefresh() {
+    if (heatmapAutoRefresh) clearInterval(heatmapAutoRefresh);
+    heatmapAutoRefresh = setInterval(() => {
+        if (heatmapEnabled) {
+            buildHeatmap();
+        }
+    }, 120000); // 2 minutes
+}
 function toggleHeatmapFab() {
+    console.log('Heatmap button clicked, current state:', heatmapEnabled);
     heatmapEnabled = !heatmapEnabled;
     const btn = document.getElementById('heatmapBtn');
+    const legend = document.getElementById('heatmapLegend');
     
     if (heatmapEnabled) {
-        if (heatmapLayer) heatmapLayer.addTo(map);
+        if (heatmapPoints.length) {
+            if (heatmapLayer) heatmapLayer.addTo(map);
+        } else {
+            buildHeatmap().then(() => {
+                if (heatmapLayer) heatmapLayer.addTo(map);
+            });
+        }
         btn.classList.remove('fab-off');
         btn.style.background = 'rgba(0,229,180,0.3)';
-        showToast('🔥 Heatmap enabled');
+        startHeatmapAutoRefresh();
+        
+        if (legend) legend.classList.add('visible');
+        
+        showToast('🔥 Heatmap enabled - Showing real-time crowd density');
     } else {
         if (heatmapLayer) map.removeLayer(heatmapLayer);
         btn.classList.add('fab-off');
         btn.style.background = '';
+        if (heatmapAutoRefresh) clearInterval(heatmapAutoRefresh);
+        
+        if (legend) legend.classList.remove('visible');
+        
         showToast('Heatmap off');
     }
+}
+function toggleWaypoints() {
+    waypointsVisible = !waypointsVisible;
+    waypointMarkers.forEach(m => waypointsVisible ? m.addTo(map) : map.removeLayer(m));
+    const btn = document.getElementById('waypointsBtn');
+    btn.classList.toggle('fab-off', !waypointsVisible);
+    showToast(waypointsVisible ? 'Waypoints shown' : 'Waypoints hidden');
 }
 
 // ── WEATHER ──────────────────────────────────────────────
@@ -1946,11 +2395,9 @@ async function fetchWeather() {
         const code = c.weather_code;
         const { icon, desc } = weatherCodeInfo(code);
 
-        // Update header chip
         document.getElementById('weatherIconSmall').textContent = icon;
         document.getElementById('weatherTempSmall').textContent = Math.round(c.temperature_2m) + '°';
 
-        // Store for panel
         window._weatherData = { icon, desc, temp: Math.round(c.temperature_2m),
             humidity: c.relative_humidity_2m, wind: Math.round(c.wind_speed_10m),
             rain: c.precipitation };
@@ -2054,10 +2501,30 @@ function toggleArrows() {
 
 function toggleHikers() {
     hikersVisible = !hikersVisible;
-    hikerMarkers.forEach(m => hikersVisible ? m.addTo(map) : map.removeLayer(m));
+    realHikerMarkers.forEach(m => hikersVisible ? m.addTo(map) : map.removeLayer(m));
     const btn = document.getElementById('hikersBtn');
     btn.classList.toggle('fab-off', !hikersVisible);
-    showToast(hikersVisible ? `Showing ${hikerMarkers.length} other hikers` : 'Hikers hidden');
+    
+    // Update badge visibility
+    const badge = document.getElementById('nearbyHikerCount');
+    if (badge) {
+        if (hikersVisible && realHikerMarkers.length) {
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+    
+    showToast(hikersVisible ? `Showing ${realHikerMarkers.length} other hikers nearby` : 'Other hikers hidden');
+    
+    // Start polling when enabled
+    if (hikersVisible && !nearbyHikerPollId) {
+        fetchNearbyHikers();
+        startNearbyHikerPolling();
+    } else if (!hikersVisible && nearbyHikerPollId) {
+        clearInterval(nearbyHikerPollId);
+        nearbyHikerPollId = null;
+    }
 }
 
 function toggleMetrics() {
@@ -2112,8 +2579,6 @@ function updateBadgeCounter() {
 }
 
 function completeHike() {
-    // Called when user reaches the 'end' waypoint automatically
-    // We show a toast but DO NOT auto-finish — user must click Finish Hike
     showToast('🎉 Trail completed! Tap Finish Hike to save your stats.');
     document.getElementById('statusText').textContent = 'DONE ⛰';
 }
@@ -2126,7 +2591,6 @@ async function finishHike() {
     btn.disabled = true;
     btn.innerHTML = '<span>Finishing…</span>';
 
-    // 1. Stop GPS tracking
     if (watchId) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
@@ -2137,10 +2601,8 @@ async function finishHike() {
     }
     locationEnabled = false;
 
-    // 2. Calculate duration
     const durationSec = Math.floor((Date.now() - startTime) / 1000);
 
-    // 3. Call API
     try {
         const res = await fetch('../api/finish_hike.php', {
             method: 'POST',
@@ -2150,7 +2612,7 @@ async function finishHike() {
                 session_token: sessionToken,
                 distance: totalDistance,
                 duration: durationSec,
-                badges: Array.from(reachedCheckpoints)  // This is an array
+                badges: Array.from(reachedCheckpoints)
             })
         });
         const data = await res.json();
@@ -2170,8 +2632,8 @@ async function finishHike() {
         btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg> Finish Hike';
     }
 }
+
 function showCompletionSummary(summary) {
-    // Update status
     document.getElementById('statusText').textContent = 'COMPLETED';
     const pill = document.getElementById('statusPill');
     pill.style.background = 'rgba(6,214,160,0.18)';
@@ -2179,17 +2641,12 @@ function showCompletionSummary(summary) {
     pill.style.color = 'var(--success)';
     pill.querySelector('.status-dot').style.animation = 'none';
 
-    // Fill summary card (only distance and time)
     document.getElementById('compTitle').textContent = `${summary.mountain} — Complete!`;
     document.getElementById('compDist').textContent = summary.distance_km.toFixed(1);
     document.getElementById('compTime').textContent = summary.duration;
-    // Remove the badges line if it exists
-    // document.getElementById('compBadges').textContent = summary.badges_earned;
 
-    // Show overlay
     document.getElementById('completionOverlay').classList.add('open');
 
-    // Hide the finish button
     const btn = document.getElementById('finishHikeBtn');
     btn.style.display = 'none';
 }
@@ -2198,21 +2655,18 @@ function showCompletionSummary(summary) {
 function checkEndTimeNudge() {
     if (hikeFinished || nudgeDismissed || nudgeShown) return;
 
-    // Determine scheduled end time based on hike type
     const now = new Date();
     const today = new Date(hikeDate);
-    let endHour = 15; // 3 PM default for day hikes
+    let endHour = 15;
 
     if (hikeType === 'overnight') {
-        endHour = 12; // Noon next day, but we'll just check if >24h
-        return; // Don't nudge overnight hikes on time
+        return;
     } else if (hikeType === 'late' || hikeType === 'late_hike') {
-        endHour = 23; // 11 PM
+        endHour = 23;
     }
-    // day_hike or day → 3 PM
 
     const scheduledEnd = new Date(today);
-    scheduledEnd.setHours(endHour, 1, 0, 0); // +1 min past scheduled end
+    scheduledEnd.setHours(endHour, 1, 0, 0);
 
     if (now >= scheduledEnd) {
         nudgeShown = true;
@@ -2226,9 +2680,7 @@ function dismissNudge() {
     document.getElementById('nudgeBar').classList.remove('show');
 }
 
-// Check every 60 seconds
 setInterval(checkEndTimeNudge, 60000);
-// Also check once after GPS is enabled (5 second delay)
 setTimeout(checkEndTimeNudge, 5000);
 
 // ── TOAST ─────────────────────────────────────────────────
@@ -2247,6 +2699,172 @@ function calcDist(lat1, lon1, lat2, lon2) {
     const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
+
+
+// ── REAL HIKERS (from database) + 1 MOCK HIKER ──────────
+let realHikerMarkers = [];
+let nearbyHikerPollId = null;
+let mockHikerAdded = false;
+
+// Mock hiker data (shows at a scenic viewpoint on the trail)
+const MOCK_HIKER = {
+    name: 'Demo Hiker',
+    latitude: null, // Will be set to a midpoint on the trail
+    longitude: null,
+    minutes_ago: 2,
+    is_mock: true
+};
+
+function getMockHikerPosition() {
+    // Place mock hiker at about 30-40% of the trail (a nice viewpoint area)
+    if (!trailCoords.length) return null;
+    
+    const midPoint = Math.floor(trailCoords.length * 0.35);
+    const [lat, lng] = trailCoords[midPoint];
+    return { lat, lng };
+}
+
+function startNearbyHikerPolling() {
+    if (nearbyHikerPollId) clearInterval(nearbyHikerPollId);
+    nearbyHikerPollId = setInterval(fetchNearbyHikers, 15000); // 15 seconds polling
+}
+
+async function fetchNearbyHikers() {
+    if (!MOUNTAIN_ID) return;
+    
+    try {
+        const res = await fetch(`../api/get_nearby_hikers.php?mountain_id=${MOUNTAIN_ID}&booking_id=${bookingId}`);
+        const data = await res.json();
+        
+        if (data.success) {
+            const realHikers = data.hikers || [];
+            
+            // If no real hikers, add one mock hiker for demo
+            if (realHikers.length === 0) {
+                const mockPos = getMockHikerPosition();
+                if (mockPos) {
+                    MOCK_HIKER.latitude = mockPos.lat;
+                    MOCK_HIKER.longitude = mockPos.lng;
+                    renderRealHikers([MOCK_HIKER], true);
+                    mockHikerAdded = true;
+                } else {
+                    renderRealHikers([], false);
+                }
+            } else {
+                // Reset mock flag when real hikers appear
+                mockHikerAdded = false;
+                renderRealHikers(realHikers, false);
+            }
+        }
+    } catch (e) {
+        console.error('Error fetching nearby hikers:', e);
+        // On error, show mock hiker if none exist
+        if (!mockHikerAdded && realHikerMarkers.length === 0) {
+            const mockPos = getMockHikerPosition();
+            if (mockPos) {
+                MOCK_HIKER.latitude = mockPos.lat;
+                MOCK_HIKER.longitude = mockPos.lng;
+                renderRealHikers([MOCK_HIKER], true);
+                mockHikerAdded = true;
+            }
+        }
+    }
+}
+
+function renderRealHikers(hikers, isMock = false) {
+    // Clear existing markers
+    realHikerMarkers.forEach(m => map.removeLayer(m));
+    realHikerMarkers = [];
+    
+    if (!hikers.length) {
+        // Update badge to show 0
+        const hikerCount = document.getElementById('nearbyHikerCount');
+        if (hikerCount) {
+            hikerCount.textContent = '0';
+            if (!isMock) hikerCount.style.display = 'none';
+        }
+        return;
+    }
+    
+    hikers.forEach(hiker => {
+        if (!hiker.latitude || !hiker.longitude) return;
+        
+        const lat = parseFloat(hiker.latitude);
+        const lng = parseFloat(hiker.longitude);
+        const initials = (hiker.name || 'Hiker').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+        const isActive = hiker.minutes_ago <= 10;
+        const isMockHiker = hiker.is_mock === true;
+        
+        // Different colors: pink for real hikers, purple for mock/demo
+        const markerColor = isMockHiker ? '#9B59B6' : '#ff6b9d';
+        
+        const icon = L.divIcon({
+            html: `<div class="real-hiker-marker ${isMockHiker ? 'mock-hiker' : ''}" style="background: ${markerColor};">
+                        <span class="hiker-initials">${initials}</span>
+                        <div class="hiker-status-dot ${isActive ? 'online' : 'offline'}"></div>
+                    </div>`,
+            className: 'real-hiker-icon',
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
+            popupAnchor: [0, -18]
+        });
+        
+        const timeAgo = hiker.minutes_ago === 0 ? 'Just now' : `${hiker.minutes_ago} min ago`;
+        
+        let popupContent;
+        if (isMockHiker) {
+            popupContent = `
+                <div class="popup-title">🎭 ${escapeHtml(hiker.name)} (Demo)</div>
+                <div class="popup-body">
+                    <strong>Status:</strong> 🟢 Demo hiker - showing how other hikers appear<br>
+                    <strong>Note:</strong> This is a demonstration. Real hikers will appear here when they are nearby!
+                </div>
+                <div class="popup-note">
+                    <i class="fas fa-info-circle"></i> Mock hiker - for demonstration only
+                </div>
+            `;
+        } else {
+            popupContent = `
+                <div class="popup-title">🧑‍🦯 ${escapeHtml(hiker.name)}</div>
+                <div class="popup-body">
+                    <strong>Status:</strong> ${isActive ? '🟢 Active on trail' : '🟡 Last seen ' + timeAgo}<br>
+                    <strong>Last update:</strong> ${timeAgo}
+                </div>
+                <div class="popup-note">
+                    <i class="fas fa-map-marker-alt"></i> Also hiking ${mountainName}
+                </div>
+            `;
+        }
+        
+        const marker = L.marker([lat, lng], { icon })
+            .bindPopup(popupContent);
+            
+        if (hikersVisible) {
+            marker.addTo(map);
+        }
+        
+        realHikerMarkers.push(marker);
+    });
+    
+    // Update badge counter
+    const realCount = hikers.filter(h => !h.is_mock).length;
+    const hikerCount = document.getElementById('nearbyHikerCount');
+    if (hikerCount) {
+        if (realCount > 0) {
+            hikerCount.textContent = realCount;
+            hikerCount.style.display = 'inline-block';
+        } else if (hikers.length > 0 && hikers[0].is_mock) {
+            // Mock hiker - show 0 or hide badge
+            hikerCount.textContent = '0';
+            hikerCount.style.display = 'none';
+        } else {
+            hikerCount.textContent = '0';
+            hikerCount.style.display = 'none';
+        }
+    }
+}
+
+
 
 // ── CLEANUP ───────────────────────────────────────────────
 window.addEventListener('beforeunload', () => {

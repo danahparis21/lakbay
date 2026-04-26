@@ -2,6 +2,8 @@
 // api/upload_review_photos.php
 session_start();
 require_once __DIR__ . '/../config/db.php';
+date_default_timezone_set('Asia/Manila');
+ini_set('date.timezone', 'Asia/Manila');
 
 header('Content-Type: application/json');
 

@@ -96,41 +96,42 @@ function getMountainsFromDB($pdo) {
     return $mountains;
 }
 
-// --- Helper function to get guides from database ---
 function getGuidesFromDB($pdo) {
     $guides = [];
     try {
         $stmt = $pdo->query("
-            SELECT g.*, u.name as guide_name, u.avatar 
+            SELECT g.id as guide_db_id, g.user_id, g.rating, g.is_available,
+                   u.id as user_id, u.name as guide_name, u.avatar, u.phone
             FROM guides g 
             JOIN users u ON g.user_id = u.id 
             WHERE g.is_available = 1
             ORDER BY g.rating DESC
         ");
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            // Get mountains this guide is assigned to
+            // ✅ CORRECT: Use guides.id (guide_db_id) for mountain assignments
             $guideMountains = [];
             $stmt2 = $pdo->prepare("SELECT mountain_id FROM guide_mountains WHERE guide_id = ?");
-            $stmt2->execute([$row['user_id']]);
+            $stmt2->execute([$row['guide_db_id']]);  // ✅ This is guides.id = 1,2,3,etc.
             while ($m = $stmt2->fetch(PDO::FETCH_ASSOC)) {
                 $guideMountains[] = $m['mountain_id'];
             }
             
             $guides[] = [
-                'id' => $row['user_id'],
-                'name' => $row['guide_name'],
+                'id' => $row['guide_db_id'],  // ← Change from user_id to guide_db_id
+    'guide_db_id' => $row['guide_db_id'],
+    'name' => $row['guide_name'],
                 'initials' => substr(preg_replace('/[^A-Z]/', '', $row['guide_name']), 0, 2),
                 'mountains' => $guideMountains,
                 'rating' => floatval($row['rating']),
-                'available' => 'Daily',
+                'available' => $row['is_available'] ? 'Daily' : 'Unavailable',
                 'phone' => $row['phone'] ?? ''
             ];
         }
     } catch (PDOException $e) {
-        // Fallback
+        error_log('Guides fetch error: ' . $e->getMessage());
     }
     
-    // Fallback guides
+    // Fallback guides if none found
     if (empty($guides)) {
         return [
             ['id'=>1,'name'=>'John Dela Cruz','initials'=>'JD','mountains'=>[1,3],'rating'=>4.9,'available'=>'Mon–Sat','phone'=>'+63 912 345 6789'],
@@ -141,15 +142,13 @@ function getGuidesFromDB($pdo) {
     }
     return $guides;
 }
-
-// --- Get user's bookings from database to populate the JavaScript bookings array ---
 function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
     $bookings = [];
     
     if (!$currentUserId) return $bookings;
     
     try {
-        // Get regular bookings (hikes)
+        // ✅ FIXED: Join guides on guides.id (not user_id)
         $stmt = $pdo->prepare("
             SELECT 
                 b.id, b.booking_number, b.mountain_id, b.guide_id,
@@ -162,15 +161,15 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2) as guideInitials
             FROM bookings b
             JOIN mountains m ON b.mountain_id = m.id
-            JOIN guides g ON b.guide_id = g.user_id
-            JOIN users u ON g.user_id = u.id
+            JOIN guides g ON b.guide_id = g.id                      -- ✅ FIXED: Use g.id
+            JOIN users u ON g.user_id = u.id                        -- ✅ Then join users
             WHERE b.user_id = ?
             ORDER BY b.created_at DESC
         ");
         $stmt->execute([$currentUserId]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            // Get hikers for this booking
+            // ... rest of the code remains the same
             $hikers = [];
             $stmt2 = $pdo->prepare("SELECT hiker_name FROM booking_hikers WHERE booking_id = ?");
             $stmt2->execute([$row['id']]);
@@ -178,17 +177,14 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 $hikers[] = $h['hiker_name'];
             }
             
-            // Get nudges count
             $stmt2 = $pdo->prepare("SELECT COUNT(*) as nudge_count, MAX(created_at) as last_nudge FROM booking_nudges WHERE booking_id = ?");
             $stmt2->execute([$row['id']]);
             $nudgeData = $stmt2->fetch(PDO::FETCH_ASSOC);
 
-            // Check if user has reviewed this booking
             $stmt2 = $pdo->prepare("SELECT COUNT(*) as has_reviewed FROM reviews WHERE booking_id = ? AND user_id = ?");
             $stmt2->execute([$row['id'], $currentUserId]);
             $hasReviewed = $stmt2->fetch()['has_reviewed'] > 0;
             
-            // Use the actual booking_number from the database
             $bookingId = $row['booking_number'];
             
             $bookings[] = [
@@ -197,7 +193,7 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 'mountainId' => $row['mountain_id'],
                 'mountain' => $row['mountain'],
                 'date' => $row['date'],
-                'time' => '06:00', // Default time
+                'time' => '06:00',
                 'type' => $row['type'] == 'overnight' ? 'overnight' : 'day',
                 'status' => $row['status'],
                 'guideId' => $row['guide_id'],
@@ -206,7 +202,7 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 'pax' => $row['pax'],
                 'hikers' => $hikers,
                 'totalFee' => floatval($row['totalFee']),
-                'createdAt' => strtotime($row['created_at']) * 1000, // This should work if PHP timezone is set
+                'createdAt' => strtotime($row['created_at']) * 1000,
                 'nudges' => intval($nudgeData['nudge_count'] ?? 0),
                 'lastNudge' => $nudgeData['last_nudge'] ? strtotime($nudgeData['last_nudge']) * 1000 : 0,
                 'camping' => $row['camping'] == 1,
@@ -215,27 +211,25 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
             ];
         }
         
-        // Get joined hikes (where user is in booking_hikers)
+        // ... joined hikes query needs the same fix
         $stmt = $pdo->prepare("
-    SELECT 
-        b.id, b.booking_number, b.mountain_id, b.guide_id,
-        b.hike_date as date, b.hike_type as type, 'joined' as status,
-        b.number_of_hikers as pax, b.total_amount as totalFee,
-        m.name as mountain,
-        u.name as guideName,
-        bh.hiker_name as joinedAs
-    FROM booking_hikers bh
-    JOIN bookings b ON bh.booking_id = b.id
-    JOIN mountains m ON b.mountain_id = m.id
-    JOIN guides g ON b.guide_id = g.user_id
-    JOIN users u ON g.user_id = u.id
-    WHERE bh.hiker_name = ? AND b.user_id != ?
-");
-// Use the current user's name from the database, not the session variable
-$stmt->execute([$currentUserName, $currentUserId]);
+            SELECT 
+                b.id, b.booking_number, b.mountain_id, b.guide_id,
+                b.hike_date as date, b.hike_type as type, 'joined' as status,
+                b.number_of_hikers as pax, b.total_amount as totalFee,
+                m.name as mountain,
+                u.name as guideName,
+                bh.hiker_name as joinedAs
+            FROM booking_hikers bh
+            JOIN bookings b ON bh.booking_id = b.id
+            JOIN mountains m ON b.mountain_id = m.id
+            JOIN guides g ON b.guide_id = g.id                        -- ✅ FIXED
+            JOIN users u ON g.user_id = u.id                          -- ✅ FIXED
+            WHERE bh.hiker_name = ? AND b.user_id != ?
+        ");
+        $stmt->execute([$currentUserName, $currentUserId]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            // Use actual booking number for joined hikes too
             $bookingId = 'JO-' . $row['booking_number'];
             $bookings[] = [
                 'id' => $bookingId,
@@ -262,12 +256,11 @@ $stmt->execute([$currentUserName, $currentUserId]);
         }
         
     } catch (PDOException $e) {
-        // If error, return empty array
+        error_log('Bookings fetch error: ' . $e->getMessage());
     }
     
     return $bookings;
 }
-
 // Get data from database
 $dbMountains = getMountainsFromDB($pdo);
 $dbGuides = getGuidesFromDB($pdo);
@@ -458,47 +451,56 @@ $stmt->execute([$newDate, $notes, $currentTime, $numericId, $currentUserId]);
         exit;
     }
     
-    if ($action === 'get_available_guides') {
-        $bookingId = $_POST['booking_id'] ?? '';
-        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+   if ($action === 'get_available_guides') {
+    $bookingId = $_POST['booking_id'] ?? '';
+    $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+    
+    $stmt = $pdo->prepare("SELECT mountain_id, guide_id FROM bookings WHERE id = ?");
+    $stmt->execute([$numericId]);
+    $booking = $stmt->fetch();
+    
+    if ($booking) {
+        // ✅ Get the current guide's guides.id from the booking
+        $stmt = $pdo->prepare("SELECT user_id FROM guides WHERE id = ?");
+        $stmt->execute([$booking['guide_id']]);
+        $currentGuide = $stmt->fetch();
+        $currentGuideUserId = $currentGuide['user_id'] ?? 0;
         
-        $stmt = $pdo->prepare("SELECT mountain_id, guide_id FROM bookings WHERE id = ?");
-        $stmt->execute([$numericId]);
-        $booking = $stmt->fetch();
-        
-        if ($booking) {
-            $stmt = $pdo->prepare("
-                SELECT u.id, u.name, g.rating, g.years_experience
-                FROM guides g
-                JOIN users u ON g.user_id = u.id
-                JOIN guide_mountains gm ON g.user_id = gm.guide_id
-                WHERE gm.mountain_id = ? AND g.user_id != ? AND g.is_available = 1
-            ");
-            $stmt->execute([$booking['mountain_id'], $booking['guide_id']]);
-            $guides = $stmt->fetchAll();
-            echo json_encode(['success' => true, 'guides' => $guides]);
-        } else {
-            echo json_encode(['success' => false, 'guides' => []]);
-        }
-        exit;
+        // ✅ Use guides.id (not users.id) for the mountain assignment query
+        $stmt = $pdo->prepare("
+            SELECT u.id, u.name, g.rating, g.years_experience, g.id as guide_db_id
+            FROM guides g
+            JOIN users u ON g.user_id = u.id
+            JOIN guide_mountains gm ON gm.guide_id = g.id
+            WHERE gm.mountain_id = ? 
+              AND g.id != ? 
+              AND g.is_available = 1
+        ");
+        $stmt->execute([$booking['mountain_id'], $booking['guide_id']]);
+        $guides = $stmt->fetchAll();
+        echo json_encode(['success' => true, 'guides' => $guides]);
+    } else {
+        echo json_encode(['success' => false, 'guides' => []]);
     }
+    exit;
+}
     if ($action === 'lookup_hike') {
         $bookingNumber = $_POST['booking_number'] ?? '';
         
         $stmt = $pdo->prepare("
-            SELECT 
-                b.id, b.booking_number, b.mountain_id, b.guide_id,
-                b.hike_date as date, b.hike_type as type, b.status,
-                b.number_of_hikers as pax,
-                m.name as mountain,
-                u.name as guideName,
-                (b.hike_type = 'overnight') as camping
-            FROM bookings b
-            JOIN mountains m ON b.mountain_id = m.id
-            JOIN guides g ON b.guide_id = g.user_id
-            JOIN users u ON g.user_id = u.id
-            WHERE b.booking_number = ?
-        ");
+    SELECT 
+        b.id, b.booking_number, b.mountain_id, b.guide_id,
+        b.hike_date as date, b.hike_type as type, b.status,
+        b.number_of_hikers as pax,
+        m.name as mountain,
+        u.name as guideName,
+        (b.hike_type = 'overnight') as camping
+    FROM bookings b
+    JOIN mountains m ON b.mountain_id = m.id
+    JOIN guides g ON b.guide_id = g.id      -- ✅ FIXED
+    JOIN users u ON g.user_id = u.id        -- ✅ FIXED
+    WHERE b.booking_number = ?
+");
         $stmt->execute([$bookingNumber]);
         $hike = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -2545,7 +2547,8 @@ function todayCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
         }
     }
  
-    const startUrl = `active-hike.php?booking_id=${b.db_id || b.id}`;
+    // Pass both integer ID and booking number to be safe
+    const startUrl = `active-hike.php?booking_id=${b.db_id}&booking_number=${b.id}`;
  
     // Secondary actions: message guide
     const msgBtn = `
@@ -2666,20 +2669,37 @@ function renderBookings(){
     }
  
     // Separate arrays for different purposes
-    const regularStatuses = ['pending', 'confirmed', 'active', 'joined'];  // For non-today current
-    const todayStatuses = ['confirmed', 'active'];  // For today section only
+    const regularStatuses = ['pending', 'confirmed', 'joined'];  // For non-today current
+    const todayStatuses = ['active', 'confirmed'];  // For today section only
     const historyStatuses = ['cancelled', 'completed', 'finished'];
 
     // ── Apply search filter ──
     const q = searchQuery.toLowerCase().trim();
+    const cleanQ = q.replace('#', '');
+    const alphaQ = cleanQ.replace(/[^a-z0-9]/g, '');
+
     function matchesSearch(b) {
         if (!q) return true;
+        
+        // Flexible ID match: remove all non-alphanumeric for a deeper check
+        const alphaID = String(b.id).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (alphaQ.length >= 3 && alphaID.includes(alphaQ)) return true;
+        
+        // Regular field matches
         const fields = [
             b.mountain, b.guideName, b.id, b.date, b.type,
             b.status, b.joinedFromId,
             ...(b.hikers || [])
         ].filter(Boolean);
-        return fields.some(f => String(f).toLowerCase().includes(q));
+        
+        return fields.some(f => String(f).toLowerCase().includes(cleanQ));
+    }
+
+    // Determine if we should bypass status filter for an exact ID match
+    function isExactIDMatch(b) {
+        if (!q || q.length < 5) return false;
+        const alphaID = String(b.id).toLowerCase().replace(/[^a-z0-9]/g, '');
+        return alphaID === alphaQ;
     }
  
     // ── Count per status (for the filter chips) ──
@@ -2707,17 +2727,23 @@ function renderBookings(){
 
     // "Today" cards: only confirmed or active (NOT pending)
     const todayBookings = bookings.filter(b =>
-        todayStatuses.includes(b.status) && isHikeToday(b) && matchesSearch(b) && matchesFilter(b)
+        todayStatuses.includes(b.status) && isHikeToday(b) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b))
     );
  
     // Regular current: regularStatuses bookings NOT today (includes pending)
     const current = bookings.filter(b =>
-        regularStatuses.includes(b.status) && !isHikeToday(b) && matchesSearch(b) && matchesFilter(b)
+        regularStatuses.includes(b.status) && !isHikeToday(b) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b))
     );
  
     const history = bookings.filter(b =>
-        historyStatuses.includes(b.status) && matchesSearch(b) && matchesFilter(b)
+        historyStatuses.includes(b.status) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b))
     );
+
+    // Cross-tab search info
+    const otherTabCount = bookings.filter(b => {
+        const inOtherTab = currentTab ? historyStatuses.includes(b.status) : regularStatuses.includes(b.status);
+        return inOtherTab && matchesSearch(b);
+    }).length;
  
     // Build current tab HTML
     const todayHTML = todayBookings.map(b => `
@@ -2752,6 +2778,23 @@ function renderBookings(){
                </div>`;
         }
     }
+
+    // If searching and results found in other tab, show a helpful hint
+    if (q && otherTabCount > 0) {
+        const otherTabName = currentTab ? 'History' : 'Active Hikes';
+        const hintHTML = `
+            <div style="grid-column:1/-1; margin-top:20px; padding:16px; background:var(--sky); border-radius:12px; text-align:center; border:1px dashed var(--sage);">
+                <span style="font-size:13px; color:var(--stone);">
+                    Found <b>${otherTabCount}</b> more result(s) in your <b>${otherTabName}</b>.
+                </span>
+                <button class="btn btn-ghost btn-sm" style="margin-left:8px; text-decoration:underline; font-weight:700;" onclick="switchTab('${currentTab ? 'history' : 'current'}', null, true)">
+                    Switch to ${otherTabName}
+                </button>
+            </div>
+        `;
+        if (currentTab) cc.insertAdjacentHTML('beforeend', hintHTML);
+        else hc.insertAdjacentHTML('beforeend', hintHTML);
+    }
 }
 
 function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
@@ -2780,7 +2823,7 @@ function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
       isToday = hikeDate.getTime() === todayDate.getTime();
     }
     
-    canStart = (b.status === 'confirmed' || b.status === 'active') && isToday;
+    canStart = (b.status === 'active') && isToday;  // Only allow active status to start today
     
     // Debug log - remove in production
     console.log(`Booking ${b.id}: date=${b.date}, isToday=${isToday}, status=${b.status}, canStart=${canStart}`);
@@ -2791,7 +2834,7 @@ function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
   let startBtn = '';
   if (canStart) {
     startBtn = `
-      <a href="active-hike.php?booking_id=${b.db_id || b.id}" class="btn btn-primary btn-sm">
+      <a href="active-hike.php?booking_id=${b.db_id}&booking_number=${b.id}" class="btn btn-primary btn-sm">
         <svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:white;margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         START HIKE
       </a>
@@ -3197,17 +3240,23 @@ function cancelBooking(bookingId, mode) {
       }
     );
 }
-function switchTab(tab,el){
+function switchTab(tab, el, keepSearch = false){
+  if (!el) {
+    const tabs = document.querySelectorAll('.page-tab');
+    el = tab === 'current' ? tabs[0] : tabs[1];
+  }
   document.querySelectorAll('.page-tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
+  if (el) el.classList.add('active');
   document.getElementById('tab-current').style.display=tab==='current'?'block':'none';
   document.getElementById('tab-history').style.display=tab==='history'?'block':'none';
 
-  // Reset filter & search
-  activeFilter = 'all';
-  searchQuery = '';
-  document.getElementById('searchInput').value = '';
-  document.getElementById('searchClear').classList.remove('show');
+  if (!keepSearch) {
+    // Reset filter & search
+    activeFilter = 'all';
+    searchQuery = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchClear').classList.remove('show');
+  }
 
   // Toggle chip visibility per tab
   const currentChips = ['pending','confirmed','active','joined'];

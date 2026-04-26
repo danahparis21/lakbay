@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = true;
             
             // Redirect to hiker profile page
-            header('Location: ../hiker frontend/explore.php');
+            header('Location: ../hiker-frontend/explore.php');
             exit;
             
         } catch (PDOException $e) {
