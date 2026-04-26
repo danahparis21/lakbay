@@ -1,3 +1,110 @@
+<?php
+session_start();
+require_once '../config/db.php';
+
+// ── AUTH: require guide login ──────────────────────────────────────────────
+if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'guide') {
+    header('Location: ../login.php');
+    exit;
+}
+
+$user_id = $_SESSION['user_id'];
+
+// ── Fetch user and guide details ──────────────────────────────────────────
+$stmt = $pdo->prepare("
+    SELECT u.name, u.email, u.phone, u.avatar,
+           g.id as guide_id, g.specialization, g.years_experience, g.bio
+    FROM users u
+    LEFT JOIN guides g ON g.user_id = u.id
+    WHERE u.id = ?
+");
+$stmt->execute([$user_id]);
+$guide_data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$guide_data) {
+    die('Guide profile not found.');
+}
+
+$guide_id = $guide_data['guide_id'];
+
+// ── Fetch assigned mountains ──────────────────────────────────────────────
+$stmt = $pdo->prepare("
+    SELECT m.id, m.name
+    FROM guide_mountains gm
+    JOIN mountains m ON m.id = gm.mountain_id
+    WHERE gm.guide_id = ?
+");
+$stmt->execute([$guide_id]);
+$assigned_mountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$assigned_mtn_ids = array_map(fn($m) => $m['id'], $assigned_mountains);
+$assigned_mtn_names = array_map(fn($m) => $m['name'], $assigned_mountains);
+
+// ── Fetch all mountains for selector ─────────────────────────────────────
+$stmt = $pdo->query("SELECT id, name FROM mountains ORDER BY name ASC");
+$all_mountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Avatar initials
+$name_parts = explode(' ', $guide_data['name']);
+$initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? substr($name_parts[1], 0, 1) : ''));
+
+// Handle POST actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+    header('Content-Type: application/json');
+    
+    try {
+        $pdo->beginTransaction();
+        
+        $email = $_POST['email'] ?? '';
+        $phone = $_POST['phone'] ?? '';
+        $specialization = $_POST['specialization'] ?? '';
+        $years_experience = (int)($_POST['years_experience'] ?? 0);
+        $bio = $_POST['bio'] ?? '';
+        $mtn_ids = isset($_POST['mountains']) ? explode(',', $_POST['mountains']) : [];
+        
+        // Update users table
+        $stmt = $pdo->prepare("UPDATE users SET email = ?, phone = ? WHERE id = ?");
+        $stmt->execute([$email, $phone, $user_id]);
+        
+        // Update guides table
+        $stmt = $pdo->prepare("UPDATE guides SET specialization = ?, years_experience = ?, bio = ? WHERE user_id = ?");
+        $stmt->execute([$specialization, $years_experience, $bio, $user_id]);
+        
+        // Handle Avatar Upload
+        if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
+            $upload_dir = '../uploads/avatars/';
+            if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+            
+            $file_ext = pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION);
+            $file_name = 'guide_' . $user_id . '_' . time() . '.' . $file_ext;
+            $target_file = $upload_dir . $file_name;
+            
+            if (move_uploaded_file($_FILES['avatar']['tmp_name'], $target_file)) {
+                $avatar_path = 'uploads/avatars/' . $file_name;
+                $stmt = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
+                $stmt->execute([$avatar_path, $user_id]);
+            }
+        }
+        
+        // Update mountains
+        $pdo->prepare("DELETE FROM guide_mountains WHERE guide_id = ?")->execute([$guide_id]);
+        if (!empty($mtn_ids)) {
+            $stmt = $pdo->prepare("INSERT INTO guide_mountains (guide_id, mountain_id) VALUES (?, ?)");
+            foreach ($mtn_ids as $mid) {
+                if (!empty($mid)) $stmt->execute([$guide_id, $mid]);
+            }
+        }
+        
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => 'Profile updated successfully']);
+        exit;
+        
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+        exit;
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,6 +114,11 @@
   <link rel="stylesheet" href="guide-shared.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
+    :root {
+      --forest: #1a1a18; /* Dark gray/ink */
+      --forest-lt: #f0ede8; /* Stone/light gray */
+    }
+
     /* ── PROFILE LAYOUT ── */
     .profile-layout {
       display: grid;
@@ -218,23 +330,24 @@
       background: white;
       font-family: 'DM Sans', sans-serif;
     }
-    .mtn-select-chip:hover { border-color: var(--forest); color: var(--forest); }
-    .mtn-select-chip.selected { background: var(--forest); color: white; border-color: var(--forest); }
+    .mtn-select-chip:hover { border-color: var(--ink); color: var(--ink); }
+    .mtn-select-chip.selected { background: #3A3A35; color: white; border-color: #3A3A35; }
 
     /* save bar */
     .save-bar {
-      background: var(--forest);
+      background: #100600; /* Solid dark background for readability */
       border-radius: var(--r-lg);
-      padding: 14px 20px;
+      padding: 16px 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-top: 20px;
+      margin-top: 28px;
       gap: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
     }
     .save-bar-text {
-      font-size: 0.8rem;
-      color: rgba(255,255,255,0.75);
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.9);
     }
     .save-bar-text strong { color: white; }
 
@@ -254,17 +367,17 @@
     <nav class="sidebar-nav">
       <div class="sidebar-section-label">Main</div>
       <ul>
-        <li><a href="guide-dashboard.html"><i class="fas fa-house"></i> Dashboard</a></li>
-        <li><a href="guide-map.html"><i class="fas fa-map-location-dot"></i> Trail Map</a></li>
-        <li><a href="guide-communication.html"><i class="fas fa-comments"></i> Communication</a></li>
-        <li><a href="guide-safety.html"><i class="fas fa-shield-halved"></i> Safety</a></li>
+        <li><a href="guide-dashboard.php"><i class="fas fa-house"></i> Dashboard</a></li>
+        <li><a href="guide-map.php"><i class="fas fa-map-location-dot"></i> Trail Map</a></li>
+        <li><a href="guide-communication.php"><i class="fas fa-comments"></i> Communication</a></li>
+        <li><a href="guide-bookings.php"><i class="fas fa-shield-halved"></i> Bookings</a></li>
       </ul>
       <div class="sidebar-divider"></div>
-      <ul><li><a href="guide-profile.html" class="active"><i class="fas fa-circle-user"></i> My Profile</a></li></ul>
+      <ul><li><a href="guide-profile.php" class="active"><i class="fas fa-circle-user"></i> My Profile</a></li></ul>
     </nav>
     <div class="sidebar-profile">
-      <div class="sidebar-avatar">JD</div>
-      <div class="sidebar-profile-info"><div class="sidebar-profile-name">John Dela Cruz</div><div class="sidebar-profile-role">Senior Trail Guide</div></div>
+      <div class="sidebar-avatar"><?= $initials ?></div>
+      <div class="sidebar-profile-info"><div class="sidebar-profile-name"><?= htmlspecialchars($guide_data['name']) ?></div><div class="sidebar-profile-role"><?= htmlspecialchars($guide_data['specialization'] ?? 'Trail Guide') ?></div></div>
     </div>
   </aside>
 
@@ -285,37 +398,42 @@
             <div class="profile-card-top">
               <div class="profile-avatar-wrap">
                 <div class="profile-avatar-img" id="profileAvatar">
-                  <img id="profileAvatarImg" src="" alt="">
-                  <span id="profileAvatarInitials">JD</span>
+                  <?php if ($guide_data['avatar']): ?>
+                    <img id="profileAvatarImg" src="../<?= htmlspecialchars($guide_data['avatar']) ?>" alt="" style="display:block;">
+                    <span id="profileAvatarInitials" style="display:none;"><?= $initials ?></span>
+                  <?php else: ?>
+                    <img id="profileAvatarImg" src="" alt="" style="display:none;">
+                    <span id="profileAvatarInitials"><?= $initials ?></span>
+                  <?php endif; ?>
                 </div>
                 <button class="profile-avatar-edit-btn" onclick="document.getElementById('avatarFileInput').click()" title="Change photo">
                   <i class="fas fa-camera"></i>
                 </button>
               </div>
-              <div class="profile-name" id="profileNameDisplay">John Dela Cruz</div>
+              <div class="profile-name" id="profileNameDisplay"><?= htmlspecialchars($guide_data['name']) ?></div>
               <div class="profile-name-note">NAME CANNOT BE CHANGED</div>
-              <div class="profile-role">Senior Trail Guide · LAKBAY</div>
+              <div class="profile-role"><?= htmlspecialchars($guide_data['specialization'] ?? 'Trail Guide') ?> · LAKBAY</div>
             </div>
             <div class="profile-card-body">
               <div class="profile-info-row">
                 <div class="profile-info-icon"><i class="fas fa-envelope"></i></div>
                 <div>
                   <div class="profile-info-label">Email</div>
-                  <div class="profile-info-val" id="pi-email">john.delacruz@lakbay.ph</div>
+                  <div class="profile-info-val" id="pi-email"><?= htmlspecialchars($guide_data['email']) ?></div>
                 </div>
               </div>
               <div class="profile-info-row">
                 <div class="profile-info-icon"><i class="fas fa-phone"></i></div>
                 <div>
                   <div class="profile-info-label">Mobile</div>
-                  <div class="profile-info-val" id="pi-phone">+63 912 345 6789</div>
+                  <div class="profile-info-val" id="pi-phone"><?= htmlspecialchars($guide_data['phone'] ?? 'Not set') ?></div>
                 </div>
               </div>
               <div class="profile-info-row">
-                <div class="profile-info-icon"><i class="fas fa-cake-candles"></i></div>
+                <div class="profile-info-icon"><i class="fas fa-briefcase"></i></div>
                 <div>
-                  <div class="profile-info-label">Age</div>
-                  <div class="profile-info-val" id="pi-age">32</div>
+                  <div class="profile-info-label">Experience</div>
+                  <div class="profile-info-val" id="pi-experience"><?= (int)$guide_data['years_experience'] ?> Years</div>
                 </div>
               </div>
               <div class="profile-info-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
@@ -325,7 +443,14 @@
                     <div class="profile-info-label">Assigned Mountains</div>
                   </div>
                 </div>
-                <div class="mountain-chips" id="profileMtnChips"></div>
+                <div class="mountain-chips" id="profileMtnChips">
+                  <?php foreach ($assigned_mountains as $m): ?>
+                    <div class="mountain-chip"><i class="fas fa-mountain" style="font-size:0.6rem;"></i><?= htmlspecialchars($m['name']) ?></div>
+                  <?php endforeach; ?>
+                  <?php if (empty($assigned_mountains)): ?>
+                    <span style="font-size:0.72rem;color:var(--ink-4);">None assigned</span>
+                  <?php endif; ?>
+                </div>
               </div>
             </div>
           </div>
@@ -351,23 +476,34 @@
             <!-- BASIC INFO (name = readonly) -->
             <div class="form-group">
               <label class="form-label">Full Name <span style="color:var(--ink-4);font-style:italic;text-transform:none;letter-spacing:0;">(read-only)</span></label>
-              <input type="text" class="form-control" value="John Dela Cruz" readonly>
+              <input type="text" class="form-control" value="<?= htmlspecialchars($guide_data['name']) ?>" readonly>
             </div>
 
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Email Address</label>
-                <input type="email" class="form-control" id="editEmail" value="john.delacruz@lakbay.ph" placeholder="email@example.com">
+                <input type="email" class="form-control" id="editEmail" value="<?= htmlspecialchars($guide_data['email']) ?>" placeholder="email@example.com">
               </div>
               <div class="form-group">
                 <label class="form-label">Mobile Number</label>
-                <input type="tel" class="form-control" id="editPhone" value="+63 912 345 6789" placeholder="+63 9XX XXX XXXX">
+                <input type="tel" class="form-control" id="editPhone" value="<?= htmlspecialchars($guide_data['phone'] ?? '') ?>" placeholder="+63 9XX XXX XXXX">
               </div>
             </div>
 
-            <div class="form-group" style="max-width:160px;">
-              <label class="form-label">Age</label>
-              <input type="number" class="form-control" id="editAge" value="32" min="18" max="70" placeholder="Age">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Specialization</label>
+                <input type="text" class="form-control" id="editSpecialization" value="<?= htmlspecialchars($guide_data['specialization'] ?? '') ?>" placeholder="e.g. Mountain Trekking">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Years of Experience</label>
+                <input type="number" class="form-control" id="editExperience" value="<?= (int)$guide_data['years_experience'] ?>" min="0" max="50" placeholder="Years">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Short Bio</label>
+              <textarea class="form-control" id="editBio" rows="3" placeholder="Tell us about your experience..." maxlength="500"><?= htmlspecialchars($guide_data['bio'] ?? '') ?></textarea>
             </div>
 
             <!-- MOUNTAINS -->
@@ -378,7 +514,7 @@
             <!-- SAVE BAR -->
             <div class="save-bar">
               <div class="save-bar-text"><strong>Ready to save?</strong> Your changes will be updated immediately.</div>
-              <button class="btn btn-ghost" style="background:rgba(255,255,255,0.15);color:white;" onclick="saveProfile()">
+              <button class="btn btn-primary" style="background:white; color:#100600; border:none; padding:10px 24px; font-weight:700;" id="saveBtn" onclick="saveProfile()">
                 <i class="fas fa-check"></i> Save Changes
               </button>
             </div>
@@ -392,11 +528,11 @@
 
   <nav class="guide-bottom-nav">
     <div class="bottom-nav-inner">
-      <a href="guide-dashboard.html" class="bnav-item"><i class="fas fa-house"></i><span>Home</span></a>
-      <a href="guide-map.html" class="bnav-item"><i class="fas fa-map-location-dot"></i><span>Map</span></a>
-      <a href="guide-communication.html" class="bnav-item"><i class="fas fa-comments"></i><span>Chats</span></a>
-      <a href="guide-safety.html" class="bnav-item"><i class="fas fa-shield-halved"></i><span>Safety</span></a>
-      <a href="guide-profile.html" class="bnav-item active"><i class="fas fa-circle-user"></i><span>Profile</span></a>
+      <a href="guide-dashboard.php" class="bnav-item"><i class="fas fa-house"></i><span>Home</span></a>
+      <a href="guide-map.php" class="bnav-item"><i class="fas fa-map-location-dot"></i><span>Map</span></a>
+      <a href="guide-communication.php" class="bnav-item"><i class="fas fa-comments"></i><span>Chats</span></a>
+      <a href="guide-bookings.php" class="bnav-item"><i class="fas fa-shield-halved"></i><span>Bookings</span></a>
+      <a href="guide-profile.php" class="bnav-item active"><i class="fas fa-circle-user"></i><span>Profile</span></a>
     </div>
   </nav>
 </div>
@@ -404,22 +540,22 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const allMountains = ['Mt. Batulao','Mt. Talamitam','Mt. Lantik','Mt. Apayang','Mt. Makiling','Mt. Pulag','Mt. Apo'];
-let selectedMtns = new Set(['Mt. Batulao','Mt. Talamitam']);
+const allMountains = <?= json_encode($all_mountains) ?>;
+let selectedMtns = new Set(<?= json_encode($assigned_mtn_ids) ?>);
 
 function renderMtnSelector() {
   const el = document.getElementById('mtnSelector');
   el.innerHTML = '';
   allMountains.forEach(m => {
     const btn = document.createElement('button');
-    btn.className = 'mtn-select-chip' + (selectedMtns.has(m) ? ' selected' : '');
-    btn.textContent = m;
+    btn.className = 'mtn-select-chip' + (selectedMtns.has(String(m.id)) || selectedMtns.has(Number(m.id)) ? ' selected' : '');
+    btn.textContent = m.name;
     btn.type = 'button';
     btn.addEventListener('click', () => {
-      if (selectedMtns.has(m)) selectedMtns.delete(m);
-      else selectedMtns.add(m);
+      const mid = Number(m.id);
+      if (selectedMtns.has(mid)) selectedMtns.delete(mid);
+      else selectedMtns.add(mid);
       renderMtnSelector();
-      renderProfileChips();
     });
     el.appendChild(btn);
   });
@@ -432,10 +568,12 @@ function renderProfileChips() {
     el.innerHTML = '<span style="font-size:0.72rem;color:var(--ink-4);">None assigned</span>';
     return;
   }
-  selectedMtns.forEach(m => {
+  selectedMtns.forEach(mid => {
+    const m = allMountains.find(x => Number(x.id) === Number(mid));
+    if (!m) return;
     const chip = document.createElement('div');
     chip.className = 'mountain-chip';
-    chip.innerHTML = `<i class="fas fa-mountain" style="font-size:0.6rem;"></i>${m}`;
+    chip.innerHTML = `<i class="fas fa-mountain" style="font-size:0.6rem;"></i>${m.name}`;
     el.appendChild(chip);
   });
 }
@@ -458,32 +596,59 @@ function handlePhotoUpload(input) {
     document.getElementById('photoPreviewImg').src = e.target.result;
     preview.style.display = 'block';
     document.getElementById('photoIcon').style.display = 'none';
-    // update sidebar avatar
-    const avatarImg = document.getElementById('profileAvatarImg');
-    avatarImg.src = e.target.result;
-    avatarImg.style.display = 'block';
-    document.getElementById('profileAvatarInitials').style.display = 'none';
   };
   reader.readAsDataURL(file);
 }
 
-function saveProfile() {
+async function saveProfile() {
   const email = document.getElementById('editEmail').value.trim();
   const phone = document.getElementById('editPhone').value.trim();
-  const age   = document.getElementById('editAge').value;
+  const specialization = document.getElementById('editSpecialization').value.trim();
+  const experience = document.getElementById('editExperience').value;
+  const bio = document.getElementById('editBio').value.trim();
+  const avatarInput = document.getElementById('avatarFileInput');
 
   // Basic validation
   if (!email || !email.includes('@')) { showToast('Please enter a valid email.'); return; }
   if (!phone) { showToast('Please enter your mobile number.'); return; }
-  if (!age || age < 18 || age > 70) { showToast('Please enter a valid age (18–70).'); return; }
 
-  // Update display card
-  document.getElementById('pi-email').textContent = email;
-  document.getElementById('pi-phone').textContent = phone;
-  document.getElementById('pi-age').textContent = age;
-  renderProfileChips();
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
 
-  showToast('✅ Profile updated successfully!');
+  const formData = new FormData();
+  formData.append('email', email);
+  formData.append('phone', phone);
+  formData.append('specialization', specialization);
+  formData.append('years_experience', experience);
+  formData.append('bio', bio);
+  formData.append('mountains', Array.from(selectedMtns).join(','));
+  
+  if (avatarInput.files[0]) {
+    formData.append('avatar', avatarInput.files[0]);
+  }
+
+  try {
+    const res = await fetch(window.location.href, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: formData
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      showToast('✅ Profile updated successfully!');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showToast('❌ ' + (data.message || 'Error saving profile'));
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check"></i> Save Changes';
+    }
+  } catch (err) {
+    showToast('❌ Network error. Please try again.');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check"></i> Save Changes';
+  }
 }
 
 function showToast(msg) {

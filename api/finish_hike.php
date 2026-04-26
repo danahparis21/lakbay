@@ -2,8 +2,7 @@
 /**
  * finish_hike.php — Finish Hike API
  * 
- * Called when user clicks "Finish Hike" in active-hike.php.
- * Stops the active session, saves route stats, and marks booking as completed.
+ * Called when guide clicks "Finish Hike" in guide-map.php.
  */
 require_once __DIR__ . '/../config/db.php';
 date_default_timezone_set('Asia/Manila');
@@ -25,22 +24,22 @@ $distance     = $input['distance'] ?? 0;
 $duration     = $input['duration'] ?? 0;
 $badges       = $input['badges'] ?? [];
 
-if (!$bookingId || !$sessionToken) {
-    echo json_encode(['success' => false, 'message' => 'Missing booking_id or session_token']);
+if (!$bookingId) {
+    echo json_encode(['success' => false, 'message' => 'Missing booking_id']);
     exit;
 }
 
 try {
     $pdo->beginTransaction();
 
-    // 1. Verify the booking belongs to this user
+    // Get booking details
     $stmt = $pdo->prepare("
         SELECT b.id, b.status, b.mountain_id, b.hike_date, b.hike_type, m.name as mountain_name
         FROM bookings b
         JOIN mountains m ON b.mountain_id = m.id
-        WHERE b.id = ? AND b.user_id = ?
+        WHERE b.id = ?
     ");
-    $stmt->execute([$bookingId, $userId]);
+    $stmt->execute([$bookingId]);
     $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$booking) {
@@ -49,13 +48,7 @@ try {
         exit;
     }
 
-    if (!in_array($booking['status'], ['active', 'confirmed', 'pending'])) {
-        $pdo->rollBack();
-        echo json_encode(['success' => false, 'message' => 'Booking is not in an active state']);
-        exit;
-    }
-
-    // 2. Mark the booking as finished
+    // Mark the booking as FINISHED (not completed!)
     $stmt = $pdo->prepare("
         UPDATE bookings 
         SET status = 'finished'
@@ -63,44 +56,39 @@ try {
     ");
     $stmt->execute([$bookingId]);
 
-    // 3. End the active hike session
-    $checkColumn = $pdo->query("SHOW COLUMNS FROM active_hike_sessions LIKE 'end_time'");
-    $hasEndTime = $checkColumn->rowCount() > 0;
-    
-    // Convert badges array to JSON for storage
-    $badgesJson = json_encode($badges);
-    
-    if ($hasEndTime) {
-        $stmt = $pdo->prepare("
-            UPDATE active_hike_sessions 
-            SET status = 'finished',
-                end_time = NOW(),
-                total_distance = ?,
-                total_duration = ?,
-                badges_earned = ?
-            WHERE booking_id = ? AND user_id = ? AND session_token = ? AND status = 'active'
-        ");
-        $stmt->execute([
-            $distance,
-            $duration,
-            $badgesJson,
-            $bookingId,
-            $userId,
-            $sessionToken
-        ]);
-    } else {
-        $stmt = $pdo->prepare("
-            UPDATE active_hike_sessions 
-            SET status = 'finished'
-            WHERE booking_id = ? AND user_id = ? AND session_token = ? AND status = 'active'
-        ");
-        $stmt->execute([$bookingId, $userId, $sessionToken]);
+    // If there's an active hike session, update it
+    if ($sessionToken) {
+        $checkColumn = $pdo->query("SHOW COLUMNS FROM active_hike_sessions LIKE 'end_time'");
+        $hasEndTime = $checkColumn->rowCount() > 0;
+        
+        $badgesJson = json_encode($badges);
+        
+        if ($hasEndTime) {
+            $stmt = $pdo->prepare("
+                UPDATE active_hike_sessions 
+                SET status = 'finished',
+                    end_time = NOW(),
+                    total_distance = ?,
+                    total_duration = ?,
+                    badges_earned = ?
+                WHERE booking_id = ? AND session_token = ? AND status = 'active'
+            ");
+            $stmt->execute([
+                $distance,
+                $duration,
+                $badgesJson,
+                $bookingId,
+                $sessionToken
+            ]);
+        } else {
+            $stmt = $pdo->prepare("
+                UPDATE active_hike_sessions 
+                SET status = 'finished'
+                WHERE booking_id = ? AND session_token = ? AND status = 'active'
+            ");
+            $stmt->execute([$bookingId, $sessionToken]);
+        }
     }
-
-    // 4. Get mountain name for response
-    $stmt = $pdo->prepare("SELECT name FROM mountains WHERE id = ?");
-    $stmt->execute([$booking['mountain_id']]);
-    $mountain = $stmt->fetch(PDO::FETCH_ASSOC);
 
     $pdo->commit();
 
@@ -111,9 +99,9 @@ try {
 
     echo json_encode([
         'success'  => true,
-        'message'  => 'Hike completed successfully!',
+        'message'  => 'Hike finished successfully!',
         'summary'  => [
-            'mountain'      => $mountain['name'] ?? 'Unknown',
+            'mountain'      => $booking['mountain_name'],
             'distance_km'   => round((float)$distance, 2),
             'duration'      => $timeStr,
             'duration_sec'  => (int)$duration,

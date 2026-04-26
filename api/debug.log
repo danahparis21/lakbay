@@ -1,0 +1,514 @@
+2026-04-26 19:18:15 - === GET MESSAGES CALLED ===
+2026-04-26 19:18:15 - otherUserId (guide_id param): 11
+2026-04-26 19:18:15 - hikerId: 4
+2026-04-26 19:18:16 - === GET MESSAGES CALLED ===
+2026-04-26 19:18:16 - otherUserId (guide_id param): 11
+2026-04-26 19:18:16 - hikerId: 4
+2026-04-26 19:18:23 - === GET MESSAGES CALLED ===
+2026-04-26 19:18:23 - otherUserId (guide_id param): 11
+2026-04-26 19:18:23 - hikerId: 4
+2026-04-26 19:18:26 - === SEND MESSAGE CALLED ===
+2026-04-26 19:18:26 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 11
+    [recipient_type] => guide
+    [body] => hemloo
+)
+
+2026-04-26 19:18:26 - hikerId from session: 4
+2026-04-26 19:18:26 - Parsed recipient_id: 11
+2026-04-26 19:18:26 - Parsed recipient_type: guide
+2026-04-26 19:18:26 - Body length: 6
+2026-04-27 03:18:26 - Validating as guide...
+2026-04-27 03:18:26 - Guide query result: 
+2026-04-27 03:18:26 - ERROR: Invalid guide ID: 11
+2026-04-26 19:18:29 - === GET MESSAGES CALLED ===
+2026-04-26 19:18:29 - otherUserId (guide_id param): 11
+2026-04-26 19:18:29 - hikerId: 4
+2026-04-26 19:18:34 - === GET MESSAGES CALLED ===
+2026-04-26 19:18:34 - otherUserId (guide_id param): 11
+2026-04-26 19:18:34 - hikerId: 4
+2026-04-26 19:18:38 - === SEND MESSAGE CALLED ===
+2026-04-26 19:18:38 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 11
+    [recipient_type] => guide
+    [body] => henlo
+)
+
+2026-04-26 19:18:38 - hikerId from session: 4
+2026-04-26 19:18:38 - Parsed recipient_id: 11
+2026-04-26 19:18:38 - Parsed recipient_type: guide
+2026-04-26 19:18:38 - Body length: 5
+2026-04-27 03:18:38 - Validating as guide...
+2026-04-27 03:18:38 - Guide query result: 
+2026-04-27 03:18:38 - ERROR: Invalid guide ID: 11
+2026-04-26 19:18:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:18:39 - otherUserId (guide_id param): 11
+2026-04-26 19:18:39 - hikerId: 4
+2026-04-26 19:18:49 - === GET MESSAGES CALLED ===
+2026-04-26 19:18:49 - otherUserId (guide_id param): 11
+2026-04-26 19:18:49 - hikerId: 4
+2026-04-26 19:19:00 - === GET MESSAGES CALLED ===
+2026-04-26 19:19:00 - otherUserId (guide_id param): 11
+2026-04-26 19:19:00 - hikerId: 4
+2026-04-26 19:19:09 - === GET MESSAGES CALLED ===
+2026-04-26 19:19:09 - otherUserId (guide_id param): 11
+2026-04-26 19:19:09 - hikerId: 4
+2026-04-26 19:19:17 - === SEND MESSAGE CALLED ===
+2026-04-26 19:19:17 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 11
+    [recipient_type] => guide
+    [body] => henlo
+)
+
+2026-04-26 19:19:17 - hikerId from session: 4
+2026-04-26 19:19:17 - Parsed recipient_id: 11
+2026-04-26 19:19:17 - Parsed recipient_type: guide
+2026-04-26 19:19:17 - Body length: 5
+2026-04-27 03:19:17 - Validating as guide...
+2026-04-27 03:19:17 - Guide query result: 
+2026-04-27 03:19:17 - ERROR: Invalid guide ID: 11
+2026-04-26 19:19:19 - === GET MESSAGES CALLED ===
+2026-04-26 19:19:19 - otherUserId (guide_id param): 11
+2026-04-26 19:19:19 - hikerId: 4
+2026-04-26 19:19:30 - === GET MESSAGES CALLED ===
+2026-04-26 19:19:30 - otherUserId (guide_id param): 11
+2026-04-26 19:19:30 - hikerId: 4
+2026-04-26 19:19:40 - === GET MESSAGES CALLED ===
+2026-04-26 19:19:40 - otherUserId (guide_id param): 11
+2026-04-26 19:19:40 - hikerId: 4
+2026-04-26 19:19:50 - === GET MESSAGES CALLED ===
+2026-04-26 19:19:50 - otherUserId (guide_id param): 11
+2026-04-26 19:19:50 - hikerId: 4
+2026-04-26 19:20:00 - === GET MESSAGES CALLED ===
+2026-04-26 19:20:00 - otherUserId (guide_id param): 11
+2026-04-26 19:20:00 - hikerId: 4
+2026-04-26 19:20:10 - === GET MESSAGES CALLED ===
+2026-04-26 19:20:10 - otherUserId (guide_id param): 11
+2026-04-26 19:20:10 - hikerId: 4
+2026-04-26 19:20:20 - === GET MESSAGES CALLED ===
+2026-04-26 19:20:20 - otherUserId (guide_id param): 11
+2026-04-26 19:20:20 - hikerId: 4
+2026-04-26 19:20:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:20:39 - otherUserId (guide_id param): 11
+2026-04-26 19:20:39 - hikerId: 4
+2026-04-26 19:21:33 - === GET MESSAGES CALLED ===
+2026-04-26 19:21:33 - otherUserId (guide_id param): 11
+2026-04-26 19:21:33 - hikerId: 4
+2026-04-26 19:21:35 - === GET MESSAGES CALLED ===
+2026-04-26 19:21:35 - otherUserId (guide_id param): 6
+2026-04-26 19:21:35 - hikerId: 4
+2026-04-26 19:21:38 - === SEND MESSAGE CALLED ===
+2026-04-26 19:21:38 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 6
+    [recipient_type] => guide
+    [body] => bruh
+)
+
+2026-04-26 19:21:38 - hikerId from session: 4
+2026-04-26 19:21:38 - Parsed recipient_id: 6
+2026-04-26 19:21:38 - Parsed recipient_type: guide
+2026-04-26 19:21:38 - Body length: 4
+2026-04-27 03:21:38 - Validating as guide...
+2026-04-27 03:21:38 - Guide query result: Array
+(
+    [user_id] => 6
+)
+
+2026-04-27 03:21:38 - Insert result: SUCCESS
+2026-04-27 03:21:38 - =====================================
+2026-04-26 19:21:38 - === GET MESSAGES CALLED ===
+2026-04-26 19:21:38 - otherUserId (guide_id param): 6
+2026-04-26 19:21:38 - hikerId: 4
+2026-04-26 19:21:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:21:39 - otherUserId (guide_id param): 6
+2026-04-26 19:21:39 - hikerId: 4
+2026-04-26 19:21:56 - === GET MESSAGES CALLED ===
+2026-04-26 19:21:56 - otherUserId (guide_id param): 6
+2026-04-26 19:21:57 - hikerId: 4
+2026-04-26 19:22:00 - === GET MESSAGES CALLED ===
+2026-04-26 19:22:00 - otherUserId (guide_id param): 6
+2026-04-26 19:22:00 - hikerId: 4
+2026-04-26 19:22:10 - === GET MESSAGES CALLED ===
+2026-04-26 19:22:10 - otherUserId (guide_id param): 6
+2026-04-26 19:22:10 - hikerId: 4
+2026-04-26 19:22:20 - === GET MESSAGES CALLED ===
+2026-04-26 19:22:20 - otherUserId (guide_id param): 6
+2026-04-26 19:22:20 - hikerId: 4
+2026-04-26 19:22:30 - === GET MESSAGES CALLED ===
+2026-04-26 19:22:30 - otherUserId (guide_id param): 6
+2026-04-26 19:22:30 - hikerId: 4
+2026-04-26 19:22:40 - === GET MESSAGES CALLED ===
+2026-04-26 19:22:40 - otherUserId (guide_id param): 6
+2026-04-26 19:22:40 - hikerId: 4
+2026-04-26 19:23:00 - === GET MESSAGES CALLED ===
+2026-04-26 19:23:01 - otherUserId (guide_id param): 6
+2026-04-26 19:23:01 - hikerId: 4
+2026-04-26 19:23:02 - === GET MESSAGES CALLED ===
+2026-04-26 19:23:02 - otherUserId (guide_id param): 6
+2026-04-26 19:23:02 - hikerId: 4
+2026-04-26 19:23:09 - === GET MESSAGES CALLED ===
+2026-04-26 19:23:09 - otherUserId (guide_id param): 6
+2026-04-26 19:23:10 - hikerId: 4
+2026-04-26 19:23:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:23:39 - otherUserId (guide_id param): 6
+2026-04-26 19:23:39 - hikerId: 4
+2026-04-26 19:24:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:24:39 - otherUserId (guide_id param): 6
+2026-04-26 19:24:39 - hikerId: 4
+2026-04-26 19:25:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:25:39 - otherUserId (guide_id param): 6
+2026-04-26 19:25:39 - hikerId: 4
+2026-04-26 19:26:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:26:39 - otherUserId (guide_id param): 6
+2026-04-26 19:26:39 - hikerId: 4
+2026-04-26 19:27:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:27:39 - otherUserId param: 6
+2026-04-26 19:27:39 - hikerId: 4
+2026-04-26 19:28:06 - === GET MESSAGES CALLED ===
+2026-04-26 19:28:06 - otherUserId param: 11
+2026-04-26 19:28:06 - hikerId: 4
+2026-04-26 19:28:09 - === SEND MESSAGE CALLED ===
+2026-04-26 19:28:09 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 11
+    [recipient_type] => guide
+    [body] => pleasee
+)
+
+2026-04-26 19:28:09 - hikerId from session: 4
+2026-04-26 19:28:09 - Parsed recipient_id: 11
+2026-04-26 19:28:09 - Parsed recipient_type: guide
+2026-04-26 19:28:09 - Body length: 7
+2026-04-27 03:28:09 - Validating as guide...
+2026-04-27 03:28:09 - Guide query result: 
+2026-04-27 03:28:09 - ERROR: Invalid guide ID: 11
+2026-04-26 19:28:11 - === GET MESSAGES CALLED ===
+2026-04-26 19:28:11 - otherUserId param: 11
+2026-04-26 19:28:11 - hikerId: 4
+2026-04-26 19:28:24 - === GET MESSAGES CALLED ===
+2026-04-26 19:28:24 - otherUserId param: 11
+2026-04-26 19:28:24 - hikerId: 4
+2026-04-26 19:28:31 - === GET MESSAGES CALLED ===
+2026-04-26 19:28:31 - otherUserId param: 11
+2026-04-26 19:28:31 - hikerId: 4
+2026-04-26 19:28:35 - === SEND MESSAGE CALLED ===
+2026-04-26 19:28:35 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 11
+    [recipient_type] => guide
+    [body] => pleasee
+)
+
+2026-04-26 19:28:35 - hikerId from session: 4
+2026-04-26 19:28:35 - Parsed recipient_id: 11
+2026-04-26 19:28:35 - Parsed recipient_type: guide
+2026-04-26 19:28:35 - Body length: 7
+2026-04-27 03:28:35 - Validating as guide...
+2026-04-27 03:28:35 - Guide query result: 
+2026-04-27 03:28:35 - ERROR: Invalid guide ID: 11
+2026-04-26 19:28:41 - === GET MESSAGES CALLED ===
+2026-04-26 19:28:41 - otherUserId param: 11
+2026-04-26 19:28:41 - hikerId: 4
+2026-04-26 19:28:54 - === GET MESSAGES CALLED ===
+2026-04-26 19:28:54 - otherUserId param: 11
+2026-04-26 19:28:54 - hikerId: 4
+2026-04-26 19:29:01 - === GET MESSAGES CALLED ===
+2026-04-26 19:29:01 - otherUserId param: 11
+2026-04-26 19:29:01 - hikerId: 4
+2026-04-26 19:29:17 - === GET MESSAGES CALLED ===
+2026-04-26 19:29:17 - otherUserId param: 11
+2026-04-26 19:29:17 - hikerId: 4
+2026-04-26 19:29:21 - === GET MESSAGES CALLED ===
+2026-04-26 19:29:21 - otherUserId param: 11
+2026-04-26 19:29:21 - hikerId: 4
+2026-04-26 19:29:31 - === GET MESSAGES CALLED ===
+2026-04-26 19:29:31 - otherUserId param: 11
+2026-04-26 19:29:31 - hikerId: 4
+2026-04-26 19:29:41 - === GET MESSAGES CALLED ===
+2026-04-26 19:29:41 - otherUserId param: 11
+2026-04-26 19:29:41 - hikerId: 4
+2026-04-26 19:29:51 - === GET MESSAGES CALLED ===
+2026-04-26 19:29:51 - otherUserId param: 11
+2026-04-26 19:29:51 - hikerId: 4
+2026-04-26 19:30:05 - === GET MESSAGES CALLED ===
+2026-04-26 19:30:05 - otherUserId param: 11
+2026-04-26 19:30:05 - hikerId: 4
+2026-04-26 19:30:11 - === GET MESSAGES CALLED ===
+2026-04-26 19:30:11 - otherUserId param: 11
+2026-04-26 19:30:11 - hikerId: 4
+2026-04-26 19:30:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:30:39 - otherUserId param: 11
+2026-04-26 19:30:39 - hikerId: 4
+2026-04-26 19:36:09 - === GET MESSAGES CALLED ===
+2026-04-26 19:36:09 - otherUserId param: 11
+2026-04-26 19:36:09 - hikerId: 4
+2026-04-26 19:36:24 - === SEND MESSAGE CALLED ===
+2026-04-26 19:36:24 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 11
+    [recipient_type] => hiker
+    [body] => pls
+)
+
+2026-04-26 19:36:24 - hikerId from session: 4
+2026-04-26 19:36:24 - Parsed recipient_id: 11
+2026-04-26 19:36:24 - Parsed recipient_type: hiker
+2026-04-26 19:36:24 - Body length: 3
+2026-04-27 03:36:24 - Validating as hiker...
+2026-04-27 03:36:24 - Hiker query result: Array
+(
+    [id] => 11
+    [role] => hiker
+)
+
+2026-04-27 03:36:24 - Insert result: SUCCESS
+2026-04-27 03:36:24 - =====================================
+2026-04-26 19:36:24 - === GET MESSAGES CALLED ===
+2026-04-26 19:36:24 - otherUserId param: 11
+2026-04-26 19:36:24 - hikerId: 4
+2026-04-26 19:36:32 - === GET MESSAGES CALLED ===
+2026-04-26 19:36:32 - otherUserId param: 6
+2026-04-26 19:36:32 - hikerId: 4
+2026-04-26 19:36:32 - === GET MESSAGES CALLED ===
+2026-04-26 19:36:32 - otherUserId param: 6
+2026-04-26 19:36:32 - hikerId: 4
+2026-04-26 19:36:33 - === GET MESSAGES CALLED ===
+2026-04-26 19:36:33 - otherUserId param: 3
+2026-04-26 19:36:33 - hikerId: 4
+2026-04-26 19:36:34 - === GET MESSAGES CALLED ===
+2026-04-26 19:36:34 - otherUserId param: 9
+2026-04-26 19:36:34 - hikerId: 4
+2026-04-26 19:36:35 - === GET MESSAGES CALLED ===
+2026-04-26 19:36:35 - otherUserId param: 7
+2026-04-26 19:36:35 - hikerId: 4
+2026-04-26 19:36:35 - === GET MESSAGES CALLED ===
+2026-04-26 19:36:35 - otherUserId param: 8
+2026-04-26 19:36:35 - hikerId: 4
+2026-04-26 19:37:54 - === GET MESSAGES CALLED ===
+2026-04-26 19:37:54 - otherUserId param: 11
+2026-04-26 19:37:54 - hikerId: 4
+2026-04-26 19:38:19 - === GET MESSAGES CALLED ===
+2026-04-26 19:38:19 - otherUserId param: 11
+2026-04-26 19:38:19 - hikerId: 4
+2026-04-26 19:38:19 - === GET MESSAGES CALLED ===
+2026-04-26 19:38:19 - otherUserId param: 11
+2026-04-26 19:38:19 - hikerId: 4
+2026-04-26 19:38:22 - === GET MESSAGES CALLED ===
+2026-04-26 19:38:22 - otherUserId param: 11
+2026-04-26 19:38:22 - hikerId: 4
+2026-04-26 19:38:32 - === GET MESSAGES CALLED ===
+2026-04-26 19:38:32 - otherUserId param: 11
+2026-04-26 19:38:32 - hikerId: 4
+2026-04-26 19:38:43 - === GET MESSAGES CALLED ===
+2026-04-26 19:38:43 - otherUserId param: 11
+2026-04-26 19:38:43 - hikerId: 4
+2026-04-26 19:38:53 - === GET MESSAGES CALLED ===
+2026-04-26 19:38:53 - otherUserId param: 11
+2026-04-26 19:38:53 - hikerId: 4
+2026-04-26 19:39:03 - === GET MESSAGES CALLED ===
+2026-04-26 19:39:03 - otherUserId param: 11
+2026-04-26 19:39:03 - hikerId: 4
+2026-04-26 19:39:42 - === GET MESSAGES CALLED ===
+2026-04-26 19:39:42 - otherUserId param: 11
+2026-04-26 19:39:42 - hikerId: 4
+2026-04-26 19:40:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:40:39 - otherUserId param: 11
+2026-04-26 19:40:39 - hikerId: 4
+2026-04-26 19:41:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:41:39 - otherUserId param: 11
+2026-04-26 19:41:39 - hikerId: 4
+2026-04-26 19:42:14 - === GET MESSAGES CALLED ===
+2026-04-26 19:42:14 - otherUserId param: 11
+2026-04-26 19:42:14 - hikerId: 4
+2026-04-26 19:42:15 - === GET MESSAGES CALLED ===
+2026-04-26 19:42:15 - otherUserId param: 11
+2026-04-26 19:42:15 - hikerId: 4
+2026-04-26 19:42:15 - === GET MESSAGES CALLED ===
+2026-04-26 19:42:15 - otherUserId param: 11
+2026-04-26 19:42:15 - hikerId: 4
+2026-04-26 19:42:51 - === GET MESSAGES CALLED ===
+2026-04-26 19:42:51 - otherUserId param: 11
+2026-04-26 19:42:51 - hikerId: 4
+2026-04-26 19:42:54 - === SEND MESSAGE CALLED ===
+2026-04-26 19:42:54 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 11
+    [recipient_type] => guide
+    [body] => hello
+)
+
+2026-04-26 19:42:54 - hikerId from session: 4
+2026-04-26 19:42:54 - Parsed recipient_id: 11
+2026-04-26 19:42:54 - Body length: 5
+2026-04-27 03:42:54 - Insert result: SUCCESS
+2026-04-27 03:42:54 - =====================================
+2026-04-26 19:42:54 - === GET MESSAGES CALLED ===
+2026-04-26 19:42:54 - otherUserId param: 11
+2026-04-26 19:42:54 - hikerId: 4
+2026-04-26 19:42:58 - === GET MESSAGES CALLED ===
+2026-04-26 19:42:58 - otherUserId param: 11
+2026-04-26 19:42:58 - hikerId: 4
+2026-04-26 19:43:02 - === SEND MESSAGE CALLED ===
+2026-04-26 19:43:02 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 11
+    [recipient_type] => guide
+    [body] => finally
+)
+
+2026-04-26 19:43:02 - hikerId from session: 4
+2026-04-26 19:43:02 - Parsed recipient_id: 11
+2026-04-26 19:43:02 - Body length: 7
+2026-04-27 03:43:02 - Insert result: SUCCESS
+2026-04-27 03:43:02 - =====================================
+2026-04-26 19:43:02 - === GET MESSAGES CALLED ===
+2026-04-26 19:43:02 - otherUserId param: 11
+2026-04-26 19:43:02 - hikerId: 4
+2026-04-26 19:43:07 - === GET MESSAGES CALLED ===
+2026-04-26 19:43:07 - otherUserId param: 11
+2026-04-26 19:43:07 - hikerId: 4
+2026-04-26 19:43:19 - === GET MESSAGES CALLED ===
+2026-04-26 19:43:19 - otherUserId param: 11
+2026-04-26 19:43:19 - hikerId: 4
+2026-04-26 19:43:27 - === GET MESSAGES CALLED ===
+2026-04-26 19:43:27 - otherUserId param: 11
+2026-04-26 19:43:27 - hikerId: 4
+2026-04-26 19:43:37 - === GET MESSAGES CALLED ===
+2026-04-26 19:43:37 - otherUserId param: 11
+2026-04-26 19:43:37 - hikerId: 4
+2026-04-26 19:43:47 - === GET MESSAGES CALLED ===
+2026-04-26 19:43:47 - otherUserId param: 11
+2026-04-26 19:43:47 - hikerId: 4
+2026-04-26 19:43:57 - === GET MESSAGES CALLED ===
+2026-04-26 19:43:57 - otherUserId param: 11
+2026-04-26 19:43:57 - hikerId: 4
+2026-04-26 19:44:24 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:24 - otherUserId param: 11
+2026-04-26 19:44:24 - hikerId: 4
+2026-04-26 19:44:27 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:27 - otherUserId param: 11
+2026-04-26 19:44:27 - hikerId: 4
+2026-04-26 19:44:31 - === SEND MESSAGE CALLED ===
+2026-04-26 19:44:31 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 11
+    [recipient_type] => guide
+    [body] => henlo
+)
+
+2026-04-26 19:44:31 - hikerId from session: 4
+2026-04-26 19:44:31 - Parsed recipient_id: 11
+2026-04-26 19:44:31 - Body length: 5
+2026-04-27 03:44:31 - Insert result: SUCCESS
+2026-04-27 03:44:31 - =====================================
+2026-04-26 19:44:32 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:32 - otherUserId param: 11
+2026-04-26 19:44:32 - hikerId: 4
+2026-04-26 19:44:33 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:33 - otherUserId param: 5
+2026-04-26 19:44:33 - hikerId: 4
+2026-04-26 19:44:34 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:34 - otherUserId param: 3
+2026-04-26 19:44:34 - hikerId: 4
+2026-04-26 19:44:36 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:36 - otherUserId param: 3
+2026-04-26 19:44:36 - hikerId: 4
+2026-04-26 19:44:38 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:38 - otherUserId param: 3
+2026-04-26 19:44:38 - hikerId: 4
+2026-04-26 19:44:38 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:38 - otherUserId param: 6
+2026-04-26 19:44:38 - hikerId: 4
+2026-04-26 19:44:38 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:38 - otherUserId param: 5
+2026-04-26 19:44:38 - hikerId: 4
+2026-04-26 19:44:38 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:38 - otherUserId param: 9
+2026-04-26 19:44:38 - hikerId: 4
+2026-04-26 19:44:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:39 - otherUserId param: 7
+2026-04-26 19:44:39 - hikerId: 4
+2026-04-26 19:44:39 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:39 - otherUserId param: 8
+2026-04-26 19:44:39 - hikerId: 4
+2026-04-26 19:44:40 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:40 - otherUserId param: 9
+2026-04-26 19:44:40 - hikerId: 4
+2026-04-26 19:44:47 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:47 - otherUserId param: 9
+2026-04-26 19:44:47 - hikerId: 4
+2026-04-26 19:44:55 - === GET MESSAGES CALLED ===
+2026-04-26 19:44:55 - otherUserId param: 9
+2026-04-26 19:44:56 - hikerId: 4
+2026-04-26 20:10:22 - === GET MESSAGES CALLED ===
+2026-04-26 20:10:22 - otherUserId param: 4
+2026-04-26 20:10:22 - hikerId: 11
+2026-04-26 20:10:31 - === GET MESSAGES CALLED ===
+2026-04-26 20:10:31 - otherUserId param: 4
+2026-04-26 20:10:31 - hikerId: 11
+2026-04-26 20:10:47 - === GET MESSAGES CALLED ===
+2026-04-26 20:10:47 - otherUserId param: 4
+2026-04-26 20:10:47 - hikerId: 11
+2026-04-26 20:10:50 - === SEND MESSAGE CALLED ===
+2026-04-26 20:10:50 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 4
+    [recipient_type] => guide
+    [body] => hi
+)
+
+2026-04-26 20:10:50 - hikerId from session: 11
+2026-04-26 20:10:50 - Parsed recipient_id: 4
+2026-04-26 20:10:50 - Body length: 2
+2026-04-27 04:10:50 - Insert result: SUCCESS
+2026-04-27 04:10:50 - =====================================
+2026-04-26 20:10:50 - === GET MESSAGES CALLED ===
+2026-04-26 20:10:50 - otherUserId param: 4
+2026-04-26 20:10:50 - hikerId: 11
+2026-04-26 20:10:50 - === GET MESSAGES CALLED ===
+2026-04-26 20:10:50 - otherUserId param: 4
+2026-04-26 20:10:51 - hikerId: 11
+2026-04-26 20:11:00 - === SEND MESSAGE CALLED ===
+2026-04-26 20:11:00 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 4
+    [recipient_type] => guide
+    [body] => why didnt accept me :<
+)
+
+2026-04-26 20:11:00 - hikerId from session: 11
+2026-04-26 20:11:00 - Parsed recipient_id: 4
+2026-04-26 20:11:00 - Body length: 22
+2026-04-27 04:11:00 - Insert result: SUCCESS
+2026-04-27 04:11:00 - =====================================
+2026-04-26 20:11:00 - === GET MESSAGES CALLED ===
+2026-04-26 20:11:00 - otherUserId param: 4
+2026-04-26 20:11:00 - hikerId: 11
+2026-04-26 20:11:01 - === GET MESSAGES CALLED ===
+2026-04-26 20:11:01 - otherUserId param: 4
+2026-04-26 20:11:01 - hikerId: 11
+2026-04-26 20:16:43 - === GET MESSAGES CALLED ===
+2026-04-26 20:16:43 - otherUserId param: 4
+2026-04-26 20:16:43 - hikerId: 11
+2026-04-26 20:16:53 - === GET MESSAGES CALLED ===
+2026-04-26 20:16:53 - otherUserId param: 4
+2026-04-26 20:16:53 - hikerId: 11
+2026-04-26 20:17:02 - === GET MESSAGES CALLED ===
+2026-04-26 20:17:02 - otherUserId param: 4
+2026-04-26 20:17:02 - hikerId: 11

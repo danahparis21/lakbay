@@ -148,28 +148,29 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
     if (!$currentUserId) return $bookings;
     
     try {
-        // ✅ FIXED: Join guides on guides.id (not user_id)
+        // Simplified query - first get all bookings where user is owner
         $stmt = $pdo->prepare("
-            SELECT 
-                b.id, b.booking_number, b.mountain_id, b.guide_id,
-                b.hike_date as date, b.hike_type as type, b.status,
-                b.number_of_hikers as pax, b.total_amount as totalFee,
-                b.special_requests as notes, b.created_at,
-                (b.hike_type = 'overnight') as camping,
-                m.name as mountain,
-                u.name as guideName,
-                SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2) as guideInitials
-            FROM bookings b
-            JOIN mountains m ON b.mountain_id = m.id
-            JOIN guides g ON b.guide_id = g.id                      -- ✅ FIXED: Use g.id
-            JOIN users u ON g.user_id = u.id                        -- ✅ Then join users
-            WHERE b.user_id = ?
-            ORDER BY b.created_at DESC
-        ");
+    SELECT 
+        b.id, b.booking_number, b.mountain_id, b.guide_id,
+        b.user_id,
+        b.hike_date as date, b.hike_type as type, b.status,
+        b.number_of_hikers as pax, b.total_amount as totalFee,
+        b.special_requests as notes, b.created_at,
+        (b.hike_type = 'overnight') as camping,
+        m.name as mountain,
+        COALESCE(u.name, 'Unknown Guide') as guideName,
+        COALESCE(SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2), '??') as guideInitials
+    FROM bookings b
+    JOIN mountains m ON b.mountain_id = m.id
+    LEFT JOIN guides g ON b.guide_id = g.id      
+    LEFT JOIN users u ON g.user_id = u.id        
+    WHERE b.user_id = ?
+    ORDER BY b.created_at DESC
+");
         $stmt->execute([$currentUserId]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            // ... rest of the code remains the same
+            // Get hikers for this booking
             $hikers = [];
             $stmt2 = $pdo->prepare("SELECT hiker_name FROM booking_hikers WHERE booking_id = ?");
             $stmt2->execute([$row['id']]);
@@ -177,15 +178,30 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 $hikers[] = $h['hiker_name'];
             }
             
+            // Add the owner if not already in hikers list
+            if (!in_array($currentUserName, $hikers)) {
+                array_unshift($hikers, $currentUserName);
+            }
+            
+            // Get nudge count
             $stmt2 = $pdo->prepare("SELECT COUNT(*) as nudge_count, MAX(created_at) as last_nudge FROM booking_nudges WHERE booking_id = ?");
             $stmt2->execute([$row['id']]);
             $nudgeData = $stmt2->fetch(PDO::FETCH_ASSOC);
-
+            
+            // Check if reviewed
             $stmt2 = $pdo->prepare("SELECT COUNT(*) as has_reviewed FROM reviews WHERE booking_id = ? AND user_id = ?");
             $stmt2->execute([$row['id'], $currentUserId]);
             $hasReviewed = $stmt2->fetch()['has_reviewed'] > 0;
             
             $bookingId = $row['booking_number'];
+            
+            // Parse time from hike_date if available, otherwise default to 06:00
+            $timeValue = '06:00';
+            if (!empty($row['date'])) {
+                if (strpos($row['date'], ' ') !== false) {
+                    $timeValue = date('H:i', strtotime($row['date']));
+                }
+            }
             
             $bookings[] = [
                 'id' => $bookingId,
@@ -193,8 +209,8 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 'mountainId' => $row['mountain_id'],
                 'mountain' => $row['mountain'],
                 'date' => $row['date'],
-                'time' => '06:00',
-                'type' => $row['type'] == 'overnight' ? 'overnight' : 'day',
+                'time' => $timeValue,
+                'type' => $row['type'] == 'overnight' ? 'overnight' : ($row['type'] == 'late_hike' ? 'late' : 'day'),
                 'status' => $row['status'],
                 'guideId' => $row['guide_id'],
                 'guideName' => $row['guideName'],
@@ -207,30 +223,52 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 'lastNudge' => $nudgeData['last_nudge'] ? strtotime($nudgeData['last_nudge']) * 1000 : 0,
                 'camping' => $row['camping'] == 1,
                 'notes' => $row['notes'] ?? '',
-                'hasReviewed' => $hasReviewed 
+                'hasReviewed' => $hasReviewed,
+                'relationship' => 'owner'
             ];
         }
         
-        // ... joined hikes query needs the same fix
-        $stmt = $pdo->prepare("
-            SELECT 
-                b.id, b.booking_number, b.mountain_id, b.guide_id,
-                b.hike_date as date, b.hike_type as type, 'joined' as status,
-                b.number_of_hikers as pax, b.total_amount as totalFee,
-                m.name as mountain,
-                u.name as guideName,
-                bh.hiker_name as joinedAs
-            FROM booking_hikers bh
-            JOIN bookings b ON bh.booking_id = b.id
-            JOIN mountains m ON b.mountain_id = m.id
-            JOIN guides g ON b.guide_id = g.id                        -- ✅ FIXED
-            JOIN users u ON g.user_id = u.id                          -- ✅ FIXED
-            WHERE bh.hiker_name = ? AND b.user_id != ?
-        ");
-        $stmt->execute([$currentUserName, $currentUserId]);
+        // Now get joined bookings (where user is in booking_hikers but not owner)
+       $stmt = $pdo->prepare("
+    SELECT 
+        b.id, b.booking_number, b.mountain_id, b.guide_id,
+        b.user_id,
+        b.hike_date as date, b.hike_type as type, b.status,
+        b.number_of_hikers as pax, b.total_amount as totalFee,
+        b.special_requests as notes, b.created_at,
+        (b.hike_type = 'overnight') as camping,
+        m.name as mountain,
+        COALESCE(u.name, 'Unknown Guide') as guideName,
+        SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2) as guideInitials
+    FROM booking_hikers bh
+    JOIN bookings b ON bh.booking_id = b.id
+    JOIN mountains m ON b.mountain_id = m.id
+    LEFT JOIN guides g ON b.guide_id = g.id      
+    LEFT JOIN users u ON g.user_id = u.id        
+    WHERE bh.hiker_name = ? AND b.user_id != ?
+    ORDER BY b.created_at DESC
+");
+$stmt->execute([$currentUserName, $currentUserId]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            // Get hikers for this booking
+            $hikers = [];
+            $stmt2 = $pdo->prepare("SELECT hiker_name FROM booking_hikers WHERE booking_id = ?");
+            $stmt2->execute([$row['id']]);
+            while ($h = $stmt2->fetch(PDO::FETCH_ASSOC)) {
+                $hikers[] = $h['hiker_name'];
+            }
+            
+            // Get owner name
+            $stmt2 = $pdo->prepare("SELECT name FROM users WHERE id = ?");
+            $stmt2->execute([$row['user_id']]);
+            $ownerName = $stmt2->fetchColumn();
+            if ($ownerName && !in_array($ownerName, $hikers)) {
+                array_unshift($hikers, $ownerName);
+            }
+            
             $bookingId = 'JO-' . $row['booking_number'];
+            
             $bookings[] = [
                 'id' => $bookingId,
                 'db_id' => $row['id'],
@@ -242,15 +280,17 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 'status' => 'joined',
                 'guideId' => $row['guide_id'],
                 'guideName' => $row['guideName'],
-                'guideInitials' => substr($row['guideName'], 0, 2),
+                'guideInitials' => $row['guideInitials'] ?: substr($row['guideName'], 0, 2),
                 'pax' => $row['pax'],
-                'hikers' => [],
+                'hikers' => $hikers,
                 'totalFee' => 0,
-                'createdAt' => time() * 1000,
+                'createdAt' => strtotime($row['created_at']) * 1000,
                 'nudges' => 0,
                 'lastNudge' => 0,
-                'camping' => false,
-                'notes' => '',
+                'camping' => $row['camping'] == 1,
+                'notes' => $row['notes'] ?? '',
+                'hasReviewed' => false,
+                'relationship' => 'joined',
                 'joinedFromId' => $row['booking_number']
             ];
         }
@@ -258,7 +298,17 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
     } catch (PDOException $e) {
         error_log('Bookings fetch error: ' . $e->getMessage());
     }
+
+    error_log('=== RAW BOOKINGS FROM DB ===');
+$pendingFound = 0;
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    if ($row['status'] == 'pending') {
+        $pendingFound++;
+        error_log("Found pending: {$row['booking_number']} | mountain_id: {$row['mountain_id']} | guide_id: {$row['guide_id']} | guide_name: {$row['guideName']}");
+    }
     
+  }
+
     return $bookings;
 }
 // Get data from database
@@ -266,6 +316,14 @@ $dbMountains = getMountainsFromDB($pdo);
 $dbGuides = getGuidesFromDB($pdo);
 $dbUserBookings = getUserBookingsFromDB($pdo, $currentUserId, $currentUser ? $currentUser['name'] : 'Guest');
 
+error_log('========== BOOKINGS DEBUG ==========');
+error_log('Current User ID: ' . $currentUserId);
+error_log('Current User Name: ' . ($currentUser ? $currentUser['name'] : 'Guest'));
+error_log('Number of bookings found: ' . count($dbUserBookings));
+foreach ($dbUserBookings as $debugBooking) {
+    error_log('Booking: ' . $debugBooking['id'] . ' - ' . $debugBooking['mountain'] . ' - Status: ' . $debugBooking['status'] . ' - Date: ' . $debugBooking['date']);
+}
+error_log('====================================');
 // ── AUTO-FINISH FALLBACK ──
 // Mark any 'active' hikes older than 24 hours as completed (safety net)
 try {
@@ -355,25 +413,54 @@ $stmt->execute([
         }
     }
     
-   if ($action === 'cancel_booking') {
+  if ($action === 'cancel_booking') {
     $bookingId = $_POST['booking_id'] ?? '';
+    $mode = $_POST['mode'] ?? 'cancel';
     
     $currentTime = date('Y-m-d H:i:s');
-$stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE booking_number = ? AND user_id = ?");
-$stmt->execute([$currentTime, $bookingId, $currentUserId]);
     
-    if ($stmt->rowCount() === 0) {
-        // Fallback: try numeric id extracted from BK017 format
-        $numericId = preg_replace('/[^0-9]/', '', $bookingId);
-        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = NOW() 
-                                WHERE id = ? AND user_id = ?");
-        $stmt->execute([$numericId, $currentUserId]);
-    }
-
-    if ($stmt->rowCount() > 0) {
-        echo json_encode(['success' => true, 'message' => 'Booking cancelled']);
+    if ($mode === 'leave') {
+        // LEAVE: Remove hiker from booking_hikers
+        // First, find the booking by its number
+        $stmt = $pdo->prepare("SELECT id, booking_number FROM bookings WHERE booking_number = ?");
+        $stmt->execute([$bookingId]);
+        $booking = $stmt->fetch();
+        
+        if (!$booking) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found']);
+            exit;
+        }
+        
+        // Remove the current user from booking_hikers
+        $stmt = $pdo->prepare("DELETE FROM booking_hikers WHERE booking_id = ? AND hiker_name = ?");
+        $stmt->execute([$booking['id'], $user_name]);
+        
+        if ($stmt->rowCount() > 0) {
+            // Decrease the number of hikers in the booking
+            $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers - 1 WHERE id = ?");
+            $stmt->execute([$booking['id']]);
+            
+            echo json_encode(['success' => true, 'message' => 'You left the hike']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'You are not part of this hike']);
+        }
     } else {
-        echo json_encode(['success' => false, 'message' => 'Booking not found or already cancelled']);
+        // CANCEL: Regular cancellation (owner cancels their own booking)
+        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE booking_number = ? AND user_id = ?");
+        $stmt->execute([$currentTime, $bookingId, $currentUserId]);
+        
+        if ($stmt->rowCount() === 0) {
+            // Try with numeric id
+            $numericId = preg_replace('/[^0-9]/', '', $bookingId);
+            $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = NOW() WHERE id = ? AND user_id = ?");
+            $stmt->execute([$numericId, $currentUserId]);
+        }
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['success' => true, 'message' => 'Booking cancelled']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Booking not found or already cancelled']);
+        }
     }
     exit;
 }
@@ -519,40 +606,150 @@ $stmt->execute([$newDate, $notes, $currentTime, $numericId, $currentUserId]);
         }
         exit;
     }
-    if ($action === 'join_hike') {
-        $bookingId = $_POST['booking_id'] ?? '';
-        $bookingNumber = $_POST['booking_number'] ?? '';
-        
-        // Find the booking by booking_number
-        $stmt = $pdo->prepare("SELECT id FROM bookings WHERE booking_number = ?");
-        $stmt->execute([$bookingNumber]);
-        $booking = $stmt->fetch();
-        
-        if ($booking) {
-            // Check if already joined
-            $stmt = $pdo->prepare("SELECT id FROM booking_hikers WHERE booking_id = ? AND hiker_name = ?");
-            $stmt->execute([$booking['id'], $user_name]);
-            
-            if ($stmt->fetch()) {
-                echo json_encode(['success' => false, 'message' => 'You have already joined this hike']);
-                exit;
-            }
-            
-            $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
-            $stmt->execute([$booking['id'], $user_name]);
-            
-            // Update number of hikers
-            $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers + 1 WHERE id = ?");
-            $stmt->execute([$booking['id']]);
-            
-            echo json_encode(['success' => true, 'message' => 'You joined the hike!']);
-            exit;
-        }
-        
+ // In your main page handler (where join_hike action is processed)
+if ($action === 'join_hike') {
+    $bookingNumber = $_POST['booking_number'] ?? '';
+    
+    // Get booking details
+    $stmt = $pdo->prepare("SELECT b.*, m.name as mountain_name FROM bookings b JOIN mountains m ON b.mountain_id = m.id WHERE b.booking_number = ?");
+    $stmt->execute([$bookingNumber]);
+    $booking = $stmt->fetch();
+    
+    if (!$booking) {
         echo json_encode(['success' => false, 'message' => 'Booking not found']);
         exit;
     }
     
+    $ownerId = $booking['user_id'];
+    $bookingDbId = $booking['id'];
+    
+    // Check if already joined or has pending request
+    $stmt = $pdo->prepare("SELECT id FROM booking_hikers WHERE booking_id = ? AND hiker_name = ?");
+    $stmt->execute([$bookingDbId, $user_name]);
+    if ($stmt->fetch()) {
+        echo json_encode(['success' => false, 'message' => 'You have already joined this hike']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("SELECT id FROM join_requests WHERE booking_id = ? AND requester_name = ? AND status = 'pending'");
+    $stmt->execute([$bookingDbId, $user_name]);
+    if ($stmt->fetch()) {
+        echo json_encode(['success' => false, 'message' => 'You already have a pending request']);
+        exit;
+    }
+    
+    // Create join request
+    $stmt = $pdo->prepare("INSERT INTO join_requests (booking_id, requester_name, requester_user_id, status) VALUES (?, ?, ?, 'pending')");
+    $stmt->execute([$bookingDbId, $user_name, $currentUserId]);
+    
+    // Create action_data
+    $actionData = json_encode([
+        'type' => 'join_request',
+        'booking_id' => $bookingDbId,
+        'booking_number' => $bookingNumber,
+        'requester_name' => $user_name,
+        'requester_user_id' => $currentUserId,
+        'mountain_name' => $booking['mountain_name']
+    ]);
+    
+    // Send message to booking owner (using encryption)
+    $messageBody = "🏔️ **Join Request**\n\n";
+    $messageBody .= "**{$user_name}** wants to join your hike!\n\n";
+    $messageBody .= "📅 **Booking ID:** {$bookingNumber}\n";
+    $messageBody .= "📍 **Mountain:** {$booking['mountain_name']}\n";
+    $messageBody .= "\n---\n";
+    $messageBody .= "Please approve or deny this request using the buttons below.";
+    
+    date_default_timezone_set('Asia/Manila');
+    $currentTime = date('Y-m-d H:i:s');
+    
+    $stmt = $pdo->prepare("
+        INSERT INTO messages (sender_id, receiver_id, body, sender_role, receiver_role, created_at, action_data)
+        VALUES (:senderId, :receiverId, AES_ENCRYPT(:body, :key), 'hiker', 'hiker', :createdAt, :actionData)
+    ");
+    $stmt->execute([
+        ':senderId' => $currentUserId,
+        ':receiverId' => $ownerId,
+        ':body' => $messageBody,
+        ':key' => MSG_AES_KEY,
+        ':createdAt' => $currentTime,
+        ':actionData' => $actionData
+    ]);
+    
+    echo json_encode(['success' => true, 'message' => 'Join request sent! The hike organizer will review your request.', 'pending' => true]);
+    exit;
+}
+if ($action === 'approve_join_request') {
+    $requestId = $_POST['request_id'] ?? 0;
+    $bookingId = $_POST['booking_id'] ?? 0;
+    $requesterName = $_POST['requester_name'] ?? '';
+    $requesterUserId = $_POST['requester_user_id'] ?? 0;
+    
+    // Update request status
+    $stmt = $pdo->prepare("UPDATE join_requests SET status = 'approved', updated_at = NOW() WHERE id = ?");
+    $stmt->execute([$requestId]);
+    
+    // Add to booking_hikers
+    $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
+    $stmt->execute([$bookingId, $requesterName]);
+    
+    // Update number of hikers
+    $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers + 1 WHERE id = ?");
+    $stmt->execute([$bookingId]);
+    
+    // Send approval message to requester
+    $approvalMessage = "✅ **Join Request Approved!**\n\n";
+    $approvalMessage .= "You have been approved to join the hike.\n";
+    $approvalMessage .= "The hike will now appear in your bookings list.\n\n";
+    $approvalMessage .= "Happy hiking! 🏔️";
+    
+    $stmt = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement) VALUES (?, ?, ?, 0, NOW(), ?, ?, 1)");
+    $stmt->execute([$currentUserId, $requesterUserId, $approvalMessage, 'hiker', 'hiker']);
+    
+    echo json_encode(['success' => true, 'message' => 'Join request approved']);
+    exit;
+}
+
+if ($action === 'deny_join_request') {
+    $requestId = $_POST['request_id'] ?? 0;
+    $bookingId = $_POST['booking_id'] ?? 0;
+    $requesterName = $_POST['requester_name'] ?? '';
+    $requesterUserId = $_POST['requester_user_id'] ?? 0;
+    
+    // Update request status
+    $stmt = $pdo->prepare("UPDATE join_requests SET status = 'denied', updated_at = NOW() WHERE id = ?");
+    $stmt->execute([$requestId]);
+    
+    // Send denial message to requester
+    $denialMessage = "❌ **Join Request Denied**\n\n";
+    $denialMessage .= "Sorry, your request to join the hike has been denied by the organizer.\n\n";
+    $denialMessage .= "You can try joining other hikes instead. 🏔️";
+    
+    $stmt = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement) VALUES (?, ?, ?, 0, NOW(), ?, ?, 1)");
+    $stmt->execute([$currentUserId, $requesterUserId, $denialMessage, 'hiker', 'hiker']);
+    
+    echo json_encode(['success' => true, 'message' => 'Join request denied']);
+    exit;
+}
+
+if ($action === 'check_pending_request') {
+    $bookingNumber = $_POST['booking_number'] ?? '';
+    
+    $stmt = $pdo->prepare("SELECT id FROM bookings WHERE booking_number = ?");
+    $stmt->execute([$bookingNumber]);
+    $booking = $stmt->fetch();
+    
+    if ($booking) {
+        $stmt = $pdo->prepare("SELECT id FROM join_requests WHERE booking_id = ? AND requester_name = ? AND status = 'pending'");
+        $stmt->execute([$booking['id'], $user_name]);
+        $hasPending = $stmt->fetch() ? true : false;
+        
+        echo json_encode(['success' => true, 'has_pending' => $hasPending]);
+    } else {
+        echo json_encode(['success' => false, 'has_pending' => false]);
+    }
+    exit;
+}
    
     if ($action === 'get_existing_reviews') {
         $bookingId = $_POST['booking_id'] ?? '';
@@ -1651,6 +1848,565 @@ body {
   .today-countdown { display: none; }
 }
  
+/* ── RESPONSIVE FIXES FOR MOBILE ── */
+@media (max-width: 768px) {
+    /* Modal adjustments */
+    .modal {
+        width: 95%;
+        max-width: 95%;
+        margin: 0 auto;
+        border-radius: 20px;
+        max-height: 85vh;
+    }
+    
+    .modal-hdr {
+        padding: 18px 20px 0;
+        flex-wrap: wrap;
+    }
+    
+    .modal-title {
+        font-size: 18px;
+    }
+    
+    .modal-body {
+        padding: 16px 20px;
+    }
+    
+    /* Flow steps for mobile */
+    .flow-steps {
+        padding: 12px 16px 0;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px;
+    }
+    
+    .flow-step {
+        font-size: 9px;
+    }
+    
+    .flow-step .sn {
+        width: 20px;
+        height: 20px;
+        font-size: 8px;
+    }
+    
+    .flow-step span {
+        display: inline-block !important;
+        font-size: 8px;
+    }
+    
+    .flow-line {
+        min-width: 8px;
+        margin: 0 2px;
+    }
+    
+    /* Mode choice cards */
+    .mode-choice-wrap {
+        gap: 12px;
+    }
+    
+    .mode-choice-card {
+        padding: 20px 16px;
+    }
+    
+    .mode-choice-icon {
+        width: 48px;
+        height: 48px;
+    }
+    
+    .mode-choice-icon svg {
+        width: 22px;
+        height: 22px;
+    }
+    
+    .mode-choice-title {
+        font-size: 14px;
+    }
+    
+    .mode-choice-desc {
+        font-size: 11px;
+    }
+    
+    /* Type toggle buttons */
+    .type-toggle {
+        flex-wrap: wrap;
+    }
+    
+    .type-btn {
+        font-size: 10px;
+        padding: 8px 8px;
+    }
+    
+    .type-btn svg {
+        width: 12px;
+        height: 12px;
+    }
+    
+    /* Hiker section */
+    .hiker-input-row {
+        flex-direction: column;
+    }
+    
+    .hiker-input-row input {
+        width: 100%;
+        min-width: unset;
+    }
+    
+    .hiker-input-row button {
+        width: 100%;
+    }
+    
+    .hiker-list-item {
+        flex-wrap: wrap;
+    }
+    
+    .hiker-info {
+        min-width: 0;
+    }
+    
+    .hiker-name {
+        font-size: 12px;
+        word-break: break-word;
+    }
+    
+    /* Date time section */
+    .datetime-row {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .custom-date-wrapper input[type="date"],
+    .custom-time-wrapper select {
+        font-size: 13px;
+        padding: 10px 12px 10px 36px;
+    }
+    
+    .dt-icon-row svg {
+        width: 14px;
+        height: 14px;
+    }
+    
+    .date-preview {
+        padding: 10px 12px;
+    }
+    
+    .date-preview-icon {
+        width: 36px;
+        height: 36px;
+    }
+    
+    .date-preview-icon .day {
+        font-size: 14px;
+    }
+    
+    .date-preview-icon .month {
+        font-size: 7px;
+    }
+    
+    .date-preview-info .weekday {
+        font-size: 11px;
+    }
+    
+    .date-preview-info .fulldate {
+        font-size: 10px;
+    }
+    
+    .time-display {
+        padding: 6px 10px;
+    }
+    
+    .time-display span {
+        font-size: 12px;
+    }
+    
+    /* Guide selection cards */
+    .guide-select-card {
+        padding: 12px;
+    }
+    
+    .guide-av-sm {
+        width: 32px;
+        height: 32px;
+        font-size: 11px;
+    }
+    
+    .guide-select-name {
+        font-size: 13px;
+    }
+    
+    .guide-select-meta {
+        font-size: 10px;
+    }
+    
+    /* Buttons */
+    .btn {
+        padding: 10px 16px;
+        font-size: 12px;
+    }
+    
+    .btn-sm {
+        padding: 6px 12px;
+        font-size: 11px;
+    }
+    
+    .btn-glass-primary {
+        padding: 10px 20px;
+        font-size: 12px;
+    }
+    
+    .btn-glass-primary svg {
+        width: 14px;
+        height: 14px;
+    }
+    
+    /* Summary box */
+    .summary-box {
+        padding: 12px;
+    }
+    
+    .summary-row {
+        font-size: 11px;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .summary-row svg {
+        width: 13px;
+        height: 13px;
+    }
+    
+    .summary-row .sr-label {
+        min-width: 80px;
+        font-size: 11px;
+    }
+    
+    .summary-row .sr-val {
+        font-size: 11px;
+        word-break: break-word;
+    }
+    
+    /* Fee rows */
+    .fee-row {
+        font-size: 11px;
+        padding: 6px 0;
+    }
+    
+    .fee-row.total {
+        font-size: 13px;
+        padding-top: 8px;
+    }
+    
+    /* Warning cards */
+    .warning-card {
+        padding: 10px 12px;
+    }
+    
+    .warning-card h4 {
+        font-size: 12px;
+    }
+    
+    .warning-card p {
+        font-size: 11px;
+    }
+    
+    /* Booking ID row */
+    .booking-id-row {
+        flex-wrap: wrap;
+        justify-content: center;
+        text-align: center;
+    }
+    
+    .booking-id-value {
+        font-size: 14px;
+    }
+    
+    .copy-btn {
+        padding: 6px 12px;
+        font-size: 10px;
+    }
+    
+    /* Today hike card */
+    .today-banner {
+        padding: 12px 16px;
+        flex-wrap: wrap;
+    }
+    
+    .today-icon-ring {
+        width: 36px;
+        height: 36px;
+        font-size: 18px;
+    }
+    
+    .today-eyebrow {
+        font-size: 8px;
+    }
+    
+    .today-headline {
+        font-size: 14px;
+    }
+    
+    .today-countdown {
+        padding: 4px 10px;
+        font-size: 10px;
+    }
+    
+    .today-countdown svg {
+        width: 10px;
+        height: 10px;
+    }
+    
+    .today-body {
+        padding: 12px 16px;
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .today-meta {
+        font-size: 10px;
+        gap: 6px;
+    }
+    
+    .today-meta svg {
+        width: 10px;
+        height: 10px;
+    }
+    
+    .today-guide {
+        padding: 8px 12px;
+    }
+    
+    .today-cta {
+        min-width: unset;
+        flex-direction: row;
+    }
+    
+    .btn-start-hike {
+        padding: 10px 16px;
+        font-size: 12px;
+        flex: 1;
+    }
+    
+    .btn-start-hike svg {
+        width: 12px;
+        height: 12px;
+    }
+    
+    .today-fee {
+        font-size: 12px;
+    }
+    
+    .today-urgency {
+        padding: 8px 16px;
+        font-size: 10px;
+    }
+    
+    .today-urgency svg {
+        width: 11px;
+        height: 11px;
+    }
+    
+    /* Booking card */
+    .booking-card {
+        padding: 14px;
+    }
+    
+    .booking-card-title {
+        font-size: 15px;
+    }
+    
+    .booking-card-date {
+        font-size: 10px;
+    }
+    
+    .booking-card-guide {
+        padding: 8px 12px;
+    }
+    
+    .fee-total {
+        font-size: 14px;
+    }
+    
+    /* Booking actions */
+    .booking-actions {
+        gap: 6px;
+    }
+    
+    /* Toast message */
+    .toast {
+        bottom: 70px;
+        padding: 10px 20px;
+        font-size: 12px;
+        white-space: normal;
+        text-align: center;
+        max-width: 90%;
+    }
+    
+    /* Filter toolbar */
+    .filter-toolbar {
+        padding: 12px 0 16px;
+    }
+    
+    .search-wrap {
+        max-width: 100%;
+    }
+    
+    .search-input {
+        font-size: 12px;
+        padding: 8px 12px 8px 36px;
+    }
+    
+    .filter-chips {
+        padding-bottom: 4px;
+    }
+    
+    .filter-chip {
+        padding: 5px 12px;
+        font-size: 11px;
+    }
+    
+    /* Hiking ID lookup */
+    .hike-id-input-row {
+        flex-direction: column;
+    }
+    
+    .hike-id-input-row input {
+        width: 100%;
+    }
+    
+    /* Photo upload */
+    .photo-upload-zone {
+        width: 70px;
+        height: 70px;
+    }
+    
+    .photo-item {
+        width: 70px;
+        height: 70px;
+    }
+    
+    /* Review modal */
+    #reviewModal .modal {
+        max-width: 95%;
+    }
+    
+    .star-rating {
+        font-size: 22px;
+        gap: 5px;
+    }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+    .modal-hdr {
+        padding: 14px 16px 0;
+    }
+    
+    .modal-body {
+        padding: 12px 16px;
+    }
+    
+    .flow-step .sn {
+        width: 18px;
+        height: 18px;
+        font-size: 7px;
+    }
+    
+    .flow-step span {
+        display: none !important;
+    }
+    
+    .type-btn {
+        font-size: 9px;
+        padding: 6px 6px;
+    }
+    
+    .type-btn svg {
+        width: 10px;
+        height: 10px;
+    }
+    
+    .btn {
+        padding: 8px 14px;
+        font-size: 11px;
+    }
+    
+    .booking-card-title {
+        font-size: 14px;
+    }
+    
+    .section-title {
+        font-size: 24px !important;
+    }
+    
+    .bookings-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .btn-glass-primary {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .today-cta {
+        flex-direction: column;
+    }
+    
+    .btn-start-hike {
+        width: 100%;
+    }
+    
+    .filter-chip .chip-count {
+        min-width: 16px;
+        height: 16px;
+        font-size: 9px;
+    }
+}
+
+/* Landscape mode fix for modals */
+@media (max-height: 600px) and (orientation: landscape) {
+    .modal {
+        max-height: 90vh;
+    }
+    
+    .modal-body {
+        max-height: calc(90vh - 120px);
+        overflow-y: auto;
+    }
+    
+    .flow-steps {
+        padding: 8px 16px 0;
+    }
+    
+    .hikers-section {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+}
+
+/* Touch-friendly adjustments */
+@media (hover: none) and (pointer: coarse) {
+    .btn, 
+    .filter-chip,
+    .mode-choice-card,
+    .mtn-select-card,
+    .guide-select-card,
+    .tab-link,
+    .page-tab {
+        cursor: default;
+        -webkit-tap-highlight-color: transparent;
+    }
+    
+    .btn:active {
+        transform: scale(0.97);
+    }
+    
+    select,
+    input[type="date"],
+    input[type="time"] {
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+}
 
 </style>
 </head>
@@ -2001,6 +2757,15 @@ function saveBookings() {
 
 function genId() { return "BK" + String(nextId++).padStart(3,'0'); }
 
+function getLocalDateString(date) {
+    const d = date || new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+
 // ── FLOW STATE ──
 let flowState = {};
 let currentStep = 0;
@@ -2009,8 +2774,10 @@ let foundHike = null;
 let lastCreatedId = '';
 
 function openBookingFlow() {
-  // Use the actual logged-in user's name from PHP
   const loggedInUserName = currentUserName;
+  const now = new Date();
+  const todayStr = getLocalDateString(now);
+  
   flowState = {
     step: 1,
     mtn: null,
@@ -2020,7 +2787,7 @@ function openBookingFlow() {
     hikers: [loggedInUserName],
     bookerName: loggedInUserName,
     guide: null,
-    date: '',
+    date: todayStr,  // Force today's date
     time: '',
     camping: false
   };
@@ -2115,27 +2882,136 @@ function renderStep(n) {
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>`;
 
-  } else if(n===2) {
+ } else if(n===2) {
     document.getElementById('flowTitle').textContent = flowState.mtn?.name || '';
     document.getElementById('flowSubtitle').textContent = 'Hike details';
-    const todayStr = new Date().toISOString().split('T')[0];
+    
+    // Get current Philippine time
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const todayStr = getLocalDateString(now);
+    
+    // Get valid times based on hike type
+    function getValidTimesForType(type) {
+        const times = [];
+        
+        if (type === 'day') {
+            // 4:00 AM to 2:00 PM in 30-min increments
+            for (let hour = 4; hour <= 14; hour++) {
+                for (let minute of [0, 30]) {
+                    if (hour === 14 && minute > 0) break;
+                    const hour12 = hour % 12 || 12;
+                    const ampm = hour < 12 ? 'AM' : 'PM';
+                    const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+                    const displayStr = `${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+                    times.push({ value: timeStr, display: displayStr });
+                }
+            }
+       } else if (type === 'late') {
+    // 3:00 PM, 3:30 PM, 4:00 PM, 4:30 PM, 5:00 PM ONLY
+    for (let hour = 15; hour <= 17; hour++) {
+        for (let minute of [0, 30]) {
+            if (hour === 17 && minute > 0) break;
+            const hour12 = hour === 15 ? 3 : (hour === 16 ? 4 : 5);
+            const displayStr = `${hour12}:${String(minute).padStart(2, '0')} PM`;
+            const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+            times.push({ value: timeStr, display: displayStr });
+        }
+    }
+} else if (type === 'overnight') {
+            // 2:00 PM to 6:00 PM in 30-min increments
+            for (let hour = 14; hour <= 18; hour++) {
+                for (let minute of [0, 30]) {
+                    if (hour === 18 && minute > 0) break;
+                    const hour12 = hour % 12 || 12;
+                    const ampm = hour < 12 ? 'AM' : 'PM';
+                    const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+                    const displayStr = `${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+                    times.push({ value: timeStr, display: displayStr });
+                }
+            }
+        }
+        
+        return times;
+    }
+    
+    // Check if same-day booking is still allowed
+    let minDate = todayStr;
+    let dateWarning = '';
+    let canBookToday = true;
+    
+    // After 8 PM - no same-day bookings at all
+    if (currentHour >= 20) {
+        canBookToday = false;
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        minDate = getLocalDateString(tomorrow);
+        dateWarning = `<div style="background:#fce4ec; border-radius:8px; padding:10px; margin-top:8px; font-size:12px; color:#c62828;">
+            <svg style="width:14px;height:14px;display:inline-block;margin-right:6px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            📅 Bookings are closed for today (after 8:00 PM). Earliest available: ${tomorrow.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+        </div>`;
+    } else {
+        // Check cutoff based on hike type
+        if (flowState.type === 'day' && currentHour >= 13) {
+            canBookToday = false;
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            minDate = getLocalDateString(tomorrow);
+            dateWarning = `<div style="background:#fff8e1; border-radius:8px; padding:10px; margin-top:8px; font-size:12px; color:#f57f17;">
+                <svg style="width:14px;height:14px;display:inline-block;margin-right:6px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                ⏰ Day hikes must be booked before 1:00 PM for same-day departure. Earliest available: ${tomorrow.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+            </div>`;
+        } else if (flowState.type === 'late' && currentHour >= 14) {
+            canBookToday = false;
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            minDate = getLocalDateString(tomorrow);
+            dateWarning = `<div style="background:#fff8e1; border-radius:8px; padding:10px; margin-top:8px; font-size:12px; color:#f57f17;">
+                <svg style="width:14px;height:14px;display:inline-block;margin-right:6px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                ⏰ Late hikes must be booked before 2:00 PM for same-day departure. Earliest available: ${tomorrow.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+            </div>`;
+        } else if (flowState.type === 'overnight' && currentHour >= 13) {
+            canBookToday = false;
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            minDate = getLocalDateString(tomorrow);
+            dateWarning = `<div style="background:#fff8e1; border-radius:8px; padding:10px; margin-top:8px; font-size:12px; color:#f57f17;">
+                <svg style="width:14px;height:14px;display:inline-block;margin-right:6px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                ⏰ Overnight hikes must be booked before 1:00 PM for same-day departure. Earliest available: ${tomorrow.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+            </div>`;
+        }
+    }
+    
+    // Get valid times and set default time
+    const validTimes = getValidTimesForType(flowState.type);
+    let defaultTime = flowState.time;
+    if (!defaultTime || !validTimes.some(t => t.value === defaultTime)) {
+        defaultTime = validTimes[0]?.value || '06:00';
+    }
+    
     body.innerHTML = `
       <div class="type-toggle-group">
         <div class="inp-label">Hike Type</div>
         <div class="type-toggle">
-          <button type="button" class="type-btn ${flowState.type==='day'?'active':''}" onclick="setType('day')">
+          <button type="button" class="type-btn ${flowState.type==='day'?'active':''}" onclick="setTypeWithRestrictions('day')">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-            Day (12am–3pm)
+            Day (4am–2pm)
           </button>
-          <button type="button" class="type-btn ${flowState.type==='late'?'active':''}" onclick="setType('late')">
+          <button type="button" class="type-btn ${flowState.type==='late'?'active':''}" onclick="setTypeWithRestrictions('late')">
             <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-            Late (4pm–12am)
+            Late (3pm–5pm)
           </button>
-          <button type="button" class="type-btn ${flowState.type==='overnight'?'active':''}" onclick="setType('overnight')">
+          <button type="button" class="type-btn ${flowState.type==='overnight'?'active':''}" onclick="setTypeWithRestrictions('overnight')">
             <svg viewBox="0 0 24 24"><path d="M12 3v1M12 20v1M3 12h1M20 12h1"/><circle cx="12" cy="12" r="4"/><path d="M12 8a4 4 0 0 0 0 8"/></svg>
-            Overnight
+            Overnight (2pm–6pm)
           </button>
         </div>
+        <div style="font-size:10px;color:var(--stone);margin-top:5px;text-align:center;">
+    ${flowState.type === 'day' ? '🌅 Day hike: 4:00 AM - 2:00 PM (book before 1:00 PM)' : 
+      (flowState.type === 'late' ? '🌙 Late hike: 3:00 PM - 5:00 PM ONLY' : 
+       '⛺ Overnight: 2:00 PM - 6:00 PM (book before 1:00 PM)')}
+</div>
       </div>
       <div class="type-toggle-group">
         <div class="inp-label">Hiking Party</div>
@@ -2181,37 +3057,40 @@ function renderStep(n) {
             <div class="inp-label">Date</div>
             <div class="custom-date-wrapper">
               <div class="dt-icon-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-              <input type="date" id="hikeDate" value="${flowState.date}" min="${todayStr}" onchange="updateDatePreview(this.value)">
-            </div>
-            <div class="date-preview ${flowState.date?'visible':''}" id="datePreview"></div>
+             <input type="date" id="hikeDate" value="${todayStr}" min="${todayStr}" max="2030-12-31" onchange="updateDatePreview(this.value); updateTimeDropdown(); validateSelectedDate(this.value)">
+             </div>
+            ${dateWarning}
+            <div class="date-preview ${(flowState.date || canBookToday) ? 'visible' : ''}" id="datePreview"></div>
           </div>
           <div class="datetime-field">
             <div class="inp-label">Start Time</div>
             <div class="custom-time-wrapper">
               <div class="dt-icon-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
-              <input type="time" id="hikeTime" value="${flowState.time}" 
-                min="${flowState.type==='day'?'00:00':(flowState.type==='late'?'16:00':'00:00')}"
-                max="${flowState.type==='day'?'15:00':(flowState.type==='late'?'23:59':'23:59')}"
-                onchange="updateTimePreview(this.value)">
+              <select id="hikeTime" class="inp" style="appearance: none; padding: 12px 14px 12px 40px; cursor: pointer;" onchange="updateTimePreview(this.value)">
+                ${validTimes.map(t => `
+                  <option value="${t.value}" ${defaultTime === t.value ? 'selected' : ''}>${t.display}</option>
+                `).join('')}
+              </select>
             </div>
-            <div class="time-display ${flowState.time?'visible':''}" id="timeDisplay"></div>
-            <div style="font-size:10px;color:var(--stone);margin-top:4px;">
-                ${flowState.type==='day'?'Day Hike: 12am-3pm':(flowState.type==='late'?'Late Hike: 4pm-12am':'Flexible time')}
-            </div>
+            <div class="time-display visible" id="timeDisplay"></div>
           </div>
         </div>
-      </div>`;
+      </div>
+      <div id="dateTimeWarning" style="display:none; background:#fce4ec; border-radius:8px; padding:10px; margin-top:8px; font-size:12px; color:#c62828;"></div>`;
+      
     footer.innerHTML = `<button class="btn btn-outline" onclick="renderStep(1)">
       <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back
-    </button><button class="btn btn-primary btn-full" onclick="nextStep()">Continue
+    </button><button class="btn btn-primary btn-full" onclick="nextStep()" id="nextStepBtn">Continue
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>`;
+    
     if(flowState.solo) { updateHikersUI(); }
     else { updateHikersUI(); }
     if(flowState.date) updateDatePreview(flowState.date);
-    if(flowState.time) updateTimePreview(flowState.time);
+    updateTimePreview(document.getElementById('hikeTime')?.value || defaultTime);
+}
 
-  } else if(n===3) {
+else if(n===3) {
     document.getElementById('flowTitle').textContent = 'Choose a Guide';
     document.getElementById('flowSubtitle').textContent = 'A tour guide is required';
     const avail = guides.filter(g=>g.mountains.includes(flowState.mtn.id));
@@ -2307,6 +3186,52 @@ function updateTimePreview(val) {
   const fmt = `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
   el.className = 'time-display visible';
   el.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span>${fmt} <span class="time-period">${period}</span></span>`;
+}
+
+function updateTimeDropdown() {
+    const dateInput = document.getElementById('hikeDate');
+    const timeSelect = document.getElementById('hikeTime');
+    if (!dateInput || !timeSelect) return;
+    
+    const selectedDate = dateInput.value;
+    const now = new Date();
+    const todayStr = getLocalDateString(now);
+    
+    // If selected date is in the future, allow all times
+    if (selectedDate > todayStr) {
+        // Keep all options enabled
+        Array.from(timeSelect.options).forEach(opt => opt.disabled = false);
+        return;
+    }
+    
+    // If selected date is today, check cutoff times
+    if (selectedDate === todayStr) {
+        const currentHour = now.getHours();
+        
+        Array.from(timeSelect.options).forEach(opt => {
+            const [hour] = opt.value.split(':').map(Number);
+            let isDisabled = false;
+            
+            if (flowState.type === 'day' && hour < currentHour) {
+                isDisabled = true;
+            } else if (flowState.type === 'late' && hour < currentHour) {
+                isDisabled = true;
+            } else if (flowState.type === 'overnight' && hour < currentHour) {
+                isDisabled = true;
+            }
+            
+            opt.disabled = isDisabled;
+            if (isDisabled && opt.selected) {
+                // Find first enabled option and select it
+                const firstEnabled = Array.from(timeSelect.options).find(o => !o.disabled);
+                if (firstEnabled) {
+                    firstEnabled.selected = true;
+                    flowState.time = firstEnabled.value;
+                    updateTimePreview(firstEnabled.value);
+                }
+            }
+        });
+    }
 }
 
 // ── MODE SELECTION ──
@@ -2477,30 +3402,91 @@ function selectGuide(id) {
   document.getElementById('nextGuideBtn').disabled = false;
 }
 function nextStep() {
-  if(currentStep===1&&!flowState.mtn) { showToast('Please select a mountain'); return; }
-  if(currentStep===2) {
-    const d = document.getElementById('hikeDate')?.value;
-    const t = document.getElementById('hikeTime')?.value;
-    if(!d) { showToast('Please select a date'); return; }
-    
-    // Time validation based on hike type
-    if(t) {
-        const [h,m] = t.split(':').map(Number);
-        if(flowState.type === 'day' && h > 15) {
-            showToast('Day hikes must start before 3:00 PM'); return;
-        }
-        if(flowState.type === 'late' && h < 16) {
-            showToast('Late hikes must start after 4:00 PM'); return;
-        }
+    if(currentStep===1 && !flowState.mtn) { 
+        showToast('Please select a mountain'); 
+        return; 
     }
     
-    flowState.date=d; flowState.time=t;
-    flowState.pax=flowState.hikers.length;
-    const cc = document.getElementById('campingCheck');
-    if(cc) flowState.camping=cc.checked;
-    renderStep(3); return;
-  }
-  renderStep(currentStep+1);
+    if(currentStep===2) {
+        const d = document.getElementById('hikeDate')?.value;
+        const t = document.getElementById('hikeTime')?.value;
+        
+        if(!d) { 
+            showToast('Please select a date'); 
+            return; 
+        }
+        
+        if(!t) { 
+            showToast('Please select a time'); 
+            return; 
+        }
+        
+        // Get current Philippine time
+        const now = new Date();
+        const todayStr = getLocalDateString(now);
+        const selectedDate = d;
+        
+        // BLOCK PAST DATES
+        // BLOCK PAST DATES
+if (selectedDate < todayStr) {
+    showToast('❌ Cannot book for past dates. Please select today or a future date.');
+    // Force reset the date picker to today
+    document.getElementById('hikeDate').value = todayStr;
+    flowState.date = todayStr;
+    return;
+}
+        // If selected date is today, check time restrictions
+        if (selectedDate === todayStr) {
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+            const [selectedHour, selectedMinute] = t.split(':').map(Number);
+            
+            // Block past times today
+            if (selectedHour < currentHour || (selectedHour === currentHour && selectedMinute < currentMinute)) {
+                showToast('❌ Selected time has already passed today. Please choose a later time or future date.');
+                return;
+            }
+            
+            // Check cutoff times based on hike type
+            if (flowState.type === 'day' && currentHour >= 13) {
+                showToast('⚠️ Day hikes must be booked BEFORE 1:00 PM for same-day departure. Please select a future date.');
+                return;
+            }
+            if (flowState.type === 'late' && currentHour >= 14) {
+                showToast('⚠️ Late hikes must be booked BEFORE 2:00 PM for same-day departure. Please select a future date.');
+                return;
+            }
+            if (flowState.type === 'overnight' && currentHour >= 13) {
+                showToast('⚠️ Overnight hikes must be booked BEFORE 1:00 PM for same-day departure. Please select a future date.');
+                return;
+            }
+            
+            // For late hikes, ensure time is after 3:00 PM
+            if (flowState.type === 'late' && selectedHour < 15) {
+                showToast('🌙 Late hikes must start at 3:00 PM or later (3:00 PM - 5:00 PM only)');
+                return;
+            }
+            
+            // For late hikes, ensure time is not after 5:00 PM
+            if (flowState.type === 'late' && selectedHour > 17) {
+                showToast('🌙 Late hikes are only available until 5:00 PM');
+                return;
+            }
+        }
+        
+        // Store the values
+        flowState.date = d;
+        flowState.time = t;
+        flowState.pax = flowState.hikers.length;
+        
+        const cc = document.getElementById('campingCheck');
+        if(cc) flowState.camping = cc.checked;
+        
+        renderStep(3);
+        return;
+    }
+    
+    renderStep(currentStep + 1);
 }
 
 function copyBookingId() {
@@ -2730,11 +3716,15 @@ function renderBookings(){
         todayStatuses.includes(b.status) && isHikeToday(b) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b))
     );
  
-    // Regular current: regularStatuses bookings NOT today (includes pending)
-    const current = bookings.filter(b =>
-        regularStatuses.includes(b.status) && !isHikeToday(b) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b))
-    );
- 
+    // Regular current: regularStatuses bookings (including today's pending)
+const current = bookings.filter(b => {
+    if (b.status === 'pending') {
+        // Show all pending bookings regardless of date
+        return regularStatuses.includes(b.status) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b));
+    }
+    // For non-pending, exclude today's (they go to today section)
+    return regularStatuses.includes(b.status) && !isHikeToday(b) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b));
+});
     const history = bookings.filter(b =>
         historyStatuses.includes(b.status) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b))
     );
@@ -2797,6 +3787,129 @@ function renderBookings(){
     }
 }
 
+function getTimeMinForType(type) {
+    if (type === 'day') return '00:00';
+    if (type === 'late') return '16:00';
+    return '00:00'; // overnight
+}
+
+function getTimeMaxForType(type) {
+    if (type === 'day') return '15:00';
+    if (type === 'late') return '23:59';
+    return '23:59'; // overnight
+}
+
+// Updated setType function with restrictions
+function setTypeWithRestrictions(newType) {
+    const oldType = flowState.type;
+    flowState.type = newType;
+    
+    // Auto-adjust time based on new type
+    if (newType === 'day') {
+        flowState.time = '06:00';
+        flowState.camping = false;
+    } else if (newType === 'late') {
+        flowState.time = '16:00';
+        flowState.camping = false;
+    } else if (newType === 'overnight') {
+        flowState.time = '08:00';
+    }
+    
+    // Re-render with new restrictions
+    if (currentStep === 2) {
+        saveStep2Temp();
+        renderStep(2);
+    }
+}
+
+function validateSelectedDate(selectedDate) {
+    const now = new Date();
+    const todayStr = getLocalDateString(now);
+    
+    if (selectedDate < todayStr) {
+        showToast('❌ Cannot select past dates. Changing to today.');
+        document.getElementById('hikeDate').value = todayStr;
+        updateDatePreview(todayStr);
+        return false;
+    }
+    return true;
+}
+
+// // Validate date and time together
+// function validateDateTime() {
+//     const dateInput = document.getElementById('hikeDate');
+//     const timeInput = document.getElementById('hikeTime');
+//     const warningDiv = document.getElementById('dateTimeWarning');
+    
+//     if (!dateInput || !timeInput) return true;
+    
+//     const selectedDate = dateInput.value;
+//     const selectedTime = timeInput.value;
+//     const now = new Date();
+//     const todayStr = now.toISOString().split('T')[0];
+    
+//     // If date is today, validate time
+//     if (selectedDate === todayStr) {
+//         const [selectedHour, selectedMinute] = selectedTime.split(':').map(Number);
+//         const currentHour = now.getHours();
+//         const currentMinute = now.getMinutes();
+        
+//         let isTooLate = false;
+//         let message = '';
+        
+//         if (flowState.type === 'day') {
+//             // Day hikes: can't book after 9 AM for same day
+//             if (currentHour >= 9 || (currentHour === 8 && currentMinute > 30)) {
+//                 isTooLate = true;
+//                 message = '⚠️ Day hikes must be booked before 9:00 AM for same-day departure. Please select a future date.';
+//             } else if (selectedHour > 15) {
+//                 isTooLate = true;
+//                 message = '⚠️ Day hikes must start before 3:00 PM.';
+//             } else if (selectedHour < currentHour) {
+//                 isTooLate = true;
+//                 message = '⚠️ Selected time has already passed today. Please choose a later time or future date.';
+//             }
+//         } else if (flowState.type === 'late') {
+//             // Late hikes: can't book after 1 PM for same day
+//             if (currentHour >= 13) {
+//                 isTooLate = true;
+//                 message = '⚠️ Late hikes must be booked before 1:00 PM for same-day departure. Please select a future date.';
+//             } else if (selectedHour < 16) {
+//                 isTooLate = true;
+//                 message = '⚠️ Late hikes must start after 4:00 PM.';
+//             } else if (selectedHour < currentHour) {
+//                 isTooLate = true;
+//                 message = '⚠️ Selected time has already passed today. Please choose a later time or future date.';
+//             }
+//         } else if (flowState.type === 'overnight') {
+//             // Overnight: can't book after 12 PM for same day
+//             if (currentHour >= 12) {
+//                 isTooLate = true;
+//                 message = '⚠️ Overnight hikes must be booked before 12:00 PM for same-day departure. Please select a future date.';
+//             }
+//         }
+        
+//         if (isTooLate) {
+//             warningDiv.style.display = 'block';
+//             warningDiv.innerHTML = `<svg style="width:14px;height:14px;display:inline-block;margin-right:6px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${message}`;
+//             return false;
+//         }
+//     }
+    
+//     warningDiv.style.display = 'none';
+//     return true;
+// }
+
+// const originalNextStep = nextStep;
+// nextStep = function() {
+//     if (currentStep === 2) {
+//         if (!validateDateTime()) {
+//             showToast('Please adjust the date/time based on the restrictions above.');
+//             return;
+//         }
+//     }
+//     originalNextStep();
+// };
 function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
   const ts = now - b.createdAt;
   const canReplace = b.status === 'pending' && ts >= FIVE_H;
@@ -3014,7 +4127,7 @@ function editBooking(bookingId) {
   const b=bookings.find(x=>x.id===bookingId);
   if(!b||b.status!=='pending'){showToast('Only pending bookings can be edited');return;}
   editBookingId=bookingId;
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   const hikerRows = b.hikers.map((h,i)=>`
     <div class="hiker-list-item ${i===0?'booker':''}" id="editHikerRow${i}" style="margin-bottom:6px;">
       <div class="hiker-info">
@@ -3200,38 +4313,55 @@ document.getElementById('confirmBtn').onclick = () => {
   if (pendingConfirmAction) pendingConfirmAction();
   closeConfirmModal();
 };
-
 function cancelBooking(bookingId, mode) {
     const label = mode === 'leave' ? 'leave this hike' : 'cancel this booking';
     
     openConfirmModal(
       mode === 'leave' ? 'Leave Hike?' : 'Cancel Booking?',
-      `Are you sure you want to ${label}? This will notify your guide and move the booking to your history.`,
+      `Are you sure you want to ${label}?`,
       mode === 'leave' ? '🚪' : '❌',
       mode === 'leave' ? 'Yes, Leave' : 'Yes, Cancel',
       'btn-danger',
       () => {
-        showToast('Processing cancellation...');
+        showToast('Processing...');
+        
+        // Extract the actual booking number (remove JO- prefix if present)
+        let actualBookingId = bookingId;
+        if (bookingId.startsWith('JO-')) {
+            actualBookingId = bookingId.replace('JO-', '');
+        }
+        
         fetch(window.location.href, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-            body: `action=cancel_booking&booking_id=${bookingId}`
+            body: `action=cancel_booking&booking_id=${actualBookingId}&mode=${mode}`
         }).then(response => response.json()).then(result => {
             if (result.success) {
-                const b = bookings.find(x => x.id === bookingId);
-                if (b) {
-                    b.status = 'cancelled';
-                    showToast(mode === 'leave' ? '✓ You left the hike' : '✓ Booking cancelled');
-                    renderBookings();
-                    
+                if (mode === 'leave') {
+                    // Remove the joined booking from the local array
+                    const index = bookings.findIndex(x => x.id === bookingId);
+                    if (index !== -1) {
+                        bookings.splice(index, 1);
+                    }
+                    showToast('✓ You left the hike');
+                } else {
+                    const b = bookings.find(x => x.id === bookingId);
+                    if (b) {
+                        b.status = 'cancelled';
+                        showToast('✓ Booking cancelled');
+                    }
+                }
+                renderBookings();
+                
+                if (mode !== 'leave' && b) {
                     fetch('../api/hiker_messages.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `action=send_system_message&guide_id=${b.guideId}&message=I had to ${mode === 'leave' ? 'leave' : 'cancel'} my booking for ${b.mountain} on ${b.date}. Sorry for the inconvenience! ❌`
+                        body: `action=send_system_message&guide_id=${b.guideId}&message=I had to cancel my booking for ${b.mountain} on ${b.date}. Sorry for the inconvenience! ❌`
                     });
                 }
             } else {
-                showToast(result.message || 'Failed to cancel booking.');
+                showToast(result.message || 'Failed to process request.');
             }
         }).catch(err => {
             console.error(err);
@@ -3329,18 +4459,46 @@ function createBooking() {
     .then(result => {
         if (result.success) {
             nb.id = result.booking_id;
+            nb.db_id = result.db_id; // Store the database ID
             bookings.unshift(nb);
             closeBookingModal();
             document.getElementById('successBookingId').textContent = nb.id;
+            
+            // Calculate total fee breakdown for display
+            const totalFeeFormatted = '₱' + total.toLocaleString();
+            document.getElementById('successSummary').innerHTML = `
+                <div class="summary-row"><span class="sr-label">Mountain</span><span class="sr-val">${nb.mountain}</span></div>
+                <div class="summary-row"><span class="sr-label">Date</span><span class="sr-val">${nb.date}${nb.time ? ' at ' + nb.time : ''}</span></div>
+                <div class="summary-row"><span class="sr-label">Hikers</span><span class="sr-val">${nb.pax} person(s)</span></div>
+                <div class="summary-row"><span class="sr-label">Guide</span><span class="sr-val">${nb.guideName}</span></div>
+                <div class="summary-row total"><span class="sr-label">Total</span><span class="sr-val">${totalFeeFormatted}</span></div>
+            `;
+            
             document.getElementById('successModal').classList.add('open');
             renderBookings();
 
-            // Send booking confirmation message to guide
+            // Send booking request message to guide with action_data for approve/decline buttons
+            const actionData = {
+                type: 'booking_request',
+                booking_id: result.db_id,
+                booking_number: nb.id,
+                hiker_name: currentUserName,
+                hiker_user_id: currentUserId,
+                mountain_name: nb.mountain,
+                booking_date: nb.date,
+                pax: nb.pax,
+                total_fee: total,
+                status: 'pending'
+            };
+            
+            // Simple message body (will be displayed as card in messages)
+            const messageBody = `🏔️ **New Booking Request**\n\n**${currentUserName}** wants to book a hike with you!\n\n📅 Date: ${nb.date}\n📍 Mountain: ${nb.mountain}\n👥 Hikers: ${nb.pax} person(s)\n💰 Total: ₱${total.toLocaleString()}\n\n---\nPlease approve or decline this booking request.`;
+            
             fetch('../api/hiker_messages.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `action=send_system_message&guide_id=${nb.guideId}&message=I just booked a hike with you! Mountain: ${nb.mountain}, Date: ${nb.date}, Hikers: ${nb.pax} persons. Looking forward to it! 🏔️`
-            });
+                body: `action=send_booking_request&guide_id=${nb.guideId}&body=${encodeURIComponent(messageBody)}&action_data=${encodeURIComponent(JSON.stringify(actionData))}`
+            }).catch(err => console.error('Error sending booking request:', err));
         } else {
             showToast('Error: ' + (result.message || 'Could not save booking'));
             if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
@@ -3394,36 +4552,54 @@ function confirmJoinHike() {
         return;
     }
     
+    // Check if already has pending request - we need to check via API
     fetch(window.location.href, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-        body: `action=join_hike&booking_number=${foundHike.id}`
-    }).then(response => response.json()).then(result => {
-        if (result.success) {
-            const joined = {
-                id: foundHike.id, mountainId: foundHike.mountainId, mountain: foundHike.mountain,
-                date: foundHike.date, time: foundHike.time, type: foundHike.type,
-                status: 'joined', guideId: foundHike.guideId, guideName: foundHike.guideName,
-                guideInitials: foundHike.guideInitials, pax: foundHike.pax, hikers: [...foundHike.hikers],
-                totalFee: 0, createdAt: Date.now(), nudges: 0, lastNudge: 0,
-                camping: foundHike.camping||false, joinedFromId: foundHike.id,
-                notes: foundHike.notes||''
-            };
-            bookings.unshift(joined);
-            closeBookingModal();
-            renderBookings();
-            showToast('✓ You successfully joined the hike!');
-        } else {
-            // Check if the error message indicates already joined
-            if (result.message && result.message.includes('Could not join')) {
-                showToast('You have already joined this hike ✓');
+        body: `action=check_pending_request&booking_number=${foundHike.id}`
+    })
+    .then(response => response.json())
+    .then(checkResult => {
+        if (checkResult.has_pending) {
+            showToast('You already have a pending join request for this hike');
+            return;
+        }
+        
+        // Proceed with join request
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body: `action=join_hike&booking_number=${foundHike.id}`
+        }).then(response => response.json()).then(result => {
+            if (result.success) {
+                if (result.pending) {
+                    // Show pending message instead of immediate join
+                    showToast(result.message);
+                    closeBookingModal();
+                    // Optionally show a modal explaining the request was sent
+                } else {
+                    // Old behavior for backward compatibility
+                    const joined = {
+                        id: foundHike.id, mountainId: foundHike.mountainId, mountain: foundHike.mountain,
+                        date: foundHike.date, time: foundHike.time, type: foundHike.type,
+                        status: 'joined', guideId: foundHike.guideId, guideName: foundHike.guideName,
+                        guideInitials: foundHike.guideInitials, pax: foundHike.pax, hikers: [...foundHike.hikers],
+                        totalFee: 0, createdAt: Date.now(), nudges: 0, lastNudge: 0,
+                        camping: foundHike.camping||false, joinedFromId: foundHike.id,
+                        notes: foundHike.notes||''
+                    };
+                    bookings.unshift(joined);
+                    closeBookingModal();
+                    renderBookings();
+                    showToast('✓ You successfully joined the hike!');
+                }
             } else {
                 showToast(result.message || 'Could not join the hike');
             }
-        }
+        });
     }).catch(err => {
         console.error(err);
-        showToast('Error joining hike. Please try again.');
+        showToast('Error checking request status');
     });
 }
 

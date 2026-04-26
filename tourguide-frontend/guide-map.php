@@ -109,21 +109,21 @@ try {
         }
 
         // After fetching track points, add waypoints loading from your existing table
-$waypoints = [];
-if ($hike) {
-    try {
-       $stmt = $pdo->prepare("
-    SELECT id, name, type, latitude, longitude, elevation, description, order_index 
-    FROM trail_waypoints 
-    WHERE mountain_id = ? AND is_active = 1
-    ORDER BY order_index ASC, id ASC
-");
-        $stmt->execute([$hike['mountain_id']]);
-        $waypoints = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        error_log("Waypoints fetch error: " . $e->getMessage());
-    }
-}
+        $waypoints = [];
+        if ($hike) {
+            try {
+                $stmt = $pdo->prepare("
+                    SELECT id, name, type, latitude, longitude, elevation, description, order_index 
+                    FROM trail_waypoints 
+                    WHERE mountain_id = ? AND is_active = 1
+                    ORDER BY order_index ASC, id ASC
+                ");
+                $stmt->execute([$hike['mountain_id']]);
+                $waypoints = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                error_log("Waypoints fetch error: " . $e->getMessage());
+            }
+        }
 
         // Get booking hikers
         $stmt = $pdo->prepare("
@@ -214,7 +214,7 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
   <title>LAKBAY Guide — Live Trail Map</title>
   <link rel="stylesheet" href="guide-shared.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -226,6 +226,7 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
       flex-direction: column;
       flex: 1;
       overflow: hidden;
+      position: relative;
     }
     
     .guide-content {
@@ -314,6 +315,7 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
       display: flex;
       flex: 1;
       overflow: hidden;
+      position: relative;
     }
 
     /* ── MAP CANVAS ── */
@@ -322,6 +324,7 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
       position: relative;
       overflow: hidden;
       background: #1a1208;
+      min-height: 0;
     }
     #leaflet-map {
       position: absolute;
@@ -359,18 +362,6 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
     .leaflet-popup-content { color: #100600 !important; font-family: 'DM Sans', sans-serif !important; margin: 14px 16px !important; }
     .leaflet-popup-tip { background: rgba(255,255,255,0.97) !important; }
     .leaflet-control-attribution { display: none !important; }
-
-    /* Crowd Report Button */
-    .crowd-report-btn {
-    display: none;
-}
-    .crowd-report-btn:hover {
-      background: #2a1a0f;
-      transform: translateX(-50%) scale(1.02);
-    }
-    .crowd-report-btn i {
-      font-size: 1rem;
-    }
 
     /* Crowd Level Modal */
     .crowd-modal {
@@ -526,71 +517,71 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
     .map-fab.active { background: #100600; color: white; }
 
     /* ── HEATMAP LEGEND ── */
-.heatmap-legend {
-    position: absolute;
-    bottom: 20px;
-    right: 12px;
-    z-index: 10;
-    background: rgba(255,255,255,0.95);
-    backdrop-filter: blur(8px);
-    border-radius: 12px;
-    padding: 10px 12px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    border: 1px solid rgba(0,0,0,0.08);
-    font-family: 'DM Sans', sans-serif;
-    min-width: 130px;
-    opacity: 0;
-    transform: translateX(10px);
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    pointer-events: none;
-}
+    .heatmap-legend {
+      position: absolute;
+      bottom: 20px;
+      right: 12px;
+      z-index: 10;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(8px);
+      border-radius: 12px;
+      padding: 10px 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      border: 1px solid rgba(0,0,0,0.08);
+      font-family: 'DM Sans', sans-serif;
+      min-width: 130px;
+      opacity: 0;
+      transform: translateX(10px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: none;
+    }
 
-.heatmap-legend.visible {
-    opacity: 1;
-    transform: translateX(0);
-    pointer-events: auto;
-}
+    .heatmap-legend.visible {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
 
-.heatmap-legend-title {
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: #100600;
-    margin-bottom: 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
+    .heatmap-legend-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #100600;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
 
-.heatmap-legend-title i {
-    font-size: 0.7rem;
-    color: #F59E0B;
-}
+    .heatmap-legend-title i {
+      font-size: 0.7rem;
+      color: #F59E0B;
+    }
 
-.heatmap-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 5px;
-    font-size: 0.65rem;
-    color: #555;
-}
+    .heatmap-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+      font-size: 0.65rem;
+      color: #555;
+    }
 
-.heatmap-legend-color {
-    width: 20px;
-    height: 10px;
-    border-radius: 3px;
-}
+    .heatmap-legend-color {
+      width: 20px;
+      height: 10px;
+      border-radius: 3px;
+    }
 
-.heatmap-legend-note {
-    font-size: 0.55rem;
-    color: #999;
-    margin-top: 6px;
-    padding-top: 5px;
-    border-top: 1px solid rgba(0,0,0,0.05);
-    text-align: center;
-}
+    .heatmap-legend-note {
+      font-size: 0.55rem;
+      color: #999;
+      margin-top: 6px;
+      padding-top: 5px;
+      border-top: 1px solid rgba(0,0,0,0.05);
+      text-align: center;
+    }
 
     /* ── GUIDE MARKER ── */
     .guide-pin {
@@ -650,19 +641,22 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
       backdrop-filter: blur(4px);
     }
 
-    /* ── SIDE PANEL ── */
+    /* ── SIDE PANEL (Bottom Sheet on Mobile) ── */
     .map-side-panel {
       width: 300px;
-      background: rgba(255,255,255,0.97);
+      background: rgba(255,255,255,0.98);
       border-left: 1px solid rgba(0,0,0,0.06);
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      transition: none;
     }
+    
     .side-panel-header {
       padding: 16px 18px;
       border-bottom: 1px solid rgba(0,0,0,0.05);
       background: rgba(248,247,245,0.95);
+      flex-shrink: 0;
     }
     .side-panel-header h3 {
       font-size: 0.95rem;
@@ -679,6 +673,7 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
       display: flex;
       border-bottom: 1px solid rgba(0,0,0,0.06);
       background: #faf9f7;
+      flex-shrink: 0;
     }
     .side-tab {
       flex: 1;
@@ -785,6 +780,7 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
       padding: 12px 16px;
       border-top: 1px solid rgba(0,0,0,0.05);
       background: rgba(255,255,255,0.9);
+      flex-shrink: 0;
     }
     .legend-title { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #ccc; margin-bottom: 7px; }
     .legend-item { display: flex; align-items: center; gap: 9px; font-size: 0.68rem; color: #888; margin-bottom: 5px; }
@@ -795,6 +791,7 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
       padding: 12px 14px;
       border-top: 1px solid rgba(0,0,0,0.05);
       background: rgba(255,255,255,0.95);
+      flex-shrink: 0;
     }
     .btn-finish {
       width: 100%;
@@ -901,95 +898,356 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
       flex-shrink: 0;
     }
 
-.custom-waypoint-icon {
-    background: transparent;
-    border: none;
-}
+    .custom-waypoint-icon {
+      background: transparent;
+      border: none;
+    }
 
-.waypoint-marker {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: transform 0.1s ease;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-}
+    .waypoint-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.1s ease;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    }
 
-.waypoint-marker:hover {
-    transform: scale(1.15);
-}
+    .waypoint-marker:hover {
+      transform: scale(1.15);
+    }
 
-.waypoint-marker i {
-    font-size: 24px;
-}
+    .waypoint-marker i {
+      font-size: 24px;
+    }
 
-/* Type-specific colors */
-.summit-marker i { color: #E74C3C; text-shadow: 0 0 4px rgba(231,76,60,0.3); }
-.campsite-marker i { color: #F39C12; }
-.viewpoint-marker i { color: #3498DB; }
-.information-marker i { color: #1ABC9C; }
-.peak-marker i { color: #2ECC71; }
-.mountain_pass-marker i { color: #9B59B6; }
-.tree-marker i { color: #27AE60; }
-.water-marker i { color: #3498DB; }
-.rest-marker i { color: #E67E22; }
-.danger-marker i { color: #E74C3C; }
-.start-marker i { color: #1ABC9C; }
-.default-marker i { color: #95A5A6; }
+    /* Type-specific colors */
+    .summit-marker i { color: #E74C3C; text-shadow: 0 0 4px rgba(231,76,60,0.3); }
+    .campsite-marker i { color: #F39C12; }
+    .viewpoint-marker i { color: #3498DB; }
+    .information-marker i { color: #1ABC9C; }
+    .peak-marker i { color: #2ECC71; }
+    .mountain_pass-marker i { color: #9B59B6; }
+    .tree-marker i { color: #27AE60; }
+    .water-marker i { color: #3498DB; }
+    .rest-marker i { color: #E67E22; }
+    .danger-marker i { color: #E74C3C; }
+    .start-marker i { color: #1ABC9C; }
+    .default-marker i { color: #95A5A6; }
 
-/* Waypoint popup stays the same */
-.waypoint-popup {
-    min-width: 180px;
-    max-width: 260px;
-}
+    /* Waypoint popup stays the same */
+    .waypoint-popup {
+      min-width: 180px;
+      max-width: 260px;
+    }
 
-.waypoint-popup strong {
-    font-size: 0.9rem;
-    color: #100600;
-    display: block;
-    margin-bottom: 6px;
-    border-bottom: 1px solid rgba(0,0,0,0.08);
-    padding-bottom: 4px;
-}
+    .waypoint-popup strong {
+      font-size: 0.9rem;
+      color: #100600;
+      display: block;
+      margin-bottom: 6px;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      padding-bottom: 4px;
+    }
 
-.popup-detail {
-    font-size: 0.72rem;
-    color: #555;
-    padding-top: 4px;
-    line-height: 1.5;
-}
+    .popup-detail {
+      font-size: 0.72rem;
+      color: #555;
+      padding-top: 4px;
+      line-height: 1.5;
+    }
 
-.popup-desc {
-    font-size: 0.68rem;
-    color: #777;
-    font-style: italic;
-    display: inline-block;
-    margin-top: 4px;
-}
+    .popup-desc {
+      font-size: 0.68rem;
+      color: #777;
+      font-style: italic;
+      display: inline-block;
+      margin-top: 4px;
+    }
 
-.popup-coords {
-    font-size: 0.6rem;
-    color: #999;
-    margin-top: 8px;
-    padding-top: 5px;
-    border-top: 1px solid rgba(0,0,0,0.05);
-    font-family: monospace;
-}
-/* Add to your existing waypoint styles */
-.information-marker i { color: #3498DB; }
-.peak-marker i { color: #2ECC71; }
-.mountain_pass-marker i { color: #9B59B6; }
-.tree-marker i { color: #27AE60; }
-.start-marker i { color: #1ABC9C; }
-.rest-marker i { color: #F39C12; }
+    .popup-coords {
+      font-size: 0.6rem;
+      color: #999;
+      margin-top: 8px;
+      padding-top: 5px;
+      border-top: 1px solid rgba(0,0,0,0.05);
+      font-family: monospace;
+    }
+    
+    .information-marker i { color: #3498DB; }
+    .peak-marker i { color: #2ECC71; }
+    .mountain_pass-marker i { color: #9B59B6; }
+    .tree-marker i { color: #27AE60; }
+    .start-marker i { color: #1ABC9C; }
+    .rest-marker i { color: #F39C12; }
 
+    /* ── MOBILE RESPONSIVE ── */
     @media (max-width: 768px) {
-      .map-layout { flex-direction: column; }
-      .map-side-panel { width: 100%; height: 220px; border-left: none; border-top: 1px solid rgba(0,0,0,0.05); }
-      .hiker-track-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; padding: 8px 10px; gap: 8px; }
-      .track-item { min-width: 160px; }
-      .info-tab-content { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; }
-      .info-stat-row { display: flex; flex-wrap: nowrap; }
+      /* Map takes full height */
+      .map-layout {
+        flex-direction: column;
+        position: relative;
+        height: 100%;
+      }
+
+      /* Map fills the available space */
+      .map-canvas {
+        flex: 1;
+        min-height: 0;
+        height: auto;
+      }
+
+      /* Bottom sheet styles - FIXED */
+      .map-side-panel {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: auto;
+        min-height: 70px;
+        max-height: 70vh;
+        border-left: none;
+        border-top: 1px solid rgba(0,0,0,0.12);
+        border-radius: 20px 20px 0 0;
+        box-shadow: 0 -2px 20px rgba(0,0,0,0.15);
+        z-index: 20;
+        transition: height 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+        overflow-y: auto;
+        backdrop-filter: blur(20px);
+        background: rgba(255,255,255,0.98);
+      }
+
+      /* Collapsed state */
+      .map-side-panel.collapsed {
+        min-height: 70px;
+        max-height: 70px;
+      }
+      
+      /* Expanded state */
+      .map-side-panel.expanded {
+        min-height: 50vh;
+        max-height: 70vh;
+      }
+
+      /* Drag handle */
+      .panel-drag-handle {
+        display: flex !important;
+        justify-content: center;
+        align-items: center;
+        padding: 12px 0 8px;
+        cursor: grab;
+        touch-action: none;
+        flex-shrink: 0;
+        background: rgba(255,255,255,0.95);
+        border-radius: 20px 20px 0 0;
+        position: sticky;
+        top: 0;
+        z-index: 21;
+      }
+      
+      .panel-drag-handle:active {
+        cursor: grabbing;
+      }
+      
+      .panel-drag-handle::before {
+        content: '';
+        display: block;
+        width: 40px;
+        height: 4px;
+        background: #ccc;
+        border-radius: 2px;
+        transition: background 0.2s;
+      }
+      
+      .panel-drag-handle:hover::before {
+        background: #999;
+      }
+
+      /* Scrollable content inside sheet */
+      .side-panel-header,
+      .side-tabs,
+      .hikers-tab-content,
+      .info-tab-content,
+      .legend,
+      .finish-section {
+        transition: opacity 0.2s;
+      }
+      
+      .collapsed .side-panel-header,
+      .collapsed .side-tabs,
+      .collapsed .hikers-tab-content,
+      .collapsed .info-tab-content,
+      .collapsed .legend,
+      .collapsed .finish-section {
+        display: none;
+      }
+      
+      .expanded .side-panel-header,
+      .expanded .side-tabs,
+      .expanded .hikers-tab-content,
+      .expanded .info-tab-content,
+      .expanded .legend,
+      .expanded .finish-section {
+        display: flex;
+      }
+      
+      .expanded .hikers-tab-content,
+      .expanded .info-tab-content {
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Status bar adjustments */
+      .map-status-bar {
+        top: 12px;
+        left: 12px;
+        right: auto;
+        max-width: calc(100% - 70px);
+        font-size: 0.7rem;
+        padding: 6px 12px;
+        z-index: 15;
+      }
+      
+      .map-status-text {
+        font-size: 0.7rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+      }
+      
+      .crowd-indicator {
+        display: flex;
+        margin-left: 8px;
+        padding-left: 8px;
+      }
+      
+      .crowd-badge {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+      }
+
+      /* FABs repositioned */
+      .map-fabs {
+        top: auto;
+        bottom: 80px;
+        right: 12px;
+      }
+      
+      /* Toggle button for collapsed/expanded */
+      .panel-toggle-fab {
+        position: absolute;
+        bottom: 85px;
+        right: 12px;
+        z-index: 15;
+        width: 40px;
+        height: 40px;
+        background: rgba(255,255,255,0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 50%;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s;
+      }
+      
+      .panel-toggle-fab:active {
+        transform: scale(0.95);
+      }
+      
+      .panel-toggle-fab i {
+        font-size: 1rem;
+        color: #100600;
+      }
+
+      /* Heatmap legend adjust position */
+      .heatmap-legend {
+        bottom: 85px;
+        right: 60px;
+        padding: 8px 10px;
+        min-width: 110px;
+      }
+      
+      .heatmap-legend-title {
+        font-size: 0.6rem;
+        margin-bottom: 5px;
+      }
+      
+      .heatmap-legend-item {
+        font-size: 0.6rem;
+        margin-bottom: 3px;
+      }
+
+      /* Legend inside sheet */
+      .legend {
+        display: block;
+        border-top: 1px solid rgba(0,0,0,0.05);
+        padding: 10px 14px;
+      }
+      
+      .legend-title {
+        font-size: 0.55rem;
+        margin-bottom: 5px;
+      }
+      
+      .legend-item {
+        font-size: 0.6rem;
+        margin-bottom: 3px;
+      }
+      
+      .legend-dot {
+        width: 8px;
+        height: 8px;
+      }
+
+      /* Scroll indicators */
+      .hiker-track-list::-webkit-scrollbar {
+        width: 3px;
+      }
+      
+      .hiker-track-list::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+      }
+      
+      .hiker-track-list::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 10px;
+      }
+    }
+
+    /* Fix for very small screens */
+    @media (max-width: 480px) {
+      .map-status-text {
+        font-size: 0.65rem;
+        max-width: 120px;
+      }
+      
+      .map-status-sub {
+        font-size: 0.55rem;
+      }
+      
+      .crowd-indicator {
+        display: none;
+      }
+      
+      .map-fab {
+        width: 34px;
+        height: 34px;
+        font-size: 0.75rem;
+      }
+      
+      .panel-toggle-fab {
+        width: 36px;
+        height: 36px;
+        bottom: 75px;
+      }
+      
+      .map-side-panel.expanded {
+        max-height: 65vh;
+      }
     }
   </style>
 </head>
@@ -1028,7 +1286,7 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
         Trail Management
       </div>
       <div class="topbar-right">
-        <button class="topbar-icon-btn" title="Refresh"><i class="fas fa-rotate"></i></button>
+        <button class="topbar-icon-btn" title="Refresh" onclick="location.reload()"><i class="fas fa-rotate"></i></button>
       </div>
     </div>
 
@@ -1075,11 +1333,6 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
             </div>
             <?php endif; ?>
 
-            <!-- Crowd Report Button -->
-            <button class="crowd-report-btn" onclick="openCrowdModal()">
-              <i class="fas fa-chart-line"></i> Report Crowd Level
-            </button>
-
             <!-- FAB Controls -->
             <div class="map-fabs">
               <button class="map-fab" onclick="centerMap()" title="My Location"><i class="fas fa-location-crosshairs"></i></button>
@@ -1087,46 +1340,46 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
               <button class="map-fab" id="heatBtn" onclick="toggleHeatmap()" title="Heatmap"><i class="fas fa-fire"></i></button>
               <button class="map-fab" id="trailBtn" onclick="toggleTrailMarkers()" title="Trail Markers"><i class="fas fa-signs-post"></i></button>
               <button class="map-fab" id="waypointBtn" onclick="toggleWaypoints()" title="Toggle Waypoints">
-    <i class="fas fa-location-dot"></i>
-</button>
-
-
+                <i class="fas fa-location-dot"></i>
+              </button>
             </div>
-             <!-- Heatmap Legend -->
-<div class="heatmap-legend" id="heatmapLegend">
-    <div class="heatmap-legend-title">
-        <i class="fas fa-fire"></i> Crowd Density
-    </div>
-    <div class="heatmap-legend-item">
-        <div class="heatmap-legend-color" style="background: #10B981;"></div>
-        <span>Low</span>
-    </div>
-    <div class="heatmap-legend-item">
-        <div class="heatmap-legend-color" style="background: #84CC16;"></div>
-        <span>Light</span>
-    </div>
-    <div class="heatmap-legend-item">
-        <div class="heatmap-legend-color" style="background: #F59E0B;"></div>
-        <span>Moderate</span>
-    </div>
-    <div class="heatmap-legend-item">
-        <div class="heatmap-legend-color" style="background: #EF4444;"></div>
-        <span>High</span>
-    </div>
-    <div class="heatmap-legend-item">
-        <div class="heatmap-legend-color" style="background: #7F1D1D;"></div>
-        <span>Very High</span>
-    </div>
-    <div class="heatmap-legend-note">
-        <i class="fas fa-hand-pointer"></i> Click trail to report
-    </div>
-</div>
             
+            <!-- Heatmap Legend -->
+            <div class="heatmap-legend" id="heatmapLegend">
+              <div class="heatmap-legend-title">
+                <i class="fas fa-fire"></i> Crowd Density
+              </div>
+              <div class="heatmap-legend-item">
+                <div class="heatmap-legend-color" style="background: #10B981;"></div>
+                <span>Low</span>
+              </div>
+              <div class="heatmap-legend-item">
+                <div class="heatmap-legend-color" style="background: #84CC16;"></div>
+                <span>Light</span>
+              </div>
+              <div class="heatmap-legend-item">
+                <div class="heatmap-legend-color" style="background: #F59E0B;"></div>
+                <span>Moderate</span>
+              </div>
+              <div class="heatmap-legend-item">
+                <div class="heatmap-legend-color" style="background: #EF4444;"></div>
+                <span>High</span>
+              </div>
+              <div class="heatmap-legend-item">
+                <div class="heatmap-legend-color" style="background: #7F1D1D;"></div>
+                <span>Very High</span>
+              </div>
+              <div class="heatmap-legend-note">
+                <i class="fas fa-hand-pointer"></i> Click trail to report
+              </div>
+            </div>
           </div>
-         
 
-          <!-- SIDE PANEL -->
-          <div class="map-side-panel">
+          <!-- SIDE PANEL (Bottom Sheet on Mobile) -->
+          <div class="map-side-panel collapsed" id="sidePanel">
+            <!-- Drag handle -->
+            <div class="panel-drag-handle" id="panelDragHandle"></div>
+            
             <div class="side-panel-header">
               <h3><i class="fas fa-person-hiking" style="margin-right:6px;font-size:0.8rem;"></i> Your Group</h3>
               <p id="panelLastUpdate">Updating…</p>
@@ -1216,6 +1469,11 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
             </div>
             <?php endif; ?>
           </div>
+          
+          <!-- Mobile toggle FAB -->
+          <div class="panel-toggle-fab" id="panelToggleFab" onclick="togglePanel()">
+            <i class="fas fa-chevron-up"></i>
+          </div>
 
         </div>
       </div>
@@ -1283,7 +1541,6 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
 
 <!-- ── SCRIPTS ── -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1317,8 +1574,11 @@ let hikeFinished = false;
 let selectedHikerIdx = -1;
 let layerIdx = 0;
 let selectedCrowdLevel = null;
-let waypointsVisible = true; // Add near your other state variables
-
+let waypointsVisible = true;
+let isPanelExpanded = false;
+let panelStartY = 0;
+let panelStartHeight = 0;
+let isDragging = false;
 
 const LAYERS = [
   { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', label: '🗺 Voyager' },
@@ -1337,7 +1597,6 @@ function switchView(view) {
     safetyView.classList.add('hidden');
     tabs[0].classList.add('active');
     tabs[1].classList.remove('active');
-    // Refresh map if needed
     if (map && typeof map.invalidateSize === 'function') {
       setTimeout(() => map.invalidateSize(), 100);
     }
@@ -1346,11 +1605,179 @@ function switchView(view) {
     safetyView.classList.remove('hidden');
     tabs[0].classList.remove('active');
     tabs[1].classList.add('active');
-    // Reload safety iframe if needed
     const iframe = safetyView.querySelector('iframe');
     if (iframe && iframe.src) {
       iframe.src = iframe.src;
     }
+  }
+}
+
+// Mobile bottom sheet functions
+function initBottomSheet() {
+  const panel = document.getElementById('sidePanel');
+  const handle = document.getElementById('panelDragHandle');
+  const toggleFab = document.getElementById('panelToggleFab');
+  
+  if (!panel) return;
+  
+  // Set initial collapsed state
+  isPanelExpanded = false;
+  panel.classList.add('collapsed');
+  panel.classList.remove('expanded');
+  
+  if (toggleFab) {
+    toggleFab.style.display = 'flex';
+    const icon = toggleFab.querySelector('i');
+    if (icon) icon.className = 'fas fa-chevron-up';
+  }
+  
+  // Only add drag functionality on mobile
+  if (window.innerWidth <= 768 && handle) {
+    handle.addEventListener('touchstart', (e) => {
+      isDragging = true;
+      panelStartY = e.touches[0].clientY;
+      panelStartHeight = panel.offsetHeight;
+      panel.style.transition = 'none';
+      e.preventDefault();
+    });
+    
+    window.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      
+      const deltaY = panelStartY - e.touches[0].clientY;
+      let newHeight = panelStartHeight + deltaY;
+      
+      // Constrain height
+      const minHeight = 70;
+      const maxHeight = window.innerHeight * 0.7;
+      newHeight = Math.min(maxHeight, Math.max(minHeight, newHeight));
+      
+      panel.style.height = newHeight + 'px';
+      
+      // Determine if expanded or collapsed based on height
+      const wasExpanded = isPanelExpanded;
+      isPanelExpanded = newHeight > 150;
+      
+      if (wasExpanded !== isPanelExpanded) {
+        if (isPanelExpanded) {
+          panel.classList.add('expanded');
+          panel.classList.remove('collapsed');
+          if (toggleFab) {
+            const icon = toggleFab.querySelector('i');
+            if (icon) icon.className = 'fas fa-chevron-down';
+          }
+        } else {
+          panel.classList.add('collapsed');
+          panel.classList.remove('expanded');
+          if (toggleFab) {
+            const icon = toggleFab.querySelector('i');
+            if (icon) icon.className = 'fas fa-chevron-up';
+          }
+        }
+      }
+      
+      e.preventDefault();
+    });
+    
+    window.addEventListener('touchend', () => {
+      if (!isDragging) return;
+      isDragging = false;
+      panel.style.transition = 'height 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1)';
+      
+      // Snap to either collapsed or expanded
+      const currentHeight = panel.offsetHeight;
+      const midPoint = 120;
+      
+      if (currentHeight > midPoint) {
+        // Expand
+        panel.style.height = '';
+        isPanelExpanded = true;
+        panel.classList.add('expanded');
+        panel.classList.remove('collapsed');
+        if (toggleFab) {
+          toggleFab.style.display = 'flex';
+          const icon = toggleFab.querySelector('i');
+          if (icon) icon.className = 'fas fa-chevron-down';
+        }
+      } else {
+        // Collapse
+        panel.style.height = '';
+        isPanelExpanded = false;
+        panel.classList.add('collapsed');
+        panel.classList.remove('expanded');
+        if (toggleFab) {
+          toggleFab.style.display = 'flex';
+          const icon = toggleFab.querySelector('i');
+          if (icon) icon.className = 'fas fa-chevron-up';
+        }
+      }
+      
+      // Refresh map
+      setTimeout(() => {
+        if (map && typeof map.invalidateSize === 'function') {
+          map.invalidateSize();
+        }
+      }, 300);
+    });
+  }
+}
+
+function togglePanel() {
+  const panel = document.getElementById('sidePanel');
+  const toggleFab = document.getElementById('panelToggleFab');
+  
+  if (!panel) return;
+  
+  if (isPanelExpanded) {
+    // Collapse
+    panel.classList.remove('expanded');
+    panel.classList.add('collapsed');
+    isPanelExpanded = false;
+    if (toggleFab) {
+      const icon = toggleFab.querySelector('i');
+      if (icon) icon.className = 'fas fa-chevron-up';
+    }
+  } else {
+    // Expand
+    panel.classList.remove('collapsed');
+    panel.classList.add('expanded');
+    isPanelExpanded = true;
+    if (toggleFab) {
+      const icon = toggleFab.querySelector('i');
+      if (icon) icon.className = 'fas fa-chevron-down';
+    }
+  }
+  
+  // Refresh map after animation
+  setTimeout(() => {
+    if (map && typeof map.invalidateSize === 'function') {
+      map.invalidateSize();
+    }
+  }, 300);
+}
+
+// Window resize handler
+function handleResize() {
+  const panel = document.getElementById('sidePanel');
+  const toggleFab = document.getElementById('panelToggleFab');
+  
+  if (window.innerWidth > 768) {
+    // Desktop: reset panel
+    if (panel) {
+      panel.classList.remove('collapsed', 'expanded');
+      panel.style.height = '';
+    }
+    if (toggleFab) toggleFab.style.display = 'none';
+  } else {
+    // Mobile
+    if (panel && !isPanelExpanded) {
+      panel.classList.add('collapsed');
+      panel.classList.remove('expanded');
+    } else if (panel && isPanelExpanded) {
+      panel.classList.add('expanded');
+      panel.classList.remove('collapsed');
+    }
+    if (toggleFab) toggleFab.style.display = 'flex';
   }
 }
 
@@ -1374,42 +1801,6 @@ function selectCrowdLevel(level) {
   });
 }
 
-
-function updateHeatmapIntensity(level) {
-  if (!heatmapLayer || !heatmapOn) return;
-  
-  // Adjust heatmap intensity based on crowd level
-  let intensity = 0.5;
-  switch(level) {
-    case 'Low': intensity = 0.3; break;
-    case 'Medium': intensity = 0.7; break;
-    case 'High': intensity = 1.0; break;
-  }
-  
-  // Rebuild heatmap with new intensity
-  if (trailCoords.length) {
-    const pts = trailCoords.map((coord, idx) => {
-      let weight = intensity;
-      if (idx > trailCoords.length * 0.6) weight = intensity * 1.2;
-      else if (idx < trailCoords.length * 0.2) weight = intensity * 0.7;
-      return [coord[0], coord[1], Math.min(weight, 1.0)];
-    });
-    
-    if (heatmapOn && heatmapLayer) {
-      map.removeLayer(heatmapLayer);
-    }
-    heatmapLayer = L.heatLayer(pts, { 
-      radius: 30, 
-      blur: 18, 
-      maxZoom: 18,
-      gradient: { 0.2: '#3B82F6', 0.5: '#10B981', 0.75: '#F59E0B', 1.0: '#EF4444' }
-    });
-    if (heatmapOn) {
-      heatmapLayer.addTo(map);
-    }
-  }
-}
-
 // ── MAP INIT ────────────────────────────────────────────
 function initMap() {
   if (!HIKE_DATA) return;
@@ -1425,34 +1816,26 @@ function initMap() {
   if (trailCoords.length) {
     map.fitBounds(L.latLngBounds(trailCoords).pad(0.1));
   }
-
   
-  // Place stored hiker positions
   renderHikerListAndMarkers(BOOKING_HIKERS);
-
-  // Start GPS for guide
   startGuideGPS();
-
-  // Poll hikers every 15s
   hikerPollId = setInterval(fetchHikers, 15000);
-
-  // Timer
   setInterval(tickTimer, 1000);
   updateMapTime();
   setInterval(updateMapTime, 1000);
-
-  // Enable reporting crowds by clicking on map
   enableMapClickReporting();
-    enableMapClickReporting();
   
-  // Show initial instruction if heatmap is on by default
+  // Initialize bottom sheet for mobile
+  initBottomSheet();
+  handleResize();
+  window.addEventListener('resize', handleResize);
+  
   if (heatmapOn) {
     setTimeout(() => {
       showToast('💡 Tip: Click on the trail to report crowd levels');
     }, 2000);
   }
 }
-
 
 // ── TIMER ───────────────────────────────────────────────
 function tickTimer() {
@@ -1525,27 +1908,6 @@ function placeStartMarker() {
     .addTo(map);
 }
 
-function placeWaypointMarkers() {
-  if (!trailCoords.length) return;
-  const fractions = [0, 0.25, 0.5, 0.75, 1.0];
-  const labels = ['Start', 'Checkpoint 1', 'Mid Trail', 'Near Summit', 'Summit'];
-  const types = ['start', '', '', '', 'summit'];
-  fractions.forEach((f, i) => {
-    const idx = Math.min(Math.floor(f * trailCoords.length), trailCoords.length - 1);
-    const [lat, lng] = trailCoords[idx];
-    const dotClass = types[i];
-    const icon = L.divIcon({
-      html: `<div class="wp-marker-wrap">
-        <div class="wp-dot ${dotClass}"></div>
-        <div class="wp-label-tag">${labels[i]}</div>
-      </div>`,
-      className: '', iconSize: [70, 34], iconAnchor: [35, 7], popupAnchor: [0, -10]
-    });
-    L.marker([lat, lng], { icon })
-      .bindPopup(`<div class="popup-title">${labels[i]}</div><div class="popup-body">Trail checkpoint</div>`)
-      .addTo(map);
-  });
-}
 // ── HEATMAP ──────────────────────────────────────────────
 let heatmapPoints = [];
 let heatmapAutoRefresh = null;
@@ -1553,7 +1915,6 @@ let heatmapAutoRefresh = null;
 async function buildHeatmap() {
     if (!trailCoords.length || !MOUNTAIN_ID) return;
     
-    // Ensure legend visibility matches heatmap state
     const legend = document.getElementById('heatmapLegend');
     if (legend) {
         if (heatmapOn) legend.classList.add('visible');
@@ -1564,10 +1925,7 @@ async function buildHeatmap() {
         const res = await fetch(`../api/detect_crowd_hotspots.php?mountain_id=${MOUNTAIN_ID}`);
         const data = await res.json();
         
-        console.log('Heatmap data received:', data); // Debug log
-        
         if (data.success && data.points && data.points.length) {
-            // Convert points for heatmap
             heatmapPoints = data.points.map(p => [p.latitude, p.longitude, p.intensity]);
             
             if (heatmapLayer) {
@@ -1580,11 +1938,11 @@ async function buildHeatmap() {
                 maxZoom: 18,
                 minOpacity: 0.4,
                 gradient: { 
-                    0.2: '#10B981',  // Low - green
-                    0.4: '#84CC16',  // Low-medium - lime
-                    0.6: '#F59E0B',  // Medium - orange  
-                    0.8: '#EF4444',  // High - red
-                    1.0: '#7F1D1D'   // Very high - dark red
+                    0.2: '#10B981',
+                    0.4: '#84CC16',
+                    0.6: '#F59E0B',
+                    0.8: '#EF4444',
+                    1.0: '#7F1D1D'
                 }
             });
             
@@ -1593,45 +1951,33 @@ async function buildHeatmap() {
                 showToast(`🔥 Heatmap showing ${data.points.length} crowded area(s)`);
             }
             
-            // Update crowd badge
             const highPoints = data.points.filter(p => p.intensity >= 0.7);
             const medPoints = data.points.filter(p => p.intensity >= 0.4 && p.intensity < 0.7);
             
             let overallLevel = 'Low';
-            let crowdMessage = '';
             
             if (highPoints.length > 0) {
                 overallLevel = 'High';
-                crowdMessage = `${highPoints.length} high-traffic area(s)`;
             } else if (medPoints.length > 0) {
                 overallLevel = 'Medium';
-                crowdMessage = `${medPoints.length} moderate area(s)`;
-            } else {
-                crowdMessage = 'Trail is quiet';
             }
             
             const badge = document.getElementById('crowdBadge');
             if (badge) {
                 badge.className = `crowd-badge ${overallLevel}`;
                 badge.textContent = `${overallLevel} Crowd`;
-                badge.title = crowdMessage;
             }
         } else {
             if (heatmapLayer && heatmapOn) {
                 map.removeLayer(heatmapLayer);
             }
             heatmapPoints = [];
-            if (heatmapOn) {
-                showToast('No crowd reports available');
-            }
         }
     } catch (e) {
         console.error('Heatmap fetch error:', e);
-        showToast('Error loading crowd data');
     }
 }
 
-// Updated crowd report submission with location
 async function submitCrowdLevel() {
     if (!selectedCrowdLevel) {
         showToast('Please select a crowd level');
@@ -1643,11 +1989,9 @@ async function submitCrowdLevel() {
         return;
     }
 
-    // Use guide's current position or clicked location
     let reportLat = guidePosition?.lat || START_LAT;
     let reportLng = guidePosition?.lng || START_LNG;
     
-    // If guide clicked on map (optional enhancement), use that
     if (window._clickedLocation) {
         reportLat = window._clickedLocation.lat;
         reportLng = window._clickedLocation.lng;
@@ -1668,11 +2012,8 @@ async function submitCrowdLevel() {
         });
         const data = await res.json();
         if (data.success) {
-            showToast(`✅ ${selectedCrowdLevel} crowd reported at ${data.segment || 'your location'}`);
-            
-            // Refresh heatmap
+            showToast(`✅ ${selectedCrowdLevel} crowd reported`);
             setTimeout(() => buildHeatmap(), 500);
-            
             closeCrowdModal();
         } else {
             showToast('Error: ' + (data.message || 'Could not update crowd level'));
@@ -1682,17 +2023,15 @@ async function submitCrowdLevel() {
     }
 }
 
-// Auto-refresh heatmap every 2 minutes
 function startHeatmapAutoRefresh() {
     if (heatmapAutoRefresh) clearInterval(heatmapAutoRefresh);
     heatmapAutoRefresh = setInterval(() => {
         if (heatmapOn) {
             buildHeatmap();
         }
-    }, 120000); // 2 minutes
+    }, 120000);
 }
 
-// Modified toggleHeatmap function
 function toggleHeatmap() {
     heatmapOn = !heatmapOn;
     const btn = document.getElementById('heatBtn');
@@ -1708,28 +2047,19 @@ function toggleHeatmap() {
         }
         btn.classList.add('active');
         startHeatmapAutoRefresh();
-        
-        // Show legend
         if (legend) legend.classList.add('visible');
-        
-        // Show instructional message
-        showToast('🔥 Heatmap enabled - Click anywhere on the trail to report crowd levels');
-        
-        // Change cursor to indicate clickable area
+        showToast('🔥 Heatmap enabled - Click on trail to report crowd levels');
         map.getContainer().style.cursor = 'crosshair';
     } else {
         if (heatmapLayer) map.removeLayer(heatmapLayer);
         btn.classList.remove('active');
         if (heatmapAutoRefresh) clearInterval(heatmapAutoRefresh);
         showToast('Heatmap off');
-        
-        // Hide legend
         if (legend) legend.classList.remove('visible');
-        
-        // Reset cursor
         map.getContainer().style.cursor = '';
     }
 }
+
 function toggleTrailMarkers() {
   trailMarkersVisible = !trailMarkersVisible;
   distMarkers.forEach(m => trailMarkersVisible ? m.addTo(map) : map.removeLayer(m));
@@ -1941,14 +2271,265 @@ function showTab(tab) {
   document.getElementById('infoTab').classList.toggle('active', tab === 'info');
 }
 
-// ── FINISH HIKE ───────────────────────────────────────────
+// ── CUSTOM CONFIRM MODAL ──
+let _confirmResolver = null;
+function showConfirm(title, msg) {
+  return new Promise((resolve) => {
+    // Create modal elements if they don't exist
+    let modal = document.getElementById('confirmModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'confirmModal';
+      modal.className = 'confirm-modal';
+      modal.innerHTML = `
+        <div class="confirm-card">
+          <div class="confirm-icon"><i class="fas fa-flag-checkered"></i></div>
+          <div class="confirm-title" id="confirmTitle">Finish Hike?</div>
+          <div class="confirm-msg" id="confirmMsg">Are you sure you want to end this hike session for all hikers?</div>
+          <div class="confirm-btns">
+            <button class="confirm-btn confirm-btn-cancel" onclick="_resolveConfirm(false)">Cancel</button>
+            <button class="confirm-btn confirm-btn-proceed" onclick="_resolveConfirm(true)">End Session</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      
+      // Add styles if not present
+      if (!document.querySelector('#confirmStyles')) {
+        const style = document.createElement('style');
+        style.id = 'confirmStyles';
+        style.textContent = `
+          .confirm-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(16, 6, 0, 0.7);
+            backdrop-filter: blur(12px);
+            z-index: 7000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+          }
+          .confirm-modal.open { display: flex; }
+          .confirm-card {
+            background: rgba(255,255,255,0.98);
+            border-radius: 28px;
+            width: 100%;
+            max-width: 340px;
+            padding: 32px 28px 28px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
+            animation: confirmPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            backdrop-filter: blur(4px);
+          }
+          @keyframes confirmPop {
+            from { opacity: 0; transform: scale(0.9) translateY(20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+          }
+          .confirm-icon {
+            width: 64px; height: 64px;
+            background: linear-gradient(135deg, rgba(184,49,42,0.12), rgba(184,49,42,0.05));
+            color: #B8312A;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            margin: 0 auto 20px;
+          }
+          .confirm-title { font-size: 1.3rem; font-weight: 800; color: #100600; margin-bottom: 10px; letter-spacing: -0.3px; }
+          .confirm-msg { font-size: 0.85rem; color: #666; line-height: 1.5; margin-bottom: 28px; }
+          .confirm-btns { display: flex; gap: 12px; }
+          .confirm-btn {
+            flex: 1; padding: 12px 16px; border-radius: 40px; border: none;
+            font-size: 0.85rem; font-weight: 700; cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'DM Sans', sans-serif;
+          }
+          .confirm-btn-cancel { background: #f0ede8; color: #666; }
+          .confirm-btn-cancel:hover { background: #e5e2dd; transform: translateY(-1px); }
+          .confirm-btn-proceed { background: linear-gradient(135deg, #B8312A, #8B1A14); color: white; box-shadow: 0 4px 14px rgba(184,49,42,0.3); }
+          .confirm-btn-proceed:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(184,49,42,0.4); }
+          .confirm-btn-proceed:active { transform: translateY(0); }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+    
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMsg').textContent = msg;
+    modal.classList.add('open');
+    _confirmResolver = resolve;
+  });
+}
+
+function _resolveConfirm(val) {
+  const modal = document.getElementById('confirmModal');
+  if (modal) modal.classList.remove('open');
+  if (_confirmResolver) _confirmResolver(val);
+  _confirmResolver = null;
+}
+
+// ── BEAUTIFUL TOAST SYSTEM ──
+let _toastTimers = new Map();
+let _toastCount = 0;
+
+function showToast(msg, type = 'info') {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+    
+    // Add toast styles
+    if (!document.querySelector('#toastStyles')) {
+      const style = document.createElement('style');
+      style.id = 'toastStyles';
+      style.textContent = `
+        .toast-container {
+          position: fixed;
+          bottom: 28px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 6000;
+          display: flex;
+          flex-direction: column-reverse;
+          gap: 10px;
+          align-items: center;
+          pointer-events: none;
+          width: max-content;
+          max-width: min(92vw, 380px);
+        }
+        .toast {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 20px 12px 16px;
+          border-radius: 60px;
+          font-size: 0.82rem;
+          font-weight: 500;
+          font-family: 'DM Sans', sans-serif;
+          pointer-events: auto;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08);
+          backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,0.15);
+          opacity: 0;
+          transform: translateY(20px) scale(0.95);
+          transition: opacity 0.25s cubic-bezier(0.16,1,0.3,1), transform 0.25s cubic-bezier(0.16,1,0.3,1);
+          max-width: 100%;
+          white-space: normal;
+          word-break: break-word;
+          letter-spacing: -0.2px;
+        }
+        .toast.show {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+        .toast.hide {
+          opacity: 0;
+          transform: translateY(10px) scale(0.96);
+        }
+        .toast-info {
+          background: rgba(20, 12, 8, 0.92);
+          color: rgba(255,255,240,0.95);
+          border-left: 3px solid #8a8278;
+        }
+        .toast-success {
+          background: rgba(16, 60, 40, 0.92);
+          color: #c8f0dc;
+          border-left: 3px solid #1B7045;
+        }
+        .toast-warning {
+          background: rgba(80, 55, 20, 0.92);
+          color: #fdebb3;
+          border-left: 3px solid #C97B1A;
+        }
+        .toast-error {
+          background: rgba(90, 25, 18, 0.92);
+          color: #fcc5c5;
+          border-left: 3px solid #B8312A;
+        }
+        .toast-icon {
+          font-size: 1rem;
+          flex-shrink: 0;
+        }
+        .toast-msg {
+          line-height: 1.4;
+          flex: 1;
+        }
+        @media (max-width: 768px) {
+          .toast-container {
+            bottom: 95px;
+            max-width: min(90vw, 340px);
+          }
+          .toast {
+            padding: 10px 16px 10px 14px;
+            font-size: 0.75rem;
+          }
+          .toast-icon {
+            font-size: 0.85rem;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
+
+  const icons = {
+    info:    'fas fa-circle-info',
+    success: 'fas fa-circle-check',
+    warning: 'fas fa-triangle-exclamation',
+    error:   'fas fa-circle-xmark'
+  };
+
+  // Auto-detect type from emoji/keywords
+  if (type === 'info') {
+    if (/✅|🎉|saved|success|done|shown|enabled|reported|marked|updated|added|completed/.test(msg)) type = 'success';
+    else if (/⚠️|💡|warning|tip|crowd|heatmap|click/.test(msg)) type = 'warning';
+    else if (/❌|error|fail|could not|cannot|network|missing/.test(msg)) type = 'error';
+  }
+
+  const id = ++_toastCount;
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.id = `toast-${id}`;
+  toast.innerHTML = `<i class="toast-icon ${icons[type] || icons.info}"></i><span class="toast-msg">${msg}</span>`;
+
+  container.appendChild(toast);
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => toast.classList.add('show'));
+  });
+
+  const timer = setTimeout(() => {
+    toast.classList.add('hide');
+    toast.classList.remove('show');
+    setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 260);
+    _toastTimers.delete(id);
+  }, 3500);
+  _toastTimers.set(id, timer);
+}
 async function finishHike() {
   if (hikeFinished) return;
-  if (!confirm('End this hike session for all hikers?')) return;
+  
+  // Debug: Log what we're sending
+  console.log('=== FINISH HIKE DEBUG ===');
+  console.log('BOOKING_ID:', BOOKING_ID);
+  console.log('SESSION_TOKEN:', SESSION_TOKEN);
+  console.log('totalDistGuide:', totalDistGuide);
+  console.log('durationSec:', Math.floor((Date.now() - startTime) / 1000));
+  console.log('========================');
+  
+  const confirmed = await showConfirm(
+    'Complete Hike Session?', 
+    'Are you sure you want to end this hike? All hikers will be notified and tracking will stop.'
+  );
+  if (!confirmed) return;
 
   const btn = document.getElementById('finishBtn');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finishing…';
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finishing...';
 
   if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   if (guideIntervalId) { clearInterval(guideIntervalId); guideIntervalId = null; }
@@ -1977,13 +2558,15 @@ async function finishHike() {
       document.getElementById('compDist').textContent = s.distance_km.toFixed(1);
       document.getElementById('compTime').textContent = s.duration;
       document.getElementById('completionOverlay').classList.add('open');
+      showToast('🎉 Hike completed successfully!', 'success');
     } else {
-      showToast('Error: ' + (data.message || 'Could not finish hike'));
+      showToast('❌ ' + (data.message || 'Could not finish hike'), 'error');
       btn.disabled = false;
       btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finish Hike';
     }
   } catch (e) {
-    showToast('Network error — please try again');
+    console.error('Finish hike error:', e);
+    showToast('❌ Network error — please try again', 'error');
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finish Hike';
   }
@@ -2011,124 +2594,22 @@ function showToast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// Add style for WP markers
-const style = document.createElement('style');
-style.textContent = `
-  .wp-marker-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-  .wp-dot { width: 14px; height: 14px; border-radius: 50%; border: 2.5px solid white; background: #C97B1A; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
-  .wp-dot.summit { background: #1B7045; width: 18px; height: 18px; }
-  .wp-dot.start { background: #100600; width: 18px; height: 18px; }
-  .wp-label-tag { background: rgba(255,255,255,0.9); color: #100600; padding: 2px 8px; border-radius: 20px; font-size: 0.58rem; font-weight: 600; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
-  .popup-status-badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 0.65rem; font-weight: 700; }
-  .psb-safe { background: rgba(27,112,69,0.12); color: #1B7045; }
-  .psb-warn { background: rgba(201,123,26,0.12); color: #C97B1A; }
-  .psb-off { background: rgba(0,0,0,0.06); color: #888; }
-  .topbar-icon-btn { background: none; border: none; font-size: 1rem; cursor: pointer; padding: 6px 10px; border-radius: 8px; color: #666; }
-  .topbar-icon-btn:hover { background: #f0ede8; }
-  .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; }
-`;
-document.head.appendChild(style);
-
-window.addEventListener('beforeunload', () => {
-  if (watchId) navigator.geolocation.clearWatch(watchId);
-  if (guideIntervalId) clearInterval(guideIntervalId);
-  if (hikerPollId) clearInterval(hikerPollId);
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-  if (HIKE_DATA) initMap();
-});
-
-
 function placeWaypointMarkersFromDB() {
     if (!WAYPOINTS || !WAYPOINTS.length) return;
     
-    // Define icon styles based on type - NO LABELS, just icons
     const iconConfigs = {
-        'summit': {
-            html: `<div class="waypoint-marker summit-marker">
-                        <i class="fas fa-mountain"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'campsite': {
-            html: `<div class="waypoint-marker campsite-marker">
-                        <i class="fas fa-campground"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'viewpoint': {
-            html: `<div class="waypoint-marker viewpoint-marker">
-                        <i class="fas fa-eye"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'information': {
-            html: `<div class="waypoint-marker information-marker">
-                        <i class="fas fa-info-circle"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'peak': {
-            html: `<div class="waypoint-marker peak-marker">
-                        <i class="fas fa-flag-checkered"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'mountain_pass': {
-            html: `<div class="waypoint-marker mountain_pass-marker">
-                        <i class="fas fa-road"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'tree': {
-            html: `<div class="waypoint-marker tree-marker">
-                        <i class="fas fa-tree"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'water_source': {
-            html: `<div class="waypoint-marker water-marker">
-                        <i class="fas fa-water"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'rest_area': {
-            html: `<div class="waypoint-marker rest-marker">
-                        <i class="fas fa-chair"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'danger': {
-            html: `<div class="waypoint-marker danger-marker">
-                        <i class="fas fa-triangle-exclamation"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'start': {
-            html: `<div class="waypoint-marker start-marker">
-                        <i class="fas fa-flag"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        },
-        'default': {
-            html: `<div class="waypoint-marker default-marker">
-                        <i class="fas fa-map-pin"></i>
-                    </div>`,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        }
+        'summit': { html: `<div class="waypoint-marker summit-marker"><i class="fas fa-mountain"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'campsite': { html: `<div class="waypoint-marker campsite-marker"><i class="fas fa-campground"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'viewpoint': { html: `<div class="waypoint-marker viewpoint-marker"><i class="fas fa-eye"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'information': { html: `<div class="waypoint-marker information-marker"><i class="fas fa-info-circle"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'peak': { html: `<div class="waypoint-marker peak-marker"><i class="fas fa-flag-checkered"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'mountain_pass': { html: `<div class="waypoint-marker mountain_pass-marker"><i class="fas fa-road"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'tree': { html: `<div class="waypoint-marker tree-marker"><i class="fas fa-tree"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'water_source': { html: `<div class="waypoint-marker water-marker"><i class="fas fa-water"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'rest_area': { html: `<div class="waypoint-marker rest-marker"><i class="fas fa-chair"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'danger': { html: `<div class="waypoint-marker danger-marker"><i class="fas fa-triangle-exclamation"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'start': { html: `<div class="waypoint-marker start-marker"><i class="fas fa-flag"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] },
+        'default': { html: `<div class="waypoint-marker default-marker"><i class="fas fa-map-pin"></i></div>`, iconSize: [30, 30], iconAnchor: [15, 15] }
     };
     
     WAYPOINTS.forEach(wp => {
@@ -2144,13 +2625,9 @@ function placeWaypointMarkersFromDB() {
             popupAnchor: [0, -15]
         });
         
-        // Build elevation text
         let elevationText = '';
         if (wp.elevation) {
             elevationText = ` · ${Math.round(wp.elevation)}m`;
-        } else if (wp.description && wp.description.match(/elevation:?\s*(\d+(?:\.\d+)?)\s*m/i)) {
-            const match = wp.description.match(/elevation:?\s*(\d+(?:\.\d+)?)\s*m/i);
-            if (match) elevationText = ` · ${Math.round(parseFloat(match[1]))}m`;
         }
         
         const popupContent = `
@@ -2162,7 +2639,6 @@ function placeWaypointMarkersFromDB() {
                 </div>
                 <div class="popup-coords">
                     📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}
-                    ${wp.elevation ? `<br>📊 Elevation: ${Math.round(wp.elevation)}m` : ''}
                 </div>
             </div>
         `;
@@ -2211,7 +2687,6 @@ function getDisplayType(type) {
     return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-// Function to toggle waypoint visibility
 function toggleWaypoints() {
     waypointsVisible = !waypointsVisible;
     wpMarkers.forEach(m => waypointsVisible ? m.addTo(map) : map.removeLayer(m));
@@ -2219,42 +2694,35 @@ function toggleWaypoints() {
     showToast(waypointsVisible ? 'Waypoints shown' : 'Waypoints hidden');
 }
 
-let selectedTrailPoint = null;
 let trailClickMarker = null;
 
 function enableMapClickReporting() {
-    // Create a custom cursor for trail clicks
     map.getContainer().style.cursor = 'crosshair';
     
-    // Add click handler
     map.on('click', function(e) {
         const clickedPoint = e.latlng;
         
-        // Find the closest point on the trail
         let closestPoint = null;
         let minDistance = Infinity;
         
         trailCoords.forEach((coord, idx) => {
             const distance = map.distance(clickedPoint, L.latLng(coord[0], coord[1]));
-            if (distance < minDistance && distance < 100) { // Within 100 meters of trail
+            if (distance < minDistance && distance < 100) {
                 minDistance = distance;
                 closestPoint = coord;
             }
         });
         
         if (closestPoint && minDistance < 100) {
-            // Save clicked location
             window._clickedLocation = { 
                 lat: closestPoint[0], 
                 lng: closestPoint[1] 
             };
             
-            // Show visual feedback - temporary marker on the trail
             if (trailClickMarker) {
                 map.removeLayer(trailClickMarker);
             }
             
-            // Create a pulsing circle to show where you clicked
             trailClickMarker = L.circleMarker([closestPoint[0], closestPoint[1]], {
                 radius: 12,
                 color: '#100600',
@@ -2265,7 +2733,6 @@ function enableMapClickReporting() {
                 className: 'pulse-marker'
             }).addTo(map);
             
-            // Remove the visual marker after 2 seconds
             setTimeout(() => {
                 if (trailClickMarker) {
                     map.removeLayer(trailClickMarker);
@@ -2273,16 +2740,12 @@ function enableMapClickReporting() {
                 }
             }, 2000);
             
-            // Open crowd modal
             openCrowdModal();
-            showToast('📍 Click on trail - select crowd level for this area');
-        } else {
-            showToast('❌ Click closer to the trail to report crowd level');
+            showToast('📍 Select crowd level for this area');
         }
     });
 }
 
-// Add CSS for the pulse animation
 const pulseStyle = document.createElement('style');
 pulseStyle.textContent = `
     .pulse-marker {
@@ -2301,8 +2764,15 @@ pulseStyle.textContent = `
 `;
 document.head.appendChild(pulseStyle);
 
-// Call this in initMap after map is created
-// (Moved inside initMap function)
+window.addEventListener('beforeunload', () => {
+  if (watchId) navigator.geolocation.clearWatch(watchId);
+  if (guideIntervalId) clearInterval(guideIntervalId);
+  if (hikerPollId) clearInterval(hikerPollId);
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (HIKE_DATA) initMap();
+});
 </script>
 </body>
 </html>

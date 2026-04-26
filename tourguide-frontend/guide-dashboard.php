@@ -46,7 +46,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 // ── 3. Upcoming confirmed bookings for this guide ──────────────────────────
 $stmt = $pdo->prepare("
     SELECT b.id, b.booking_number, b.hike_date, b.hike_type,
-           b.number_of_hikers, b.status,
+           b.number_of_hikers, b.status, b.user_id as hiker_user_id,
            u.name AS hiker_name,
            m.name AS mountain_name, m.image AS mountain_image,
            m.jumpOff
@@ -64,7 +64,7 @@ $upcoming_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->prepare("
     SELECT b.id, b.booking_number, b.hike_date, b.hike_type,
-           b.number_of_hikers, b.status,
+           b.number_of_hikers, b.status, b.user_id as hiker_user_id,
            u.name AS hiker_name,
            m.name AS mountain_name, m.image AS mountain_image,
            m.jumpOff
@@ -100,7 +100,7 @@ $occupied_json   = json_encode(array_values(array_unique($occupied_dates)));
 
 // ── 5. Pending bookings — flag overlaps with confirmed dates ───────────────
 $stmt = $pdo->prepare("
-    SELECT b.id, b.booking_number, b.hike_date, b.number_of_hikers, b.status,
+    SELECT b.id, b.booking_number, b.hike_date, b.number_of_hikers, b.status, b.user_id as hiker_user_id,
            u.name AS hiker_name,
            m.name AS mountain_name, m.image AS mountain_image
     FROM bookings b
@@ -206,8 +206,6 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
 // Next hike
 $next_hike = $upcoming_bookings[0] ?? null;
 
-// Pass calendar data to JS is handled above already
-
 // Handle AJAX status update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
     header('Content-Type: application/json');
@@ -244,8 +242,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     echo json_encode(['success' => true]);
     exit;
 }
+
+// ── NEW: Handle CONFIRM booking ──────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_booking') {
-    // Prevent any stray output from breaking JSON
     if (ob_get_length()) ob_clean();
     error_reporting(0); 
     header('Content-Type: application/json');
@@ -269,12 +268,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $bk_num = isset($bk['booking_number']) ? $bk['booking_number'] : ('#' . $booking_id);
                 $msg_body = "Your booking " . $bk_num . " has been confirmed! Guide " . $guide_name . " is ready for your hike. See you on the trail!";
                 
+                // FIXED: Use all positional parameters (?) instead of mixing with named (:key)
                 $stmt = $pdo->prepare("
                     INSERT INTO messages 
                         (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement)
-                    VALUES (?, ?, ?, 0, NOW(), 'guide', 'hiker', 1)
+                    VALUES (?, ?, AES_ENCRYPT(?, ?), 0, NOW(), 'guide', 'hiker', 1)
                 ");
-                $stmt->execute([$user_id, $hiker_user_id, $msg_body]);
+                $stmt->execute([$user_id, $hiker_user_id, $msg_body, MSG_AES_KEY]);
             }
 
             echo json_encode(['success' => true, 'message' => 'Booking confirmed successfully']);
@@ -286,6 +286,102 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $msg = ($curr && $curr['status'] === 'active') ? 'Booking is already active.' : 'Failed to confirm booking. Permission denied or invalid ID.';
             echo json_encode(['success' => false, 'message' => $msg]);
         }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── NEW: Handle CANCEL booking ───────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'cancel_booking') {
+    if (ob_get_length()) ob_clean();
+    error_reporting(0);
+    header('Content-Type: application/json');
+    
+    try {
+        $booking_id = $_POST['booking_id'] ?? 0;
+        $cancel_reason = $_POST['cancel_reason'] ?? 'Cancelled by guide';
+        
+        // Get booking details before updating
+        $stmt = $pdo->prepare("SELECT user_id, booking_number FROM bookings WHERE id = ? AND guide_id = ?");
+        $stmt->execute([$booking_id, $guide_id]);
+        $bk = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$bk) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found or permission denied']);
+            exit;
+        }
+        
+        // Update booking status to 'cancelled'
+        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ? AND guide_id = ?");
+        $success = $stmt->execute([$booking_id, $guide_id]);
+        
+        if ($success && $stmt->rowCount() > 0) {
+            // Send cancellation message to hiker
+            $hiker_user_id = $bk['user_id'];
+            $guide_name = $guide['name'];
+            $bk_num = $bk['booking_number'];
+            $msg_body = "❌ Your booking {$bk_num} has been CANCELLED by the guide.\n\nReason: {$cancel_reason}\n\nPlease contact support if you have questions or need to rebook.";
+            
+            // FIXED: Use all positional parameters (?) instead of mixing with named (:key)
+            $stmt_msg = $pdo->prepare("
+                INSERT INTO messages 
+                    (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement)
+                VALUES (?, ?, AES_ENCRYPT(?, ?), 0, NOW(), 'guide', 'hiker', 1)
+            ");
+            $stmt_msg->execute([$user_id, $hiker_user_id, $msg_body, MSG_AES_KEY]);
+            
+            echo json_encode(['success' => true, 'message' => 'Booking cancelled successfully']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to cancel booking']);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+// ── NEW: Handle SEND MESSAGE to hiker ────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'send_message_to_hiker') {
+    if (ob_get_length()) ob_clean();
+    error_reporting(0);
+    header('Content-Type: application/json');
+    
+    try {
+        $booking_id = $_POST['booking_id'] ?? 0;
+        $message_body = trim($_POST['message_body'] ?? '');
+        
+        if (empty($message_body)) {
+            echo json_encode(['success' => false, 'message' => 'Message cannot be empty']);
+            exit;
+        }
+        
+        // Get hiker user_id from booking
+        $stmt = $pdo->prepare("SELECT user_id, booking_number FROM bookings WHERE id = ? AND guide_id = ?");
+        $stmt->execute([$booking_id, $guide_id]);
+        $bk = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$bk) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found or permission denied']);
+            exit;
+        }
+        
+        $hiker_user_id = $bk['user_id'];
+        $guide_name = $guide['name'];
+        $bk_num = $bk['booking_number'];
+        
+        $full_message = "📩 Message from your Guide ({$guide_name}) regarding booking {$bk_num}:\n\n{$message_body}";
+        
+        $stmt_msg = $pdo->prepare("
+            INSERT INTO messages 
+                (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role)
+            VALUES (?, ?, AES_ENCRYPT(?, :key), 0, NOW(), 'guide', 'hiker')
+        ");
+        $stmt_msg->execute([$user_id, $hiker_user_id, $full_message]);
+        $stmt_msg->bindParam(':key', MSG_AES_KEY);
+        $stmt_msg->execute();
+        
+        echo json_encode(['success' => true, 'message' => 'Message sent to hiker']);
+        
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
     }
@@ -305,6 +401,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 b.id, b.booking_number, b.mountain_id, b.guide_id,
                 b.hike_date, b.hike_type, b.status, b.number_of_hikers,
                 b.total_amount, b.downpayment_amount, b.payment_status, b.special_requests,
+                b.user_id as hiker_user_id,
                 m.name as mountain_name,
                 u.name as hiker_name, u.email as hiker_email, u.phone as hiker_phone
             FROM bookings b
@@ -351,8 +448,6 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$user_id]);
 $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-
 
 ?>
 <!DOCTYPE html>
@@ -401,7 +496,34 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     .booking-name { font-size: 0.87rem; font-weight: 600; color: var(--ink); }
     .booking-meta { font-size: 0.7rem; color: var(--ink-4); margin-top: 3px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .booking-meta i { color: var(--ink-5); }
-    .booking-actions { display: flex; gap: 6px; align-items: center; }
+    
+    /* Updated booking actions with three buttons */
+    .booking-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-shrink: 0;
+    }
+    .btn-icon-sm {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: rgba(0,0,0,0.04);
+        border: 1px solid var(--line);
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+    }
+    .btn-icon-sm:hover {
+        transform: translateY(-1px);
+    }
+    .btn-view:hover { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+    .btn-message:hover { background: #34599510; color: #345995; border-color: #345995; }
+    .btn-cancel:hover { background: var(--red-lt); color: var(--red); border-color: var(--red); }
+    .btn-confirm:hover { background: var(--green-lt); color: var(--green); border-color: var(--green); }
 
     /* Overlap warning */
     .overlap-warn {
@@ -514,6 +636,24 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
     }
     .btn-success:hover { background: #1a5c3a; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(27,112,69,0.2); }
+    
+    .btn-danger {
+        display: inline-flex; align-items: center; gap: 8px;
+        background: var(--red); color: white; border: none;
+        padding: 10px 20px; border-radius: var(--r-md);
+        font-weight: 700; cursor: pointer; transition: all 0.2s;
+        font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+    }
+    .btn-danger:hover { background: #a02822; transform: translateY(-1px); }
+    
+    .btn-secondary {
+        display: inline-flex; align-items: center; gap: 8px;
+        background: var(--ink-5); color: white; border: none;
+        padding: 10px 20px; border-radius: var(--r-md);
+        font-weight: 700; cursor: pointer; transition: all 0.2s;
+        font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+    }
+    
     .badge-green { background: rgba(30, 123, 72, 0.1); color: #1E7B48; }
     .badge-amber { background: rgba(230, 126, 34, 0.1); color: #c96a10; }
     .badge-gray { background: #eef2f8; color: #6e7483; }
@@ -523,6 +663,29 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     .hikers-table td { font-size: 0.8rem; color: var(--ink-2); padding: 12px 10px; border-bottom: 1px solid var(--line); }
     .hikers-table tr:last-child td { border-bottom: none; }
 
+    /* Message Modal Styles */
+    .message-textarea {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        font-family: 'DM Sans', sans-serif;
+        font-size: 0.85rem;
+        resize: vertical;
+        min-height: 100px;
+    }
+    .message-textarea:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px var(--primary-soft);
+    }
+    .char-count {
+        font-size: 0.7rem;
+        color: var(--ink-4);
+        text-align: right;
+        margin-top: 4px;
+    }
+
 @media (max-width: 600px) {
     .detail-grid { grid-template-columns: 1fr; }
     .detail-item.span2 { grid-column: span 1; }
@@ -531,6 +694,10 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     @media (max-width: 1024px) { .dash-grid { grid-template-columns: 1fr; } }
     @media (max-width: 640px) { .stats-row { grid-template-columns: repeat(3, 1fr); } }
     @media (max-width: 440px) { .stats-row { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) {
+        .booking-actions { flex-direction: column; gap: 4px; }
+        .btn-icon-sm { width: 28px; height: 28px; font-size: 0.7rem; }
+    }
 
     /* ========== REDESIGNED TODAY CARD — DEEP BROWN, GREETING CARD FONT STYLES ========== */
     .today-hike-card {
@@ -790,7 +957,7 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <li><a href="guide-dashboard.php" class="active"><i class="fas fa-house"></i> Dashboard</a></li>
         <li><a href="guide-map.php"><i class="fas fa-map-location-dot"></i> Trail Map</a></li>
         <li><a href="guide-communication.php"><i class="fas fa-comments"></i> Communication</a></li>
-        <li><a href="guide-safety.php"><i class="fas fa-shield-halved"></i> Safety</a></li>
+        <li><a href="guide-bookings.php"><i class="fas fa-shield-halved"></i> Bookings</a></li>
       </ul>
       <div class="sidebar-divider"></div>
       <div class="sidebar-section-label">Account</div>
@@ -995,16 +1162,9 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <?php foreach ($upcoming_bookings as $bk): ?>
             <?php
               $thumb_bg = !empty($bk['mountain_image']) ? $bk['mountain_image'] : 'https://images.unsplash.com/photo-1613144492511-59984f1cdeb3?w=200';
-              $is_overlap = in_array($bk['hike_date'], $occupied_dates) && $bk['status'] === 'pending';
-              $badge_class = 'badge';
-if ($bk['status'] === 'confirmed') {
-    $badge_class = 'badge badge-green';
-} elseif ($bk['status'] === 'pending') {
-    $badge_class = 'badge badge-amber';
-}
+              $is_pending = $bk['status'] === 'pending';
+              $badge_class = $bk['status'] === 'active' ? 'badge badge-green' : ($bk['status'] === 'pending' ? 'badge badge-amber' : 'badge');
             ?>
-
-
             <div class="booking-item" data-date="<?= $bk['hike_date'] ?>">
                 <div class="booking-mountain-thumb" style="background-image:url('<?= htmlspecialchars($thumb_bg) ?>');"></div>
                 <div class="booking-info">
@@ -1015,7 +1175,6 @@ if ($bk['status'] === 'confirmed') {
                         <span><i class="fas fa-users"></i> <?= (int)$bk['number_of_hikers'] ?> pax</span>
                         <span><i class="fas fa-tag"></i> <?= ucfirst(str_replace('_', ' ', $bk['hike_type'])) ?></span>
                     </div>
-                    <!-- ADD BOOKING ID HERE -->
                     <div style="font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--ink-4); margin-top: 6px;">
                         <i class="fas fa-ticket-alt"></i> Booking ID: <?= htmlspecialchars($bk['booking_number']) ?>
                     </div>
@@ -1025,17 +1184,24 @@ if ($bk['status'] === 'confirmed') {
                             <?= ucfirst($bk['status']) ?>
                         </span>
                     </div>
-                    <?php if ($is_overlap): ?>
-                    <div class="overlap-warn">
-                        <i class="fas fa-triangle-exclamation"></i>
-                        This booking overlaps with your confirmed schedule!
-                    </div>
-                    <?php endif; ?>
                 </div>
                 <div class="booking-actions">
-                    <button class="btn btn-ghost btn-sm btn-icon" title="View Details" onclick="viewBookingDetails(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>')">
+                    <button class="btn-icon-sm btn-view" title="View Details" onclick="viewBookingDetails(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>')">
                         <i class="fas fa-eye"></i>
                     </button>
+                    <?php if ($bk['status'] === 'active'): ?>
+                    <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=<?= $bk['hiker_user_id'] ?>'">
+                        <i class="fas fa-comment-dots"></i>
+                    </button>
+                    <?php endif; ?>
+                    <?php if ($bk['status'] === 'pending'): ?>
+                    <button class="btn-icon-sm btn-confirm" title="Confirm Booking" onclick="confirmBooking(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>')">
+                        <i class="fas fa-check-circle"></i>
+                    </button>
+                    <button class="btn-icon-sm btn-cancel" title="Cancel Booking" onclick="showCancelModal(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>')">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
+                    <?php endif; ?>
                 </div>
             </div>
             <?php endforeach; ?>
@@ -1148,7 +1314,7 @@ if ($bk['status'] === 'confirmed') {
       <a href="guide-dashboard.php" class="bnav-item active"><i class="fas fa-house"></i><span>Home</span></a>
       <a href="guide-map.php" class="bnav-item"><i class="fas fa-map-location-dot"></i><span>Map</span></a>
       <a href="guide-communication.php" class="bnav-item"><i class="fas fa-comments"></i><span>Chats</span></a>
-      <a href="guide-safety.php" class="bnav-item"><i class="fas fa-shield-halved"></i><span>Safety</span></a>
+      <a href="guide-bookings.php" class="bnav-item"><i class="fas fa-shield-halved"></i><span>Bookings</span></a>
       <a href="guide-profile.php" class="bnav-item"><i class="fas fa-circle-user"></i><span>Profile</span></a>
     </div>
   </nav>
@@ -1249,6 +1415,7 @@ if ($bk['status'] === 'confirmed') {
     </div>
 </div>
 
+<!-- BOOKING DETAILS MODAL -->
 <div class="modal-overlay" id="bookingDetailsModal">
     <div class="modal" style="max-width: 650px;">
         <div class="modal-header">
@@ -1261,6 +1428,36 @@ if ($bk['status'] === 'confirmed') {
         <div class="modal-footer">
             <button class="btn btn-primary" onclick="closeModal('bookingDetailsModal')">Close</button>
         </div>
+    </div>
+</div>
+
+
+<!-- CANCEL MODAL -->
+<div class="modal-overlay" id="cancelModal">
+    <div class="modal" style="max-width: 450px;">
+        <div class="modal-header">
+            <div class="modal-title" style="color:var(--red);"><i class="fas fa-times-circle"></i> Cancel Booking</div>
+            <button class="modal-close" onclick="closeModal('cancelModal')"><i class="fas fa-xmark"></i></button>
+        </div>
+        <form id="cancelForm" onsubmit="cancelBooking(event)">
+            <input type="hidden" id="cancelBookingId" value="">
+            <div class="modal-body">
+                <p style="margin-bottom: 16px;">Are you sure you want to cancel booking <strong id="cancelBookingNumber"></strong>?</p>
+                <div class="form-group">
+                    <label class="form-label">Reason for cancellation</label>
+                    <textarea id="cancelReason" class="message-textarea" rows="3" placeholder="Provide a reason for cancelling this booking..." maxlength="300" required></textarea>
+                    <div class="char-count"><span id="cancelCharCount">0</span>/300 characters</div>
+                </div>
+                <p class="overlap-warn" style="margin-top: 12px;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    This action cannot be undone. The hiker will be notified.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('cancelModal')">Keep Booking</button>
+                <button type="submit" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Confirm Cancellation</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -1409,6 +1606,25 @@ function filterByDate(iso) {
                                   (bk.status === 'active' ? '<i class="fas fa-check-circle"></i>' : 
                                   '<i class="fas fa-clock"></i>'));
                 
+                // Show appropriate action buttons based on status
+                let actionButtons = '';
+                if (bk.status === 'active') {
+                    actionButtons = `
+                        <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
+                            <i class="fas fa-comment-dots"></i>
+                        </button>
+                    `;
+                } else if (bk.status === 'pending') {
+                    actionButtons = `
+                        <button class="btn-icon-sm btn-confirm" title="Confirm Booking" onclick="confirmBooking(${bk.id}, '${escapeHtml(bk.booking_number)}')">
+                            <i class="fas fa-check-circle"></i>
+                        </button>
+                        <button class="btn-icon-sm btn-cancel" title="Cancel Booking" onclick="showCancelModal(${bk.id}, '${escapeHtml(bk.booking_number)}')">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
+                    `;
+                }
+                
                 return `
                 <div class="booking-item">
                     <div class="booking-mountain-thumb" style="background-image:url('${escapeHtml(thumb_bg)}');"></div>
@@ -1431,9 +1647,10 @@ function filterByDate(iso) {
                         </div>
                     </div>
                     <div class="booking-actions">
-                        <button class="btn btn-ghost btn-sm btn-icon" title="View Details" onclick="viewBookingDetails(${bk.id}, '${escapeHtml(bk.booking_number)}')">
+                        <button class="btn-icon-sm btn-view" title="View Details" onclick="viewBookingDetails(${bk.id}, '${escapeHtml(bk.booking_number)}')">
                             <i class="fas fa-eye"></i>
                         </button>
+                        ${actionButtons}
                     </div>
                 </div>`;
             }).join('');
@@ -1468,14 +1685,6 @@ function match(status, classes) {
 
 function empty(str) {
     return !str || str === '';
-}
-function resetFilter() {
-    selectedDate = null;
-    const items = document.querySelectorAll('.booking-item');
-    const header = document.querySelector('.section-title');
-    items.forEach(item => item.style.display = 'flex');
-    header.textContent = "Upcoming Bookings";
-    renderCal();
 }
 
 function calPrev() { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCal(); }
@@ -1540,7 +1749,6 @@ updateTime(); setInterval(updateTime, 1000);
 document.addEventListener('DOMContentLoaded', function() {
     const broadcastCards = document.querySelectorAll('.announcement-card.unread');
     broadcastCards.forEach(card => {
-        // Extract broadcast ID from the card (you'll need to add data-id to each card)
         const broadcastId = card.dataset.id;
         if (broadcastId) {
             fetch(window.location.href, {
@@ -1560,7 +1768,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function viewBookingDetails(bookingId, bookingNumber) {
-    // Fetch booking details via AJAX
     fetch(window.location.href, {
         method: 'POST',
         headers: {
@@ -1578,18 +1785,30 @@ function viewBookingDetails(bookingId, bookingNumber) {
             const booking = data.booking;
             const typeMap = { day_hike: 'Day Hike', overnight: 'Overnight', multi_day: 'Multi-Day' };
             
-            // Payment status badge class
             const paymentBadgeClass = booking.payment_status === 'paid' ? 'badge-green' : 
                                       (booking.payment_status === 'pending' ? 'badge-amber' : 'badge-gray');
             
-            // Show confirm button only if booking is pending
-            const confirmButton = booking.status === 'pending' ? `
-                <div style="margin-top: 20px;">
-                    <button class="btn btn-success" onclick="confirmBooking(${booking.id}, '${booking.booking_number}')" style="width: 100%; justify-content: center;">
-                        <i class="fas fa-check-circle"></i> Confirm Booking
-                    </button>
-                </div>
-            ` : '';
+            let actionButtons = '';
+            if (booking.status === 'pending') {
+                actionButtons = `
+                    <div style="display: flex; gap: 12px; margin-top: 20px;">
+                        <button class="btn btn-success" onclick="confirmBooking(${booking.id}, '${booking.booking_number}')" style="flex: 1;">
+                            <i class="fas fa-check-circle"></i> Confirm Booking
+                        </button>
+                        <button class="btn btn-danger" onclick="showCancelModalFromDetails(${booking.id}, '${booking.booking_number}')" style="flex: 1;">
+                            <i class="fas fa-times-circle"></i> Cancel Booking
+                        </button>
+                    </div>
+                `;
+            } else if (booking.status === 'active') {
+                actionButtons = `
+                    <div style="margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="location.href='guide-communication.php?user_id=${booking.hiker_user_id}'" style="width: 100%;">
+                            <i class="fas fa-comment-dots"></i> Send Message to Hiker
+                        </button>
+                    </div>
+                `;
+            }
             
             document.getElementById('bookingDetailsBody').innerHTML = `
                 <div class="detail-section">
@@ -1694,7 +1913,7 @@ function viewBookingDetails(bookingId, bookingNumber) {
                 </div>
                 ` : ''}
                 
-                ${confirmButton}
+                ${actionButtons}
             `;
             openModal('bookingDetailsModal');
         } else {
@@ -1726,9 +1945,7 @@ function confirmBooking(bookingId, bookingNumber) {
         .then(data => {
             if (data.success) {
                 showToast(`✓ Booking ${bookingNumber} confirmed!`);
-                // Close the modal
                 closeModal('bookingDetailsModal');
-                // Refresh the page to show updated status after a short delay
                 setTimeout(() => location.reload(), 1200);
             } else {
                 showToast(data.message || 'Failed to confirm booking');
@@ -1739,6 +1956,71 @@ function confirmBooking(bookingId, bookingNumber) {
             showToast('Error confirming booking');
         });
     }
+}
+
+function showCancelModal(bookingId, bookingNumber) {
+    document.getElementById('cancelBookingId').value = bookingId;
+    document.getElementById('cancelBookingNumber').textContent = bookingNumber;
+    document.getElementById('cancelReason').value = '';
+    document.getElementById('cancelCharCount').textContent = '0';
+    openModal('cancelModal');
+}
+
+function showCancelModalFromDetails(bookingId, bookingNumber) {
+    closeModal('bookingDetailsModal');
+    showCancelModal(bookingId, bookingNumber);
+}
+
+function cancelBooking(event) {
+    event.preventDefault();
+    const bookingId = document.getElementById('cancelBookingId').value;
+    const bookingNumber = document.getElementById('cancelBookingNumber').textContent;
+    const cancelReason = document.getElementById('cancelReason').value;
+    
+    if (!cancelReason.trim()) {
+        showToast('Please provide a reason for cancellation');
+        return;
+    }
+    
+    showToast('Cancelling booking...');
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: new URLSearchParams({
+            action: 'cancel_booking',
+            booking_id: bookingId,
+            cancel_reason: cancelReason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`✗ Booking ${bookingNumber} cancelled`);
+            closeModal('cancelModal');
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            showToast(data.message || 'Failed to cancel booking');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('Error cancelling booking');
+    });
+}
+
+
+
+// Character counter for cancel modal
+const cancelReason = document.getElementById('cancelReason');
+const cancelCharCount = document.getElementById('cancelCharCount');
+if (cancelReason && cancelCharCount) {
+    cancelReason.addEventListener('input', function() {
+        cancelCharCount.textContent = this.value.length;
+    });
 }
 
 function escapeHtml(str) {
@@ -1752,7 +2034,6 @@ function escapeHtml(str) {
 }
 
 document.getElementById('viewAlertsBtn')?.addEventListener('click', () => openModal('alertsModal'));
-// Auto-open emergency modal if there was a POST error
 <?php if ($emergency_error): ?>
 openModal('emergencyModal');
 <?php endif; ?>
