@@ -51,7 +51,7 @@ $earning_stats = $stmt->fetch(PDO::FETCH_ASSOC);
 
 // ── All bookings ──────────────────────────────────────────────────────────
 $stmt = $pdo->prepare("
-    SELECT b.id, b.booking_number, b.hike_date, b.hike_type,
+    SELECT b.id, b.booking_number, b.hike_date, b.start_time, b.hike_type,
            b.number_of_hikers, b.status, b.total_amount, b.downpayment_amount, b.payment_status,
            u.name AS hiker_name, u.id as hiker_user_id,
            m.name AS mountain_name, m.image AS mountain_image
@@ -95,6 +95,239 @@ $total_reviews = $rating_stats['total_reviews'];
 $name_parts = explode(' ', $guide['name']);
 $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? substr($name_parts[1], 0, 1) : ''));
 
+
+// ── Handle AJAX: Get booking details ─────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_booking_details') {
+    if (ob_get_length()) ob_clean();
+    error_reporting(0);
+    header('Content-Type: application/json');
+    
+    try {
+        $booking_id = $_POST['booking_id'] ?? 0;
+        
+        $stmt = $pdo->prepare("
+            SELECT 
+                b.id, b.booking_number, b.mountain_id, b.guide_id,
+                b.hike_date, b.start_time, b.hike_type, b.status, b.number_of_hikers,
+                b.total_amount, b.downpayment_amount, b.payment_status, b.special_requests,
+                b.user_id as hiker_user_id,
+                m.name as mountain_name,
+                u.name as hiker_name, u.email as hiker_email, u.phone as hiker_phone
+            FROM bookings b
+            JOIN mountains m ON b.mountain_id = m.id
+            JOIN users u ON b.user_id = u.id
+            WHERE b.id = ? AND b.guide_id = ?
+        ");
+        $stmt->execute([$booking_id, $guide_id]);
+        $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($booking) {
+            // Get additional hikers
+            $stmt2 = $pdo->prepare("
+                SELECT hiker_name, age, emergency_contact_name, emergency_contact_number
+                FROM booking_hikers
+                WHERE booking_id = ?
+            ");
+            $stmt2->execute([$booking_id]);
+            $booking['additional_hikers'] = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+            
+            echo json_encode(['success' => true, 'booking' => $booking]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Booking not found']);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+// ── Handle AJAX: Confirm booking with payment instructions ──────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_booking') {
+    if (ob_get_length()) ob_clean();
+    error_reporting(0);
+    header('Content-Type: application/json');
+    
+    try {
+        $booking_id = $_POST['booking_id'] ?? 0;
+        
+        // Get booking details before updating (need downpayment amount)
+        $stmt = $pdo->prepare("
+            SELECT b.user_id, b.booking_number, b.downpayment_amount, b.total_amount, 
+                   b.hike_date, m.name as mountain_name
+            FROM bookings b
+            JOIN mountains m ON m.id = b.mountain_id
+            WHERE b.id = ? AND b.guide_id = ?
+        ");
+        $stmt->execute([$booking_id, $guide_id]);
+        $bk = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$bk) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found or permission denied']);
+            exit;
+        }
+        
+        // Update booking status to 'active'
+        $stmt = $pdo->prepare("UPDATE bookings SET status = 'active' WHERE id = ? AND guide_id = ?");
+        $success = $stmt->execute([$booking_id, $guide_id]);
+        
+        if ($success && $stmt->rowCount() > 0) {
+            $hiker_user_id = $bk['user_id'];
+            $guide_name = $guide['name'];
+            $bk_num = $bk['booking_number'];
+           $downpayment = number_format($bk['downpayment_amount'] ?? ($bk['total_amount'] * 0.2), 2);
+           $remaining = number_format($bk['total_amount'] - ($bk['downpayment_amount'] ?? ($bk['total_amount'] * 0.2)), 2);
+           
+            $total_amount = number_format($bk['total_amount'], 2);
+            $remaining = number_format($bk['total_amount'] - ($bk['downpayment_amount'] ?? ($bk['total_amount'] * 0.5)), 2);
+            $hike_date = date('F j, Y', strtotime($bk['hike_date']));
+            
+            // Get guide's GCash details from the guides table
+            $stmt_gcash = $pdo->prepare("
+                SELECT gcash_name, gcash_number, gcash_qr_code 
+                FROM guides 
+                WHERE user_id = ?
+            ");
+            $stmt_gcash->execute([$user_id]);
+            $gcash = $stmt_gcash->fetch(PDO::FETCH_ASSOC);
+            
+            $gcash_number = $gcash['gcash_number'] ?? '0999 999 9999';
+            $gcash_name = $gcash['gcash_name'] ?? 'Your Guide';
+            $gcash_qr = !empty($gcash['gcash_qr_code']) ? '../' . $gcash['gcash_qr_code'] : '../assets/images/gcash-qr.jpg';
+            
+            // Build the confirmation message with payment instructions (ONE message only)
+            $msg_body = "🎉 Yay! Your booking {$bk_num} has been CONFIRMED! 🏔️\n\n" .
+                        "📅 Hike Date: {$hike_date}\n" .
+                        "📍 Mountain: " . htmlspecialchars($bk['mountain_name']) . "\n" .
+                        "👤 Guide: {$guide_name}\n\n" .
+                        "💰 DOWNPAYMENT REQUIRED: ₱{$downpayment}\n" .
+                        "(Total: ₱{$total_amount}, Remaining: ₱{$remaining})\n\n" .
+                        "📱 GCash Details:\n" .
+                        "• Number: {$gcash_number}\n" .
+                        "• Account Name: {$gcash_name}\n\n" .
+                        "📸 Send your downpayment and reply with your proof of payment.\n\n" .
+                        "See you on the trail! 🥾✨";
+            
+                        // After setting status = 'active', add:
+$downpayment_amount = $bk['downpayment_amount'] ?? ($bk['total_amount'] * 0.2); // 20%
+$deadline_hours = 5;
+$deadline = date('Y-m-d H:i:s', strtotime("+{$deadline_hours} hours"));
+
+$stmt = $pdo->prepare("UPDATE bookings SET 
+    downpayment_deadline = ?,
+    downpayment_status = 'unpaid'
+    WHERE id = ?");
+$stmt->execute([$deadline, $booking_id]);
+
+
+            // Insert the confirmation message with payment instructions
+            $stmt = $pdo->prepare("
+                INSERT INTO messages 
+                    (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement, action_data)
+                VALUES (?, ?, AES_ENCRYPT(?, ?), 0, NOW(), 'guide', 'hiker', 1, ?)
+            ");
+            
+            /// Store GCash info in action_data for reference
+$action_data = json_encode([
+    'type' => 'payment_instructions',
+    'gcash_number' => $gcash_number,
+    'gcash_name' => $gcash_name,
+    'qr_code_url' => $gcash_qr,
+    'downpayment_amount' => $downpayment,
+    'booking_number' => $bk_num,
+    'total_amount' => $total_amount,
+    'deadline' => $deadline  // ADD THIS LINE
+]);
+            
+            $stmt->execute([$user_id, $hiker_user_id, $msg_body, MSG_AES_KEY, $action_data]);
+
+            echo json_encode(['success' => true, 'message' => 'Booking confirmed with payment instructions sent!']);
+        } else {
+            $stmt = $pdo->prepare("SELECT status FROM bookings WHERE id = ?");
+            $stmt->execute([$booking_id]);
+            $curr = $stmt->fetch();
+            $msg = ($curr && $curr['status'] === 'active') ? 'Booking is already active.' : 'Failed to confirm booking.';
+            echo json_encode(['success' => false, 'message' => $msg]);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+// ── Handle AJAX: Cancel booking ───────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'cancel_booking') {
+    if (ob_get_length()) ob_clean();
+    error_reporting(0);
+    header('Content-Type: application/json');
+    
+    try {
+        $booking_id = $_POST['booking_id'] ?? 0;
+        $cancel_reason = $_POST['cancel_reason'] ?? 'Cancelled by guide';
+        
+        // Get booking details before updating
+        $stmt = $pdo->prepare("SELECT user_id, booking_number FROM bookings WHERE id = ? AND guide_id = ?");
+        $stmt->execute([$booking_id, $guide_id]);
+        $bk = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$bk) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found or permission denied']);
+            exit;
+        }
+        
+        // Update booking status to 'cancelled'
+        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ? AND guide_id = ?");
+        $success = $stmt->execute([$booking_id, $guide_id]);
+        
+        if ($success && $stmt->rowCount() > 0) {
+            // Send cancellation message to hiker with ENCRYPTION
+            $hiker_user_id = $bk['user_id'];
+            $guide_name = $guide['name'];
+            $bk_num = $bk['booking_number'];
+            $msg_body = "❌ Your booking {$bk_num} has been CANCELLED by the guide.\n\nReason: {$cancel_reason}\n\nPlease contact support if you have questions or need to rebook.";
+            
+            $stmt_msg = $pdo->prepare("
+                INSERT INTO messages 
+                    (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement, action_data)
+                VALUES (?, ?, AES_ENCRYPT(?, ?), 0, NOW(), 'guide', 'hiker', 1, NULL)
+            ");
+            $stmt_msg->execute([$user_id, $hiker_user_id, $msg_body, MSG_AES_KEY]);
+            
+            echo json_encode(['success' => true, 'message' => 'Booking cancelled successfully']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to cancel booking']);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── Handle AJAX: Finish hike (release guide) ───────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'finish_hike') {
+    if (ob_get_length()) ob_clean();
+    header('Content-Type: application/json');
+    
+    try {
+        $booking_id = $_POST['booking_id'] ?? 0;
+        
+        $stmt = $pdo->prepare("
+            UPDATE bookings 
+            SET status = 'finished', 
+                completed_at = NOW(),
+                guide_locked_until = NULL
+            WHERE id = ? AND guide_id = ? AND status = 'active'
+        ");
+        $success = $stmt->execute([$booking_id, $guide_id]);
+        
+        if ($success && $stmt->rowCount() > 0) {
+            echo json_encode(['success' => true, 'message' => 'Hike marked as finished! Guide is now available.']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Could not finish hike.']);
+        }
+    } catch (Exception $e) {
+        // FIXED: Missing => after 'success'
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
 // Helper functions
 function fmt_date(string $d): string {
     return date('M j, Y', strtotime($d));
@@ -251,8 +484,22 @@ function render_stars($rating) {
       font-size: 0.65rem;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       color: var(--ink-3);
+    }
+    .filter-btn:hover {
+      background: var(--stone-2);
+      color: var(--ink);
+      transform: translateY(-1px);
+    }
+    .filter-btn:active {
+      transform: translateY(1px);
+    }
+    .filter-btn.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(16,6,0,0.2);
     }
 
     /* Mobile Booking Cards (hidden on desktop, shown on mobile) */
@@ -317,25 +564,45 @@ function render_stars($rating) {
     }
     .booking-mobile-actions {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       margin-top: 12px;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      padding-bottom: 4px;
     }
+    .booking-mobile-actions::-webkit-scrollbar { display: none; }
+    
     .mobile-action-btn {
       flex: 1;
-      padding: 8px;
+      min-width: 0;
+      padding: 6px 4px;
       border-radius: 8px;
       background: var(--stone);
       border: 1px solid var(--line);
-      font-size: 0.7rem;
+      font-size: 0.62rem;
       font-weight: 600;
       cursor: pointer;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 2px;
       transition: all 0.2s;
+      white-space: nowrap;
     }
+    .mobile-action-btn:hover {
+      background: var(--stone-2);
+      color: var(--ink);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .mobile-action-btn:active {
+      transform: translateY(1px);
+      box-shadow: none;
+    }
+    .mobile-action-btn i { font-size: 0.8rem; }
 
     /* Desktop Table */
     .bookings-table-wrapper {
@@ -383,6 +650,17 @@ function render_stars($rating) {
       justify-content: center;
       font-size: 0.75rem;
       color: var(--ink-3);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .action-icon:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(16,6,0,0.2);
+    }
+    .action-icon:active {
+      transform: translateY(0);
     }
     .booking-info-cell {
       display: flex;
@@ -500,12 +778,25 @@ function render_stars($rating) {
       .bookings-layout { 
         grid-template-columns: 1fr;
         gap: 24px;
+        flex: none;
+        height: auto;
       }
       .reviews-sidebar { width: 100%; }
+      .bookings-container { min-height: auto; }
     }
 
     @media (max-width: 900px) {
-      .guide-content { padding: 16px; }
+      .guide-main { 
+        height: auto; 
+        min-height: 100vh; 
+        overflow: visible; 
+      }
+      .guide-content { 
+        padding: 16px; 
+        overflow-y: visible;
+        flex: none;
+        height: auto;
+      }
       .stats-row { 
         grid-template-columns: repeat(2, 1fr); 
         gap: 12px;
@@ -515,6 +806,24 @@ function render_stars($rating) {
       .bookings-table-wrapper { display: none; }
       /* Show mobile cards */
       .bookings-mobile-list { display: flex; }
+      
+      .bookings-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+      .bookings-container {
+        overflow: visible;
+        flex: none;
+      }
+      .reviews-sidebar {
+        overflow: visible;
+        flex: none;
+      }
+      .reviews-list {
+        max-height: 500px; /* Give it some height but allow it to be part of page scroll */
+        overflow-y: auto;
+      }
     }
     
     @media (max-width: 480px) {
@@ -524,10 +833,17 @@ function render_stars($rating) {
       .stat-card-val { font-size: 1.1rem; }
       .stat-card-label { font-size: 0.6rem; }
       .section-header { flex-direction: column; align-items: stretch; gap: 12px; }
-      .filter-group { justify-content: flex-start; overflow-x: auto; padding-bottom: 4px; }
-      .filter-btn { white-space: nowrap; }
-      .booking-mobile-actions { flex-direction: column; }
-      .mobile-action-btn { width: 100%; }
+      .filter-group { 
+        justify-content: flex-start; 
+        overflow-x: auto; 
+        padding-bottom: 8px;
+        scrollbar-width: none; 
+      }
+      .filter-group::-webkit-scrollbar { display: none; }
+      .filter-btn { white-space: nowrap; flex-shrink: 0; }
+      .booking-mobile-actions { flex-direction: row; }
+      .mobile-action-btn { width: auto; }
+      .bookings-mobile-list { padding: 12px; }
     }
 
     /* Modal styles */
@@ -552,15 +868,100 @@ function render_stars($rating) {
     .detail-val { font-size: 0.8rem; color: var(--ink); font-weight: 500; }
 
     .btn {
-      padding: 8px 16px;
-      border-radius: 8px;
+      padding: 10px 20px;
+      border-radius: 10px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.85rem;
     }
-    .btn-primary { background: #100600; color: white; border: none; }
-    .btn-ghost { background: transparent; border: 1px solid var(--line); }
-    .btn-danger { background: var(--red); color: white; border: none; }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    }
+    .btn:active {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    }
+    .btn-primary { 
+      background: var(--primary); 
+      color: white; 
+      border: none; 
+    }
+    .btn-primary:hover {
+      background: var(--primary-light);
+    }
+    .btn-ghost { 
+      background: var(--stone); 
+      border: 1px solid var(--line); 
+      color: var(--ink-2);
+    }
+    .btn-ghost:hover {
+      background: var(--stone-2);
+    }
+    .btn-danger { 
+      background: var(--red); 
+      color: white; 
+      border: none; 
+      box-shadow: 0 4px 12px rgba(184,49,42,0.2);
+    }
+    .btn-danger:hover {
+      background: #9e2920;
+      box-shadow: 0 8px 20px rgba(184,49,42,0.3);
+    }
+
+    /* Mobile Tabs */
+    .mobile-tabs {
+      display: none;
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border);
+      border-radius: 40px;
+      padding: 4px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .mobile-tab-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 30px;
+      border: none;
+      background: transparent;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--ink-3);
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .mobile-tab-btn:not(.active):hover {
+      background: rgba(0,0,0,0.03);
+      color: var(--ink);
+    }
+    .mobile-tab-btn:active {
+      transform: scale(0.96);
+    }
+    .mobile-tab-btn.active {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 12px rgba(16,6,0,0.2);
+    }
+
+    @media (max-width: 900px) {
+      .mobile-tabs { display: flex; }
+      
+      /* Toggle visibility based on active tab */
+      .bookings-layout.show-bookings .reviews-sidebar { display: none; }
+      .bookings-layout.show-ratings .bookings-container { display: none; }
+      .bookings-layout.show-ratings .reviews-sidebar { display: flex; }
+    }
 
     .toast {
       position: fixed;
@@ -582,6 +983,64 @@ function render_stars($rating) {
       transform: translateX(-50%) translateY(0);
       opacity: 1;
     }
+    /* Payment instructions styling */
+.payment-instructions {
+    background: linear-gradient(135deg, #f0f7e8 0%, #e8f0e0 100%);
+    border-radius: var(--r-lg);
+    padding: 16px;
+    margin-top: 16px;
+    border-left: 4px solid var(--green);
+}
+.payment-instructions h4 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--green);
+    margin-bottom: 12px;
+}
+.payment-detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px dashed rgba(0,0,0,0.05);
+    font-size: 0.78rem;
+}
+.payment-detail-label {
+    font-weight: 600;
+    color: var(--ink-4);
+}
+.payment-detail-value {
+    font-weight: 700;
+    color: var(--ink);
+}
+.gcash-qr-preview {
+    text-align: center;
+    margin-top: 12px;
+}
+.gcash-qr-preview img {
+    max-width: 120px;
+    border-radius: 12px;
+    border: 2px solid var(--white);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+/* Add this to your existing styles */
+.hikers-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.7rem;
+}
+.hikers-table th {
+    text-align: left;
+    padding: 8px 6px;
+    background: var(--stone);
+    font-weight: 600;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--line);
+}
+.hikers-table td {
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-2);
+}
   </style>
 </head>
 <body>
@@ -602,10 +1061,20 @@ function render_stars($rating) {
       <div class="sidebar-divider"></div>
       <ul><li><a href="guide-profile.php"><i class="fas fa-circle-user"></i> My Profile</a></li></ul>
     </nav>
-    <div class="sidebar-profile">
-      <div class="sidebar-avatar"><?= $initials ?></div>
-      <div class="sidebar-profile-info"><div class="sidebar-profile-name"><?= htmlspecialchars($guide['name']) ?></div><div class="sidebar-profile-role"><?= htmlspecialchars($guide['specialization'] ?? 'Trail Guide') ?></div></div>
-    </div>
+   <div class="sidebar-profile">
+  <?php if (!empty($guide['avatar'])): ?>
+    <img src="../<?= htmlspecialchars($guide['avatar']) ?>" class="sidebar-avatar" style="object-fit:cover;" alt="avatar">
+  <?php else: ?>
+    <div class="sidebar-avatar"><?= $initials ?></div>
+  <?php endif; ?>
+  <div class="sidebar-profile-info">
+    <div class="sidebar-profile-name"><?= htmlspecialchars($guide['name']) ?></div>
+    <div class="sidebar-profile-role"><?= htmlspecialchars($guide['specialization'] ?? 'Trail Guide') ?></div>
+  </div>
+  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+    <i class="fas fa-sign-out-alt"></i>
+  </a>
+</div>
   </aside>
 
   <div class="guide-main">
@@ -655,8 +1124,18 @@ function render_stars($rating) {
         </div>
       </div>
 
+      <!-- MOBILE TABS (only shown on small screens) -->
+      <div class="mobile-tabs">
+        <button class="mobile-tab-btn active" onclick="switchMobileTab('bookings', this)">
+          <i class="fas fa-calendar-check"></i> Bookings
+        </button>
+        <button class="mobile-tab-btn" onclick="switchMobileTab('ratings', this)">
+          <i class="fas fa-star"></i> Reviews & Ratings
+        </button>
+      </div>
+
       <!-- MAIN LAYOUT -->
-      <div class="bookings-layout">
+      <div class="bookings-layout show-bookings">
         
         <!-- LEFT: Bookings -->
         <div class="bookings-container">
@@ -689,7 +1168,8 @@ function render_stars($rating) {
                     </div>
                   </td>
                   <td><strong><?= htmlspecialchars($bk['hiker_name']) ?></strong></td>
-                  <td><?= fmt_date($bk['hike_date']) ?></td>
+                  <td><?= date('M j, Y g:i A', strtotime($bk['hike_date'] . ' ' . ($bk['start_time'] ?? '00:00'))) ?></td>
+                  
                   <td><?= ucfirst(str_replace('_', ' ', $bk['hike_type'])) ?></td>
                   <td>₱<?= number_format($bk['total_amount'], 0) ?></td>
                   <td><?= get_status_badge($bk['status']) ?></td>
@@ -728,7 +1208,7 @@ function render_stars($rating) {
                 </div>
               </div>
               <div class="booking-mobile-row"><span class="booking-mobile-label">Hiker:</span><span class="booking-mobile-value"><?= htmlspecialchars($bk['hiker_name']) ?></span></div>
-              <div class="booking-mobile-row"><span class="booking-mobile-label">Date:</span><span class="booking-mobile-value"><?= fmt_date($bk['hike_date']) ?></span></div>
+             <div class="booking-mobile-row"><span class="booking-mobile-label">Date/Time:</span><span class="booking-mobile-value"><?= date('M j, Y g:i A', strtotime($bk['hike_date'] . ' ' . ($bk['start_time'] ?? '00:00'))) ?></span></div>
               <div class="booking-mobile-row"><span class="booking-mobile-label">Type:</span><span class="booking-mobile-value"><?= ucfirst(str_replace('_', ' ', $bk['hike_type'])) ?></span></div>
               <div class="booking-mobile-row"><span class="booking-mobile-label">Amount:</span><span class="booking-mobile-value">₱<?= number_format($bk['total_amount'], 0) ?></span></div>
               <div class="booking-mobile-row"><span class="booking-mobile-label">Status:</span><span class="booking-mobile-value"><?= get_status_badge($bk['status']) ?></span></div>
@@ -743,6 +1223,12 @@ function render_stars($rating) {
                 <?php if ($bk['payment_status'] !== 'paid' && $bk['status'] === 'active'): ?>
                 <button class="mobile-action-btn" style="background:#f5b04220;color:#e67e22;" onclick="requestPayment(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>', <?= $bk['total_amount'] ?>, <?= $bk['downpayment_amount'] ?? 0 ?>)"><i class="fas fa-credit-card"></i> Payment</button>
                 <?php endif; ?>
+                <?php if ($bk['status'] === 'active'): ?>
+                    <button class="action-icon action-finish" onclick="finishHike(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>')">
+                        <i class="fas fa-flag-checkered"></i>
+                    </button>
+                <?php endif; ?>
+
               </div>
             </div>
             <?php endforeach; ?>
@@ -817,6 +1303,23 @@ function render_stars($rating) {
   </div>
 </div>
 
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal" style="max-width: 450px;">
+    <div class="modal-header">
+      <div class="modal-title" style="color:var(--green);"><i class="fas fa-check-circle"></i> Confirm Booking</div>
+      <button class="modal-close" onclick="closeModal('confirmModal')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <p>Are you sure you want to confirm booking <strong id="confirmBookingNumber"></strong>?</p>
+      <p style="font-size:0.75rem; color:var(--ink-4); margin-top:10px;">This will notify the hiker and set the status to "Confirmed".</p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('confirmModal')">Go Back</button>
+      <button type="button" class="btn btn-primary" id="confirmActionBtn" style="background:var(--green); color:white;">Yes, Confirm</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="cancelModal">
   <div class="modal" style="max-width: 450px;">
     <div class="modal-header">
@@ -875,68 +1378,357 @@ function filterBookings(status) {
     }
   });
 }
-
-async function viewBookingDetails(bookingId, bookingNumber) {
-  showToast('Loading...');
-  try {
-    const res = await fetch('../api/guide_messages.php?action=get_booking_details&booking_id=' + bookingId);
-    const data = await res.json();
-    if (data.success) {
-      const bk = data.booking;
-      document.getElementById('bookingDetailsBody').innerHTML = `
-        <div class="detail-section"><div class="detail-section-title">Booking Info</div>
-        <div class="detail-grid">
-          <div class="detail-item"><div class="detail-label">Booking #</div><div class="detail-val">${escapeHtml(bk.booking_number)}</div></div>
-          <div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">${bk.status}</div></div>
-          <div class="detail-item"><div class="detail-label">Mountain</div><div class="detail-val">${escapeHtml(bk.mountain_name)}</div></div>
-          <div class="detail-item"><div class="detail-label">Date</div><div class="detail-val">${new Date(bk.hike_date).toLocaleDateString()}</div></div>
-          <div class="detail-item"><div class="detail-label">Hikers</div><div class="detail-val">${bk.number_of_hikers} pax</div></div>
-          <div class="detail-item"><div class="detail-label">Total</div><div class="detail-val">₱${parseFloat(bk.total_amount).toLocaleString()}</div></div>
-        </div></div>
-        <div class="detail-section"><div class="detail-section-title">Hiker</div>
-        <div class="detail-grid">
-          <div class="detail-item"><div class="detail-label">Name</div><div class="detail-val">${escapeHtml(bk.hiker_name)}</div></div>
-          <div class="detail-item"><div class="detail-label">Email</div><div class="detail-val">${escapeHtml(bk.hiker_email || 'N/A')}</div></div>
-        </div></div>`;
-      openModal('bookingDetailsModal');
-    } else showToast('Error loading details');
-  } catch(e) { showToast('Network error'); }
-}
-
-function confirmBooking(bookingId, bookingNumber) {
-  if (confirm(`Confirm booking ${bookingNumber}?`)) {
-    showToast('Confirming...');
+function viewBookingDetails(bookingId, bookingNumber) {
+    showToast('Loading...');
+    
     fetch(window.location.href, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ action: 'confirm_booking', booking_id: bookingId })
-    }).then(r => r.json()).then(data => {
-      showToast(data.message);
-      if (data.success) setTimeout(() => location.reload(), 1200);
-    }).catch(() => showToast('Error'));
-  }
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: new URLSearchParams({
+            action: 'get_booking_details',
+            booking_id: bookingId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const booking = data.booking;
+            const typeMap = { day_hike: 'Day Hike', overnight: 'Overnight', multi_day: 'Multi-Day' };
+            
+            const hikeDateTime = booking.start_time 
+                ? new Date(booking.hike_date + 'T' + booking.start_time).toLocaleString('en-PH', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })
+                : new Date(booking.hike_date).toLocaleDateString('en-PH', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  });
+            
+            const paymentBadgeClass = booking.payment_status === 'paid' ? 'badge-green' : 
+                                      (booking.payment_status === 'pending' ? 'badge-amber' : 'badge-gray');
+            
+            // Downpayment status badge
+            let downpaymentBadge = '';
+            if (booking.downpayment_status === 'paid') {
+                downpaymentBadge = '<span class="badge badge-green"><i class="fas fa-check-circle"></i> Paid</span>';
+            } else if (booking.downpayment_status === 'expired') {
+                downpaymentBadge = '<span class="badge badge-gray"><i class="fas fa-clock"></i> Expired</span>';
+            } else {
+                downpaymentBadge = '<span class="badge badge-amber"><i class="fas fa-hourglass-half"></i> Unpaid</span>';
+            }
+            
+            // Format deadline if exists
+            let deadlineHtml = '';
+            if (booking.downpayment_deadline) {
+                const deadlineDate = new Date(booking.downpayment_deadline).toLocaleString('en-PH', {
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+                deadlineHtml = `<div class="detail-item">
+                    <div class="detail-label">Downpayment Deadline</div>
+                    <div class="detail-val" style="color: #e67e22;">${deadlineDate}</div>
+                </div>`;
+            }
+            
+            // GCash details from actual booking data or fallback
+            const gcashNumber = booking.gcash_number || "0999 999 9999";
+            const gcashName = booking.gcash_name || "Your Guide";
+            
+            let actionButtons = '';
+            if (booking.status === 'pending') {
+                actionButtons = `
+                    <div style="display: flex; gap: 12px; margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="confirmBookingWithPayment(${booking.id}, '${booking.booking_number}')" style="flex: 1; background: var(--green);">
+                            <i class="fas fa-check-circle"></i> Confirm & Request Downpayment
+                        </button>
+                        <button class="btn btn-danger" onclick="showCancelModalFromDetails(${booking.id}, '${booking.booking_number}')" style="flex: 1;">
+                            <i class="fas fa-times-circle"></i> Cancel Booking
+                        </button>
+                    </div>
+                `;
+            } else if (booking.status === 'active') {
+                actionButtons = `
+                    <div style="margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="location.href='guide-communication.php?user_id=${booking.hiker_user_id}'" style="width: 100%;">
+                            <i class="fas fa-comment-dots"></i> Send Message to Hiker
+                        </button>
+                        <button class="btn btn-success" onclick="finishHike(${booking.id}, '${booking.booking_number}')" style="width: 100%; margin-top: 10px; background: #1E7B48;">
+                            <i class="fas fa-flag-checkered"></i> Mark Hike as Finished
+                        </button>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('bookingDetailsBody').innerHTML = `
+                <style>
+                    .hikers-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 0.7rem;
+                    }
+                    .hikers-table th {
+                        text-align: left;
+                        padding: 8px 6px;
+                        background: var(--stone);
+                        font-weight: 600;
+                        color: var(--ink-3);
+                        border-bottom: 1px solid var(--line);
+                    }
+                    .hikers-table td {
+                        padding: 8px 6px;
+                        border-bottom: 1px solid var(--line);
+                        color: var(--ink-2);
+                    }
+                </style>
+                <div class="detail-section">
+                    <div class="detail-section-title">Booking Information</div>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">Booking Number</div>
+                            <div class="detail-val"><strong>${escapeHtml(booking.booking_number)}</strong></div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Status</div>
+                            <div class="detail-val">
+                                <span class="badge ${booking.status === 'active' ? 'badge-green' : (booking.status === 'pending' ? 'badge-amber' : 'badge-gray')}">
+                                    ${booking.status === 'active' ? 'Confirmed' : (booking.status.charAt(0).toUpperCase() + booking.status.slice(1))}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Payment Status</div>
+                            <div class="detail-val"><span class="badge ${paymentBadgeClass}">${booking.payment_status ? booking.payment_status.charAt(0).toUpperCase() + booking.payment_status.slice(1) : 'Pending'}</span></div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Downpayment Status</div>
+                            <div class="detail-val">${downpaymentBadge}</div>
+                        </div>
+                        ${deadlineHtml}
+                        <div class="detail-item">
+                            <div class="detail-label">Hike Date & Time</div>
+                            <div class="detail-val">${hikeDateTime}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Hike Type</div>
+                            <div class="detail-val">${typeMap[booking.hike_type] || booking.hike_type}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Mountain</div>
+                            <div class="detail-val">${escapeHtml(booking.mountain_name)}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Number of Hikers</div>
+                            <div class="detail-val">${booking.number_of_hikers} person(s)</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Total Amount</div>
+                            <div class="detail-val">₱${parseFloat(booking.total_amount).toLocaleString()}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Downpayment Required</div>
+                            <div class="detail-val" style="color: var(--green); font-weight: 700;">₱${parseFloat(booking.downpayment_amount || (booking.total_amount * 0.2)).toLocaleString()}</div>
+                            <div class="detail-label" style="font-size: 0.6rem;">(20% of total)</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Remaining Balance</div>
+                            <div class="detail-val" style="color:var(--ink); font-weight:700;">₱${parseFloat(booking.total_amount - (booking.downpayment_amount || (booking.total_amount * 0.2))).toLocaleString()}</div>
+                        </div>
+                        ${booking.special_requests ? `
+                        <div class="detail-item span2">
+                            <div class="detail-label">Special Requests</div>
+                            <div class="detail-val">${escapeHtml(booking.special_requests)}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <div class="detail-section-title">Payment Instructions</div>
+                    <div style="background: #f0f7e8; padding: 16px; border-radius: 12px;">
+                        <div style="font-weight: 700; margin-bottom: 8px;">📱 GCash Payment Details</div>
+                        <div style="font-size: 0.8rem;">Number: <strong>${gcashNumber}</strong></div>
+                        <div style="font-size: 0.8rem;">Account Name: <strong>${gcashName}</strong></div>
+                        <div style="margin-top: 12px; font-size: 0.7rem; color: #666;">
+                            ⚠️ Hiker must pay downpayment within 5 hours after confirmation.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <div class="detail-section-title">Hiker Information</div>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">Name</div>
+                            <div class="detail-val"><strong>${escapeHtml(booking.hiker_name)}</strong></div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Email</div>
+                            <div class="detail-val">${escapeHtml(booking.hiker_email || 'Not provided')}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Phone</div>
+                            <div class="detail-val">${escapeHtml(booking.hiker_phone || 'Not provided')}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                ${booking.additional_hikers && booking.additional_hikers.length > 0 ? `
+                <div class="detail-section">
+                    <div class="detail-section-title">Additional Hikers (${booking.additional_hikers.length})</div>
+                    <div style="overflow-x:auto;">
+                        <table class="hikers-table">
+                            <thead>
+                                <tr><th>Name</th><th>Age</th><th>Emergency Contact</th><th>Emergency Phone</th></tr>
+                            </thead>
+                            <tbody>
+                                ${booking.additional_hikers.map(hiker => `
+                                <tr>
+                                    <td><strong>${escapeHtml(hiker.hiker_name)}</strong></td>
+                                    <td>${hiker.age || 'N/A'}</td>
+                                    <td>${escapeHtml(hiker.emergency_contact_name || 'N/A')}</td>
+                                    <td>${escapeHtml(hiker.emergency_contact_number || 'N/A')}</td>
+                                </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${actionButtons}
+            `;
+            openModal('bookingDetailsModal');
+        } else {
+            showToast(data.message || 'Could not load booking details');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('Error loading booking details');
+    });
 }
 
+// New function for confirming with payment instructions
+function confirmBookingWithPayment(bookingId, bookingNumber) {
+    if (confirm(`Confirm booking ${bookingNumber}? This will send payment instructions to the hiker.`)) {
+        showToast('Confirming booking and sending payment details...');
+        
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: new URLSearchParams({
+                action: 'confirm_booking',
+                booking_id: bookingId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`✓ Booking ${bookingNumber} confirmed! Payment instructions sent to hiker.`);
+                closeModal('bookingDetailsModal');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(data.message || 'Failed to confirm booking');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('Error confirming booking');
+        });
+    }
+}
+function confirmBooking(bookingId, bookingNumber) {
+    if (confirm(`Are you sure you want to confirm booking ${bookingNumber}? This will notify the hiker.`)) {
+        showToast('Confirming booking...');
+        
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: new URLSearchParams({
+                action: 'confirm_booking',
+                booking_id: bookingId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`✓ Booking ${bookingNumber} confirmed!`);
+                closeModal('bookingDetailsModal');
+                setTimeout(() => location.reload(), 1200);
+            } else {
+                showToast(data.message || 'Failed to confirm booking');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('Error confirming booking');
+        });
+    }
+}
 function showCancelModal(bookingId, bookingNumber) {
-  document.getElementById('cancelBookingId').value = bookingId;
-  document.getElementById('cancelBookingNumber').textContent = bookingNumber;
-  openModal('cancelModal');
+    document.getElementById('cancelBookingId').value = bookingId;
+    document.getElementById('cancelBookingNumber').textContent = bookingNumber;
+    document.getElementById('cancelReason').value = '';
+    openModal('cancelModal');
+}
+
+function showCancelModalFromDetails(bookingId, bookingNumber) {
+    closeModal('bookingDetailsModal');
+    showCancelModal(bookingId, bookingNumber);
 }
 
 function cancelBooking(event) {
-  event.preventDefault();
-  const bookingId = document.getElementById('cancelBookingId').value;
-  const reason = document.getElementById('cancelReason').value;
-  showToast('Cancelling...');
-  fetch(window.location.href, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ action: 'cancel_booking', booking_id: bookingId, cancel_reason: reason })
-  }).then(r => r.json()).then(data => {
-    showToast(data.message);
-    if (data.success) setTimeout(() => location.reload(), 1200);
-  }).catch(() => showToast('Error'));
-  closeModal('cancelModal');
+    event.preventDefault();
+    const bookingId = document.getElementById('cancelBookingId').value;
+    const bookingNumber = document.getElementById('cancelBookingNumber').textContent;
+    const cancelReason = document.getElementById('cancelReason').value;
+    
+    if (!cancelReason.trim()) {
+        showToast('Please provide a reason for cancellation');
+        return;
+    }
+    
+    showToast('Cancelling booking...');
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: new URLSearchParams({
+            action: 'cancel_booking',
+            booking_id: bookingId,
+            cancel_reason: cancelReason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`✗ Booking ${bookingNumber} cancelled`);
+            closeModal('cancelModal');
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            showToast(data.message || 'Failed to cancel booking');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('Error cancelling booking');
+    });
 }
 
 function requestPayment(bookingId, bookingNumber, totalAmount, downpayment) {
@@ -959,6 +1751,22 @@ function showToast(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
+function switchMobileTab(tab, btn) {
+  const layout = document.querySelector('.bookings-layout');
+  const buttons = document.querySelectorAll('.mobile-tab-btn');
+  
+  buttons.forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  
+  if (tab === 'bookings') {
+    layout.classList.remove('show-ratings');
+    layout.classList.add('show-bookings');
+  } else {
+    layout.classList.remove('show-bookings');
+    layout.classList.add('show-ratings');
+  }
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str).replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
@@ -972,6 +1780,37 @@ document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('cli
 
 const viewBookingId = new URLSearchParams(location.search).get('view_booking');
 if (viewBookingId) setTimeout(() => viewBookingDetails(viewBookingId, ''), 500);
+
+function finishHike(bookingId, bookingNumber) {
+    if (confirm(`Mark booking ${bookingNumber} as FINISHED?\n\nGuide will become available for other bookings.`)) {
+        showToast('Completing hike...');
+        
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: new URLSearchParams({
+                action: 'finish_hike',
+                booking_id: bookingId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('✓ Hike completed! Guide is now available.');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(data.message || 'Failed to finish hike');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('Error finishing hike');
+        });
+    }
+}
 </script>
 
 <?php

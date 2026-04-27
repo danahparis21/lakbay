@@ -29,6 +29,68 @@ $userInitial = substr($userInitial, 0, 2);
 
 $preselectedGuide = isset($_GET['guide']) ? intval($_GET['guide']) : null;
 $preselectedGuideName = isset($_GET['guide_name']) ? $_GET['guide_name'] : null;
+
+function submitPaymentProof($pdo, $hikerId) {
+    $bookingNumber = $_POST['booking_number'] ?? '';
+    $messageId = $_POST['message_id'] ?? 0;
+    $referenceNumber = $_POST['reference_number'] ?? '';
+    $proofImageUrl = $_POST['proof_image_url'] ?? '';
+    
+    if (!$bookingNumber || !$referenceNumber || !$proofImageUrl) {
+        echo json_encode(['success' => false, 'message' => 'Missing required fields']);
+        return;
+    }
+    
+    // Get booking details
+    $stmt = $pdo->prepare("SELECT id, guide_id, user_id FROM bookings WHERE booking_number = ?");
+    $stmt->execute([$bookingNumber]);
+    $booking = $stmt->fetch();
+    
+    if (!$booking || $booking['user_id'] != $hikerId) {
+        echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+        return;
+    }
+    
+    // Get guide's user_id
+    $stmt = $pdo->prepare("SELECT user_id FROM guides WHERE id = ?");
+    $stmt->execute([$booking['guide_id']]);
+    $guide = $stmt->fetch();
+    $guideUserId = $guide['user_id'];
+    
+    // Update booking downpayment status
+    $stmt = $pdo->prepare("UPDATE bookings SET downpayment_status = 'pending_approval' WHERE id = ?");
+    $stmt->execute([$booking['id']]);
+    
+    // Update the action_data in the original message
+    $stmt = $pdo->prepare("SELECT action_data FROM messages WHERE id = ?");
+    $stmt->execute([$messageId]);
+    $msg = $stmt->fetch();
+    if ($msg) {
+        $ad = json_decode($msg['action_data'], true) ?: [];
+        $ad['payment_status'] = 'pending_approval';
+        $ad['payment_reference'] = $referenceNumber;
+        $ad['proof_image_url'] = $proofImageUrl;
+        $stmt = $pdo->prepare("UPDATE messages SET action_data = ? WHERE id = ?");
+        $stmt->execute([json_encode($ad), $messageId]);
+    }
+    
+    // Send message to guide with proof
+    $proofMessage = "💵 **PAYMENT PROOF SUBMITTED**\n\n";
+    $proofMessage .= "Hiker has paid the downpayment for booking #{$bookingNumber}.\n\n";
+    $proofMessage .= "📝 Reference Number: {$referenceNumber}\n";
+    $proofMessage .= "🖼️ Proof: {$proofImageUrl}\n\n";
+    $proofMessage .= "Please verify and confirm the payment.";
+    
+    date_default_timezone_set('Asia/Manila');
+    $stmt = $pdo->prepare("
+        INSERT INTO messages (sender_id, receiver_id, body, sender_role, receiver_role, created_at)
+        VALUES (?, ?, AES_ENCRYPT(?, ?), 'hiker', 'guide', NOW())
+    ");
+    $stmt->execute([$hikerId, $guideUserId, $proofMessage, MSG_AES_KEY]);
+    
+    echo json_encode(['success' => true, 'message' => 'Payment proof submitted. Guide will verify.']);
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -262,6 +324,120 @@ $preselectedGuideName = isset($_GET['guide_name']) ? $_GET['guide_name'] : null;
 .system-announcement-title { font-weight:700; color:var(--forest); font-size:11px; text-transform:uppercase; letter-spacing:.6px; }
 .system-announcement-time { font-size:10px; color:var(--stone); font-family:'DM Mono',monospace; }
 .system-announcement-body { color:var(--forest); line-height:1.6; font-size:13px; }
+
+/* Payment Instructions Card Styles */
+.payment-instructions-card {
+    width: 360px;
+    max-width: 100%;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    background: white;
+}
+
+.payment-status-badge {
+    background: rgba(255,255,255,0.2);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.payment-detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.payment-label {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.payment-value.amount {
+    font-size: 16px;
+    font-weight: 700;
+    color: #2563eb;
+}
+
+.payment-value {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.gcash-details {
+    background: #f0f9ff;
+    border-radius: 12px;
+    padding: 12px;
+    margin: 12px 0;
+}
+
+.gcash-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    padding: 4px 0;
+}
+
+.qr-toggle-btn {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.qr-code-preview {
+    margin-top: 12px;
+}
+
+.qr-code-preview img {
+    max-width: 120px;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    cursor: pointer;
+}
+
+.payment-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.btn-payment.primary {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    border: none;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+}
+
+.btn-payment.secondary {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid #e5e7eb;
+    background: #f3f4f6;
+    cursor: pointer;
+}
+
+/* Proof of Payment Modal */
+#proofModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+#proofModal.open { display: flex; }
+
 </style>
 </head>
 <body>
@@ -313,6 +489,38 @@ $preselectedGuideName = isset($_GET['guide_name']) ? $_GET['guide_name'] : null;
       </div>
     </div>
   </div>
+</div>
+
+<!-- Proof of Payment Modal -->
+<div id="proofModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:white; border-radius:16px; width:90%; max-width:450px; max-height:80vh; overflow-y:auto; margin:20px;">
+        <div style="padding:20px 24px 16px; border-bottom:1px solid #eaeef2;">
+            <h3 style="font-family:'Playfair Display',serif; font-size:18px; margin:0;">💸 Confirm Payment</h3>
+            <p style="font-size:12px; color:#8A99AE; margin:4px 0 0;">Booking #<span id="proofBookingNumber"></span></p>
+        </div>
+        <div style="padding:24px;">
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:#1E2F3D;">REFERENCE NUMBER</label>
+                <input type="text" id="refNumber" class="inp" placeholder="e.g. GCash Ref #1234567890" style="width:100%; padding:12px; border:1.5px solid #E2E8F0; border-radius:12px;">
+            </div>
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:#1E2F3D;">PROOF OF PAYMENT (Screenshot)</label>
+                <div style="border:2px dashed #E2E8F0; border-radius:12px; padding:20px; text-align:center; cursor:pointer;" onclick="document.getElementById('proofFile').click()">
+                    <i class="fas fa-cloud-upload-alt" style="font-size:32px; color:#8A99AE;"></i>
+                    <p style="font-size:12px; color:#8A99AE; margin-top:8px;">Click to upload screenshot</p>
+                    <p style="font-size:10px; color:#B0BAC8;">PNG, JPG up to 5MB</p>
+                </div>
+                <input type="file" id="proofFile" accept="image/*" style="display:none;" onchange="previewProofImage(this)">
+                <div id="imagePreview" style="margin-top:12px; display:none;">
+                    <img id="previewImg" style="max-width:100%; border-radius:12px; border:1px solid #E2E8F0;">
+                </div>
+            </div>
+        </div>
+        <div style="padding:16px 24px 24px; display:flex; gap:12px; border-top:1px solid #eaeef2;">
+            <button class="btn btn-outline" style="flex:1;" onclick="closeProofModal()">Cancel</button>
+            <button class="btn btn-primary" style="flex:1; background:#2563eb;" onclick="submitProofOfPayment()">Submit Payment Proof</button>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
@@ -471,13 +679,179 @@ function renderMessages(messages) {
             lastDate = dateStr;
         }
 
-        // Check for booking confirmation messages (with action_data)
+        // 0. CHECK FOR PAYMENT PROOF SUBMITTED MESSAGE FIRST (regular text message, not action_data)
+        if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
+            const bodyText = msg.body || '';
+            const refMatch = bodyText.match(/Reference Number:\s*([^\n]+)/);
+            const referenceNumber = refMatch ? refMatch[1] : 'N/A';
+            const imgMatch = bodyText.match(/Proof:\s*(\S+\.(jpg|jpeg|png))/i);
+            const proofImageUrl = imgMatch ? imgMatch[1] : null;
+            const bookingMatch = bodyText.match(/booking #([^\s]+)/);
+            const bookingNumber = bookingMatch ? bookingMatch[1] : 'N/A';
+            const isGuide = String(msg.receiver_id) === String(CURRENT_USER_ID);
+            
+            let actionButtons = '';
+            if (isGuide && !isMine) {
+                actionButtons = `
+                    <div class="payment-actions" style="display:flex;gap:10px;margin-top:16px;">
+                        <button class="btn-payment primary" onclick="verifyAndConfirmPayment('${esc(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:none;background:#059669;color:white;cursor:pointer;">
+                            <i class="fas fa-check-circle"></i> Verify & Confirm Payment
+                        </button>
+                        <button class="btn-payment secondary" onclick="rejectPaymentProof('${esc(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid #e5e7eb;background:#f3f4f6;cursor:pointer;">
+                            <i class="fas fa-times-circle"></i> Reject
+                        </button>
+                    </div>
+                `;
+            }
+            
+            let statusText = 'PENDING VERIFICATION';
+            if (!isGuide && !isMine) {
+                statusText = '⏳ AWAITING GUIDE VERIFICATION';
+            } else if (isGuide && !isMine) {
+                statusText = 'ACTION REQUIRED';
+            }
+            
+            const card = `
+                <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
+                    <div class="msg-card-hdr" style="background:linear-gradient(135deg, #059669 0%, #047857 100%);padding:12px 16px;display:flex;align-items:center;gap:10px;color:white;">
+                        <span class="msg-card-icon" style="font-size:20px;">💵</span>
+                        <div class="msg-card-hdr-label" style="flex:1;">
+                            <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">PAYMENT PROOF SUBMITTED</div>
+                            <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${esc(bookingNumber)}</div>
+                        </div>
+                        <span class="payment-status-badge" style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">${statusText}</span>
+                    </div>
+                    <div class="msg-card-body" style="padding:16px;">
+                        <div class="payment-detail-row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                            <span class="payment-label" style="font-size:12px;color:#6b7280;">📝 Reference Number</span>
+                            <span class="payment-value" style="font-size:13px;font-weight:700;color:#1f2937;">${esc(referenceNumber)}</span>
+                        </div>
+                        <div class="gcash-details" style="background:#f0fdf4;border-radius:12px;padding:12px;margin:12px 0;">
+                            <div class="gcash-row" style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;">
+                                <i class="fas fa-receipt" style="color:#059669;width:20px;"></i>
+                                <span><strong>Payment Proof:</strong></span>
+                            </div>
+                            ${proofImageUrl ? `
+                                <div class="proof-image-preview" style="margin-top:8px;text-align:center;">
+                                    <img src="${esc(proofImageUrl)}" alt="Payment Proof" style="max-width:100%;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('${esc(proofImageUrl)}', '_blank')">
+                                    <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
+                                </div>
+                            ` : '<div style="font-size:12px;color:#6b7280;">No image uploaded</div>'}
+                        </div>
+                        ${actionButtons}
+                        ${!isGuide && !isMine ? `
+                        <div class="info-note" style="background:#fef3c7;border-radius:8px;padding:10px;margin-top:12px;text-align:center;">
+                            <span style="font-size:11px;color:#d97706;">⏳ Your payment proof is being reviewed by the guide. You'll be notified once verified.</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
+            
+            if (isMine) {
+                html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+            } else {
+                html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+            }
+            return;
+        }
+
+        // Check for action_data messages (payment instructions, booking requests, join requests)
         if (msg.action_data && msg.action_data !== 'null' && msg.action_data !== '') {
             try {
                 const ad = typeof msg.action_data === 'string' ? JSON.parse(msg.action_data) : msg.action_data;
 
+                // 1. PAYMENT INSTRUCTIONS CARD (GCash details)
+                if (ad.type === 'payment_instructions') {
+                    const downpayment = ad.downpayment_amount || '₱0.00';
+                    const gcashNumber = ad.gcash_number || 'Not set';
+                    const gcashName = ad.gcash_name || 'Not set';
+                    const bookingNumber = ad.booking_number || 'N/A';
+                    const totalAmount = ad.total_amount || 'N/A';
+                    const remaining = parseFloat(totalAmount) - parseFloat(downpayment);
+                    const qrCodeUrl = ad.qr_code_url || '../assets/images/gcash-qr.jpg';
+                    
+                    let deadlineHtml = '';
+                    if (ad.deadline) {
+                        const deadlineDate = new Date(ad.deadline).toLocaleString();
+                        deadlineHtml = `<div class="payment-detail-row">
+                            <span class="payment-label">⏰ Pay before</span>
+                            <span class="payment-value" style="color:#dc2626;">${deadlineDate}</span>
+                        </div>`;
+                    }
+                    
+                    let statusText = 'AWAITING PAYMENT';
+                    let buttonHtml = `
+                        <button class="btn-payment primary" onclick="markPaymentAsSent('${esc(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:none;background:#2563eb;color:white;cursor:pointer;">
+                            <i class="fas fa-check-circle"></i> I've Paid
+                        </button>
+                    `;
+
+                    if (ad.payment_status === 'paid') {
+                        statusText = '✓ PAYMENT CONFIRMED';
+                        buttonHtml = `<div style="background:#d1fae5; color:#059669; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:700;">
+                            <i class="fas fa-check-circle"></i> Payment Confirmed by Guide
+                        </div>`;
+                    } else if (ad.payment_status === 'pending_approval') {
+                        statusText = '⏳ AWAITING APPROVAL';
+                        buttonHtml = `<div style="background:#fef3c7; color:#d97706; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:700;">
+                            <i class="fas fa-hourglass-half"></i> Waiting for Guide to Verify
+                        </div>`;
+                    } else if (ad.payment_status === 'expired') {
+                        statusText = '⏰ EXPIRED';
+                        buttonHtml = `<div style="background:#fee2e2; color:#dc2626; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:700;">
+                            <i class="fas fa-times-circle"></i> Payment Deadline Passed
+                        </div>`;
+                    }
+                    
+                    const uniqueQrId = 'qr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+                    
+                    const card = `
+                        <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
+                            <div class="msg-card-hdr" style="background:linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);padding:12px 16px;display:flex;align-items:center;gap:10px;color:white;">
+                                <span class="msg-card-icon" style="font-size:20px;">💰</span>
+                                <div class="msg-card-hdr-label" style="flex:1;">
+                                    <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">PAYMENT INSTRUCTIONS</div>
+                                    <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${esc(bookingNumber)}</div>
+                                </div>
+                                <span class="payment-status-badge" style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">${statusText}</span>
+                            </div>
+                            <div class="msg-card-body" style="padding:16px;">
+                                <div class="payment-detail-row"><span class="payment-label">Total Amount</span><span class="payment-value amount">₱${esc(totalAmount)}</span></div>
+                                <div class="payment-detail-row"><span class="payment-label">Downpayment Required</span><span class="payment-value amount" style="color:#059669;">₱${esc(downpayment)}</span></div>
+                                <div class="payment-detail-row"><span class="payment-label">Remaining Balance</span><span class="payment-value">₱${esc(remaining)}</span></div>
+                                ${deadlineHtml}
+                                <div class="gcash-details">
+                                    <div class="gcash-row"><i class="fas fa-mobile-alt"></i><span><strong>GCash Number:</strong> ${esc(gcashNumber)}</span><button onclick="copyGCashNumber('${esc(gcashNumber)}')" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#2563eb;"><i class="fas fa-copy"></i></button></div>
+                                    <div class="gcash-row"><i class="fas fa-user"></i><span><strong>Account Name:</strong> ${esc(gcashName)}</span></div>
+                                </div>
+                                <div class="qr-code-section">
+                                    <button class="qr-toggle-btn" onclick="toggleQRCode('${uniqueQrId}')"><i class="fas fa-qrcode"></i> Show/Hide QR Code</button>
+                                    <div id="${uniqueQrId}" class="qr-code-preview" style="display:none;margin-top:12px;">
+                                        <img src="${esc(qrCodeUrl)}" alt="GCash QR Code" style="max-width:120px;border-radius:12px;cursor:pointer;" onclick="window.open('${esc(qrCodeUrl)}', '_blank')">
+                                        <small>Click to enlarge</small>
+                                    </div>
+                                </div>
+                                <div class="payment-actions">
+                                    <button class="btn-payment secondary" onclick="copyGCashNumber('${esc(gcashNumber)}')">Copy Number</button>
+                                    ${buttonHtml}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
+                    
+                    if (isMine) {
+                        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+                    } else {
+                        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+                    }
+                    return;
+                }
+
+
+                // 2. BOOKING REQUEST CARD
                 if (ad.type === 'booking_request') {
-                    const isGuide = String(msg.receiver_id) === String(CURRENT_USER_ID); // Guide receives the request
+                    const isGuide = String(msg.receiver_id) === String(CURRENT_USER_ID);
                     const status = ad.status || 'pending';
                     const handled = status === 'approved' || status === 'denied';
 
@@ -508,7 +882,7 @@ function renderMessages(messages) {
                                 <div class="msg-card-title">${esc(ad.hiker_name)}</div>
                                 <div class="msg-card-desc">${isGuide ? 'wants to book a hike with you.' : 'Your booking request has been sent to the guide.'}</div>
                                 <div class="msg-card-detail"><i class="fas fa-mountain"></i> Mountain: ${esc(ad.mountain_name)}</div>
-                                <div class="msg-card-detail"><i class="fas fa-calendar"></i> Date: ${esc(ad.booking_date)}</div>
+                                <div class="msg-card-detail"><i class="fas fa-calendar"></i> Date: ${esc(ad.booking_date)} ${ad.booking_time ? 'at ' + esc(ad.booking_time) : ''}</div>
                                 <div class="msg-card-detail"><i class="fas fa-users"></i> Hikers: ${ad.pax} person(s)</div>
                                 <div class="msg-card-detail"><i class="fas fa-tag"></i> Booking ID: ${esc(ad.booking_number)}</div>
                                 ${actionsHtml}
@@ -517,15 +891,14 @@ function renderMessages(messages) {
                         <div class="msg-time" style="margin-top: 4px;">${timeStr}</div>`;
 
                     if (isGuide) {
-                        // Guide receives the request - on LEFT side
                         html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
                     } else {
-                        // Hiker sent the request - on RIGHT side (mine)
                         html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
                     }
                     return;
                 }
 
+                // 3. JOIN REQUEST CARD
                 if (ad.type === 'join_request') {
                     const isOwner = String(msg.receiver_id) === String(CURRENT_USER_ID);
                     const status = ad.status || 'pending';
@@ -631,35 +1004,33 @@ function renderMessages(messages) {
             }
             return;
         }
-// Check for nudge messages
-if (msg.source_type === 'nudge') {
-    const isMine = String(msg.sender_id) === String(CURRENT_USER_ID);
-    
-    // Use the original friendly reminder message
-    const reminderMessage = "Hi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋";
-    
-    const card = `
-        <div class="msg-card booking-update">
-            <div class="msg-card-hdr">
-                <span class="msg-card-icon">🔔</span>
-                <div class="msg-card-hdr-label">
-                    <div class="msg-card-hdr-title">Reminder</div>
-                    <div class="msg-card-hdr-sub">Friendly Reminder</div>
+
+        // Check for nudge messages
+        if (msg.source_type === 'nudge') {
+            const reminderMessage = "Hi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋";
+            
+            const card = `
+                <div class="msg-card booking-update">
+                    <div class="msg-card-hdr">
+                        <span class="msg-card-icon">🔔</span>
+                        <div class="msg-card-hdr-label">
+                            <div class="msg-card-hdr-title">Reminder</div>
+                            <div class="msg-card-hdr-sub">Friendly Reminder</div>
+                        </div>
+                    </div>
+                    <div class="msg-card-body">
+                        <div class="msg-card-desc">${esc(reminderMessage)}</div>
+                    </div>
                 </div>
-            </div>
-            <div class="msg-card-body">
-                <div class="msg-card-desc">${esc(reminderMessage)}</div>
-            </div>
-        </div>
-        <div class="msg-time" style="margin-top: 4px;">${timeStr}</div>`;
-    
-    if (isMine) {
-        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
-    } else {
-        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
-    }
-    return;
-}
+                <div class="msg-time" style="margin-top: 4px;">${timeStr}</div>`;
+            
+            if (isMine) {
+                html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+            } else {
+                html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+            }
+            return;
+        }
 
         // Check if this is a system announcement 
         const isSystemAnnouncement = (msg.is_system_announcement == 1) || 
@@ -733,6 +1104,26 @@ if (msg.source_type === 'nudge') {
     area.innerHTML = html;
     area.scrollTop = area.scrollHeight;
 }
+
+
+
+// Helper functions for payment actions
+function copyGCashNumber(number) {
+    navigator.clipboard.writeText(number).then(() => {
+        showToast('✅ GCash number copied!');
+    }).catch(() => {
+        showToast('Could not copy number');
+    });
+}
+
+function toggleQRCode(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.display = element.style.display === 'none' || element.style.display === '' ? 'block' : 'none';
+    }
+}
+
+
 
 // Add this function to handle booking request responses
 function handleBookingRequest(messageId, action, bookingId, hikerName, hikerUserId) {
@@ -971,6 +1362,104 @@ function showToast(msg) {
     t.style.opacity = '1';
     setTimeout(() => t.style.opacity = '0', 3000);
 }
+
+let currentPaymentBookingNumber = null;
+let currentPaymentMessageId = null;
+let currentPaymentActionData = null;
+
+function markPaymentAsSent(bookingNumber, messageId) {
+    // Store for use in modal
+    currentPaymentBookingNumber = bookingNumber;
+    currentPaymentMessageId = messageId;
+    
+    // Open modal
+    document.getElementById('proofBookingNumber').textContent = bookingNumber;
+    document.getElementById('refNumber').value = '';
+    document.getElementById('proofFile').value = '';
+    document.getElementById('imagePreview').style.display = 'none';
+    document.getElementById('previewImg').src = '';
+    document.getElementById('proofModal').classList.add('open');
+    document.getElementById('proofModal').style.display = 'flex';
+}
+
+function closeProofModal() {
+    document.getElementById('proofModal').classList.remove('open');
+    document.getElementById('proofModal').style.display = 'none';
+}
+
+function previewProofImage(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('previewImg').src = e.target.result;
+            document.getElementById('imagePreview').style.display = 'block';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+async function submitProofOfPayment() {
+    const refNumber = document.getElementById('refNumber').value.trim();
+    const fileInput = document.getElementById('proofFile');
+    const file = fileInput.files[0];
+    
+    if (!refNumber) {
+        showToast('❌ Please enter the reference number');
+        return;
+    }
+    if (!file) {
+        showToast('❌ Please upload a proof of payment screenshot');
+        return;
+    }
+    
+    showToast('📤 Submitting payment proof...');
+    
+    // Upload file first
+    const formData = new FormData();
+    formData.append('proof_image', file);
+    formData.append('booking_number', currentPaymentBookingNumber);
+    
+    try {
+        const uploadRes = await fetch('../api/upload_proof.php', {
+            method: 'POST',
+            body: formData
+        });
+        const uploadData = await uploadRes.json();
+        
+        if (!uploadData.success) {
+            showToast('❌ Failed to upload image: ' + (uploadData.message || 'Unknown error'));
+            return;
+        }
+        
+        const imageUrl = uploadData.image_url;
+        
+        // Submit payment proof data
+        const fd = new FormData();
+        fd.append('action', 'submit_payment_proof');
+        fd.append('booking_number', currentPaymentBookingNumber);
+        fd.append('message_id', currentPaymentMessageId);
+        fd.append('reference_number', refNumber);
+        fd.append('proof_image_url', imageUrl);
+        
+        const res = await fetch('../api/hiker_messages.php', { method: 'POST', body: fd });
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('✅ Payment proof submitted! Guide will verify and confirm.');
+            closeProofModal();
+            // Reload messages to show updated status
+            if (activeThread) loadMessages(activeThread);
+        } else {
+            showToast('❌ Error: ' + (data.message || 'Unknown error'));
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('❌ Network error. Please try again.');
+    }
+}
+
+
+
 </script>
 </body>
 </html>

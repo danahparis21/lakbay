@@ -41,7 +41,8 @@ try {
         case 'deny_join_request':       denyJoinRequest($pdo, $hikerId);        
         case 'send_booking_request':    sendBookingRequest($pdo, $hikerId);    break;  
         case 'approve_booking_request':    approveBookingRequest($pdo, $hikerId);    break;
-case 'deny_booking_request':       denyBookingRequest($pdo, $hikerId);       break;       break;
+case 'deny_booking_request':       denyBookingRequest($pdo, $hikerId);       break;
+case 'submit_payment_proof': submitPaymentProof($pdo, $hikerId); break;
         default: echo json_encode(['success' => false, 'message' => 'Invalid action: ' . $action]);
     }
 } catch (Exception $e) {
@@ -565,5 +566,66 @@ function denyJoinRequest($pdo, $hikerId) {
     $stmt->execute([$hikerId, $requesterUserId, $body, MSG_AES_KEY]);
 
     echo json_encode(['success'=>true,'message'=>'Join request denied.']);
+}
+
+function submitPaymentProof($pdo, $hikerId) {
+    $bookingNumber = $_POST['booking_number'] ?? '';
+    $messageId = $_POST['message_id'] ?? 0;
+    $referenceNumber = $_POST['reference_number'] ?? '';
+    $proofImageUrl = $_POST['proof_image_url'] ?? '';
+    
+    if (!$bookingNumber || !$referenceNumber || !$proofImageUrl) {
+        echo json_encode(['success' => false, 'message' => 'Missing required fields']);
+        return;
+    }
+    
+    // Get booking details
+    $stmt = $pdo->prepare("SELECT id, guide_id, user_id FROM bookings WHERE booking_number = ?");
+    $stmt->execute([$bookingNumber]);
+    $booking = $stmt->fetch();
+    
+    if (!$booking || $booking['user_id'] != $hikerId) {
+        echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+        return;
+    }
+    
+    // Get guide's user_id
+    $stmt = $pdo->prepare("SELECT user_id FROM guides WHERE id = ?");
+    $stmt->execute([$booking['guide_id']]);
+    $guide = $stmt->fetch();
+    $guideUserId = $guide['user_id'];
+    
+    // Update booking downpayment status
+    $stmt = $pdo->prepare("UPDATE bookings SET downpayment_status = 'pending_approval' WHERE id = ?");
+    $stmt->execute([$booking['id']]);
+    
+    // Update the action_data in the original message
+    $stmt = $pdo->prepare("SELECT action_data FROM messages WHERE id = ?");
+    $stmt->execute([$messageId]);
+    $msg = $stmt->fetch();
+    if ($msg) {
+        $ad = json_decode($msg['action_data'], true) ?: [];
+        $ad['payment_status'] = 'pending_approval';
+        $ad['payment_reference'] = $referenceNumber;
+        $ad['proof_image_url'] = $proofImageUrl;
+        $stmt = $pdo->prepare("UPDATE messages SET action_data = ? WHERE id = ?");
+        $stmt->execute([json_encode($ad), $messageId]);
+    }
+    
+    // Send message to guide with proof
+    $proofMessage = "💵 **PAYMENT PROOF SUBMITTED**\n\n";
+    $proofMessage .= "Hiker has paid the downpayment for booking #{$bookingNumber}.\n\n";
+    $proofMessage .= "📝 Reference Number: {$referenceNumber}\n";
+    $proofMessage .= "🖼️ Proof: {$proofImageUrl}\n\n";
+    $proofMessage .= "Please verify and confirm the payment.";
+    
+    date_default_timezone_set('Asia/Manila');
+    $stmt = $pdo->prepare("
+        INSERT INTO messages (sender_id, receiver_id, body, sender_role, receiver_role, created_at)
+        VALUES (?, ?, AES_ENCRYPT(?, ?), 'hiker', 'guide', NOW())
+    ");
+    $stmt->execute([$hikerId, $guideUserId, $proofMessage, MSG_AES_KEY]);
+    
+    echo json_encode(['success' => true, 'message' => 'Payment proof submitted. Guide will verify.']);
 }
 ?>

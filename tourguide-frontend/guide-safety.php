@@ -634,12 +634,19 @@ try {
       <ul><li><a href="guide-profile.php"><i class="fas fa-circle-user"></i> My Profile</a></li></ul>
     </nav>
     <div class="sidebar-profile">
-      <div class="sidebar-avatar"><?= htmlspecialchars($guideInitials) ?></div>
-      <div class="sidebar-profile-info">
-        <div class="sidebar-profile-name"><?= htmlspecialchars($guideName) ?></div>
-        <div class="sidebar-profile-role">Trail Guide</div>
-      </div>
-    </div>
+  <?php if (!empty($guide_data['avatar'])): ?>
+    <img src="../<?= htmlspecialchars($guide_data['avatar']) ?>" class="sidebar-avatar" style="object-fit:cover;" alt="avatar">
+  <?php else: ?>
+    <div class="sidebar-avatar"><?= $initials ?></div>
+  <?php endif; ?>
+  <div class="sidebar-profile-info">
+    <div class="sidebar-profile-name"><?= htmlspecialchars($guide_data['name']) ?></div>
+    <div class="sidebar-profile-role"><?= htmlspecialchars($guide_data['specialization'] ?? 'Trail Guide') ?></div>
+  </div>
+  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+    <i class="fas fa-sign-out-alt"></i>
+  </a>
+</div>
   </aside>
   <?php endif; ?>
 

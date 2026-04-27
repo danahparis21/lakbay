@@ -42,10 +42,9 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$guide_id]);
 $stats = $stmt->fetch(PDO::FETCH_ASSOC);
-
 // ── 3. Upcoming confirmed bookings for this guide ──────────────────────────
 $stmt = $pdo->prepare("
-    SELECT b.id, b.booking_number, b.hike_date, b.hike_type,
+    SELECT b.id, b.booking_number, b.hike_date, b.start_time, b.hike_type,
            b.number_of_hikers, b.status, b.user_id as hiker_user_id,
            u.name AS hiker_name,
            m.name AS mountain_name, m.image AS mountain_image,
@@ -63,7 +62,7 @@ $stmt->execute([$guide_id]);
 $upcoming_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->prepare("
-    SELECT b.id, b.booking_number, b.hike_date, b.hike_type,
+    SELECT b.id, b.booking_number, b.hike_date, b.start_time, b.hike_type,
            b.number_of_hikers, b.status, b.user_id as hiker_user_id,
            u.name AS hiker_name,
            m.name AS mountain_name, m.image AS mountain_image,
@@ -77,6 +76,16 @@ $stmt = $pdo->prepare("
 $stmt->execute([$guide_id]);
 $all_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $all_bookings_json = json_encode($all_bookings);
+
+
+// Get active bookings for overlap detection
+$stmt = $pdo->prepare("
+    SELECT hike_date, id 
+    FROM bookings 
+    WHERE guide_id = ? AND status = 'active'
+");
+$stmt->execute([$guide_id]);
+$active_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // ── 4. All bookings (for calendar & overlap detection) ─────────
 $stmt = $pdo->prepare("
@@ -120,6 +129,52 @@ foreach ($pending_bookings as &$pb) {
 }
 unset($pb);
 
+// ── 5.5 Add overlap detection for pending bookings ───────────────────────────────
+$stmt = $pdo->prepare("
+    SELECT b.id, b.booking_number, b.hike_date, b.start_time, b.number_of_hikers, b.status, b.user_id as hiker_user_id,
+           u.name AS hiker_name,
+           m.name AS mountain_name, m.image AS mountain_image
+    FROM bookings b
+    JOIN users u ON u.id = b.user_id
+    JOIN mountains m ON m.id = b.mountain_id
+    WHERE b.guide_id = ?
+      AND b.status = 'pending'
+      AND b.hike_date >= CURDATE()
+    ORDER BY b.hike_date ASC
+");
+$stmt->execute([$guide_id]);
+$pending_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Get all active bookings for overlap detection
+$stmt = $pdo->prepare("
+    SELECT hike_date, start_time, id 
+    FROM bookings 
+    WHERE guide_id = ? AND status = 'active'
+");
+$stmt->execute([$guide_id]);
+$active_bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Tag each pending booking with overlap info
+foreach ($pending_bookings as &$pb) {
+    $pb['overlaps'] = false;
+    $pb['similar_schedule'] = [];
+    
+    foreach ($active_bookings as $ab) {
+        if ($pb['hike_date'] === $ab['hike_date']) {
+            $pb['overlaps'] = true;
+            // Check if start times are similar (within 2 hours)
+            if ($pb['start_time'] && $ab['start_time']) {
+                $pb_time = strtotime($pb['start_time']);
+                $ab_time = strtotime($ab['start_time']);
+                if (abs($pb_time - $ab_time) <= 7200) { // 2 hours difference
+                    $pb['similar_schedule'][] = $ab['id'];
+                }
+            }
+        }
+    }
+}
+unset($pb);
+
 // ── 6. Admin broadcasts for guides ────────────────────────────────────────
 $stmt = $pdo->prepare("
     SELECT b.id, b.message, b.created_at,
@@ -137,7 +192,7 @@ $stmt = $pdo->prepare("
 $stmt->execute([$user_id]);
 $broadcasts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// ── 7. Assigned mountains for this guide ──────────────────────────────────
+// ── 7. Assigned mountains for this guide (MOVED UP for stats card) ──────────────────────────────────
 $stmt = $pdo->prepare("
     SELECT m.id, m.name, m.image, m.location, m.difficulty, m.elevation
     FROM guide_mountains gm
@@ -397,18 +452,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $booking_id = $_POST['booking_id'] ?? 0;
         
         $stmt = $pdo->prepare("
-            SELECT 
-                b.id, b.booking_number, b.mountain_id, b.guide_id,
-                b.hike_date, b.hike_type, b.status, b.number_of_hikers,
-                b.total_amount, b.downpayment_amount, b.payment_status, b.special_requests,
-                b.user_id as hiker_user_id,
-                m.name as mountain_name,
-                u.name as hiker_name, u.email as hiker_email, u.phone as hiker_phone
-            FROM bookings b
-            JOIN mountains m ON b.mountain_id = m.id
-            JOIN users u ON b.user_id = u.id
-            WHERE b.id = ? AND b.guide_id = ?
-        ");
+    SELECT 
+        b.id, b.booking_number, b.mountain_id, b.guide_id,
+        b.hike_date, b.start_time, b.hike_type, b.status, b.number_of_hikers,
+        b.total_amount, b.downpayment_amount, b.payment_status, b.special_requests,
+        b.user_id as hiker_user_id,
+        m.name as mountain_name,
+        u.name as hiker_name, u.email as hiker_email, u.phone as hiker_phone
+    FROM bookings b
+    JOIN mountains m ON b.mountain_id = m.id
+    JOIN users u ON b.user_id = u.id
+    WHERE b.id = ? AND b.guide_id = ?
+");
         $stmt->execute([$booking_id, $guide_id]);
         $booking = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -581,19 +636,20 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     .cal-day-label { text-align: center; font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-5); padding: 4px 0; }
     .cal-day { text-align: center; font-size: 0.9rem; padding: 12px 2px; border-radius: 8px; cursor: pointer; color: var(--ink-3); transition: all 0.12s; position: relative; }
     .cal-day.today { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
-    .cal-day.occupied { color: var(--green); font-weight: 700; }
+    .cal-day.occupied { background: rgba(46, 125, 50, 0.15); color: var(--green); font-weight: 700; }
+.cal-day.occupied:hover { background: rgba(46, 125, 50, 0.25); }
     .cal-day.other-month { opacity: 0.2; cursor: default; }
     .cal-day.occupied:hover { background: var(--green-lt); }
     .cal-day.selected { background: var(--primary) !important; color: white !important; }
     .cal-day.selected.occupied { color: white; }
     
     /* Dots */
-    .cal-dots { display: flex; justify-content: center; gap: 3px; margin-top: 4px; height: 6px; }
-    .cal-dot { width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,0.1); }
-    .dot-confirmed { background: var(--green); }
-    .dot-pending   { background: var(--amber); }
-    .dot-cancelled { background: var(--ink-5); opacity: 0.5; }
-    .dot-finished  { background: #000; }
+.cal-dots { display: flex; justify-content: center; gap: 3px; margin-top: 4px; height: 6px; }
+.cal-dot { width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,0.1); }
+.dot-active { background: var(--green); }
+.dot-pending   { background: var(--amber); }
+.dot-cancelled { background: var(--ink-5); opacity: 0.5; }
+.dot-finished  { background: #000; }
     
     .cal-legend { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
     .cal-legend-item { display: flex; align-items: center; gap: 4px; font-size: 0.6rem; color: var(--ink-4); }
@@ -934,6 +990,69 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
       .greeting-message { font-size: 0.78rem !important; opacity: 0.8 !important; }
       .greeting-glass-pill, .greeting-date { display: none !important; }
     }
+    /* Scrollable filtered bookings container */
+#filteredBookingsList {
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+#filteredBookingsList::-webkit-scrollbar {
+    width: 6px;
+}
+
+#filteredBookingsList::-webkit-scrollbar-track {
+    background: var(--line);
+    border-radius: 10px;
+}
+
+#filteredBookingsList::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 10px;
+}
+
+/* Scrollable filtered bookings container */
+#filteredBookingsList {
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+#filteredBookingsList::-webkit-scrollbar {
+    width: 6px;
+}
+
+#filteredBookingsList::-webkit-scrollbar-track {
+    background: var(--line);
+    border-radius: 10px;
+}
+
+#filteredBookingsList::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 10px;
+}
+
+/* Scrollable upcoming bookings container */
+#upcomingBookingsList {
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+#upcomingBookingsList::-webkit-scrollbar {
+    width: 6px;
+}
+
+#upcomingBookingsList::-webkit-scrollbar-track {
+    background: var(--line);
+    border-radius: 10px;
+}
+
+#upcomingBookingsList::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 10px;
+}
+
   </style>
 </head>
 <body>
@@ -966,19 +1085,19 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
       </ul>
     </nav>
     <div class="sidebar-profile">
-      <?php if (!empty($guide['avatar'])): ?>
-        <img src="<?= htmlspecialchars($guide['avatar']) ?>" class="sidebar-avatar" style="object-fit:cover;" alt="avatar">
-      <?php else: ?>
-        <div class="sidebar-avatar"><?= $initials ?></div>
-      <?php endif; ?>
-      <div class="sidebar-profile-info">
-        <div class="sidebar-profile-name"><?= htmlspecialchars($guide['name']) ?></div>
-        <div class="sidebar-profile-role"><?= htmlspecialchars($guide['specialization']) ?></div>
-      </div>
-      <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.72rem;padding:4px;cursor:pointer;transition:color 0.15s;text-decoration:none;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
-        <i class="fas fa-right-from-bracket"></i>
-      </a>
-    </div>
+  <?php if (!empty($guide['avatar'])): ?>
+    <img src="../<?= htmlspecialchars($guide['avatar']) ?>" class="sidebar-avatar" style="object-fit:cover;" alt="avatar">
+  <?php else: ?>
+    <div class="sidebar-avatar"><?= $initials ?></div>
+  <?php endif; ?>
+  <div class="sidebar-profile-info">
+    <div class="sidebar-profile-name"><?= htmlspecialchars($guide['name']) ?></div>
+    <div class="sidebar-profile-role"><?= htmlspecialchars($guide['specialization'] ?? 'Trail Guide') ?></div>
+  </div>
+  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+    <i class="fas fa-sign-out-alt"></i>
+  </a>
+</div>
   </aside>
 
   <!-- MAIN -->
@@ -1117,11 +1236,24 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
           <div class="stat-card-sub">across all bookings</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-icon"><i class="fas fa-mountain"></i></div>
-          <div class="stat-card-label">Mountains</div>
-          <div class="stat-card-val"><?= (int)$stats['total_mountains'] ?></div>
-          <div class="stat-card-sub">in your assignments</div>
-        </div>
+    <div class="stat-card-icon"><i class="fas fa-mountain"></i></div>
+    <div class="stat-card-label">My Mountains</div>
+    <div style="margin-top: 8px;">
+        <?php if (empty($my_mountains)): ?>
+            <div class="stat-card-sub" style="font-size: 0.7rem;">No mountains assigned yet</div>
+        <?php else: ?>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <?php foreach ($my_mountains as $mt): ?>
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 0.75rem;">
+                        <i class="fas fa-tree" style="color: var(--primary); font-size: 0.65rem;"></i>
+                        <span style="font-weight: 500;"><?= htmlspecialchars($mt['name']) ?></span>
+                        <span style="font-size: 0.6rem; color: var(--ink-4);">(<?= htmlspecialchars($mt['difficulty']) ?>)</span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
       </div>
 
       <div class="dash-grid">
@@ -1146,108 +1278,96 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
           </div>
 
-          <!-- UPCOMING BOOKINGS -->
-          <div>
-    <div class="section-header">
-        <div class="section-title">Upcoming Bookings</div>
-        <a href="guide-communication.php" class="see-all">See all <i class="fas fa-arrow-right" style="font-size:0.6rem;"></i></a>
-    </div>
-    <div class="booking-list" id="upcomingBookingsList">
-        <?php if (empty($upcoming_bookings)): ?>
-            <div style="text-align:center;padding:30px;color:var(--ink-4);font-size:0.82rem;">
-                <i class="fas fa-calendar-xmark" style="font-size:1.8rem;margin-bottom:8px;display:block;opacity:0.3;"></i>
-                No upcoming bookings
-            </div>
-        <?php else: ?>
-            <?php foreach ($upcoming_bookings as $bk): ?>
-            <?php
-              $thumb_bg = !empty($bk['mountain_image']) ? $bk['mountain_image'] : 'https://images.unsplash.com/photo-1613144492511-59984f1cdeb3?w=200';
-              $is_pending = $bk['status'] === 'pending';
-              $badge_class = $bk['status'] === 'active' ? 'badge badge-green' : ($bk['status'] === 'pending' ? 'badge badge-amber' : 'badge');
-            ?>
-            <div class="booking-item" data-date="<?= $bk['hike_date'] ?>">
-                <div class="booking-mountain-thumb" style="background-image:url('<?= htmlspecialchars($thumb_bg) ?>');"></div>
-                <div class="booking-info">
-                    <div class="booking-name"><?= htmlspecialchars($bk['hiker_name']) ?></div>
-                    <div class="booking-meta">
-                        <span><i class="fas fa-mountain"></i> <?= htmlspecialchars($bk['mountain_name']) ?></span>
-                        <span><i class="fas fa-calendar"></i> <?= fmt_date($bk['hike_date']) ?></span>
-                        <span><i class="fas fa-users"></i> <?= (int)$bk['number_of_hikers'] ?> pax</span>
-                        <span><i class="fas fa-tag"></i> <?= ucfirst(str_replace('_', ' ', $bk['hike_type'])) ?></span>
-                    </div>
-                    <div style="font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--ink-4); margin-top: 6px;">
-                        <i class="fas fa-ticket-alt"></i> Booking ID: <?= htmlspecialchars($bk['booking_number']) ?>
-                    </div>
-                    <div style="margin-top:6px;">
-                        <span class="<?= $badge_class ?>">
-                            <i class="fas fa-circle" style="font-size:0.35rem;"></i>
-                            <?= ucfirst($bk['status']) ?>
-                        </span>
-                    </div>
-                </div>
-                <div class="booking-actions">
-                    <button class="btn-icon-sm btn-view" title="View Details" onclick="viewBookingDetails(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>')">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    <?php if ($bk['status'] === 'active'): ?>
-                    <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=<?= $bk['hiker_user_id'] ?>'">
-                        <i class="fas fa-comment-dots"></i>
-                    </button>
-                    <?php endif; ?>
-                    <?php if ($bk['status'] === 'pending'): ?>
-                    <button class="btn-icon-sm btn-confirm" title="Confirm Booking" onclick="confirmBooking(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>')">
-                        <i class="fas fa-check-circle"></i>
-                    </button>
-                    <button class="btn-icon-sm btn-cancel" title="Cancel Booking" onclick="showCancelModal(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>')">
-                        <i class="fas fa-times-circle"></i>
-                    </button>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
-    </div>
-</div>
-
-<!-- FILTERED BOOKINGS DISPLAY (shows when clicking calendar) -->
-<div id="filteredBookingsContainer" style="display: none;">
-    <div class="section-header">
-        <div class="section-title" id="filteredBookingsTitle"></div>
-        <button class="see-all" onclick="closeFilteredView()" style="background:none;border:none;color:var(--primary);cursor:pointer;">
-            <i class="fas fa-times"></i> Close
-        </button>
-    </div>
-    <div id="filteredBookingsList" class="booking-list"></div>
-</div>
-
-          <!-- PENDING WITH OVERLAP SECTION -->
-          <?php $overlap_pending = array_filter($pending_bookings, fn($pb) => $pb['overlaps']); ?>
-          <?php if (!empty($overlap_pending)): ?>
+                 <!-- UPCOMING BOOKINGS -->
           <div>
             <div class="section-header">
-              <div class="section-title" style="color:var(--amber);">⚠ Schedule Conflicts</div>
+              <div class="section-title">Upcoming Bookings</div>
+              <a href="guide-communication.php" class="see-all">See all <i class="fas fa-arrow-right" style="font-size:0.6rem;"></i></a>
             </div>
-            <div class="booking-list">
-              <?php foreach ($overlap_pending as $pb): ?>
-              <div class="booking-item" style="border-color:#ffc107;">
-                <div class="booking-mountain-thumb" style="background-image:url('<?= htmlspecialchars($pb['mountain_image'] ?? '') ?>');background-color:#f8f9fa;"></div>
-                <div class="booking-info">
-                  <div class="booking-name"><?= htmlspecialchars($pb['hiker_name']) ?></div>
-                  <div class="booking-meta">
-                    <span><i class="fas fa-mountain"></i> <?= htmlspecialchars($pb['mountain_name']) ?></span>
-                    <span><i class="fas fa-calendar"></i> <?= fmt_date($pb['hike_date']) ?></span>
-                    <span><i class="fas fa-users"></i> <?= (int)$pb['number_of_hikers'] ?> pax</span>
-                  </div>
-                  <div class="overlap-warn">
-                    <i class="fas fa-triangle-exclamation"></i>
-                    This booking overlaps with your confirmed schedule — you can't take this.
-                  </div>
+            <div class="booking-list" id="upcomingBookingsList">
+              <?php if (empty($upcoming_bookings)): ?>
+                <div style="text-align:center;padding:30px;color:var(--ink-4);font-size:0.82rem;">
+                  <i class="fas fa-calendar-xmark" style="font-size:1.8rem;margin-bottom:8px;display:block;opacity:0.3;"></i>
+                  No upcoming bookings
                 </div>
-              </div>
-              <?php endforeach; ?>
+              <?php else: ?>
+                <?php foreach ($upcoming_bookings as $bk): 
+    // Check if this pending booking overlaps with any active booking on same date AND same time
+    $has_overlap = false;
+    $overlap_message = '';
+    
+    if ($bk['status'] === 'pending') {
+        foreach ($active_bookings as $ab) {
+            if ($bk['hike_date'] === $ab['hike_date']) {
+                $has_overlap = true;
+                // Check if times are similar/overlapping
+                if (!empty($bk['start_time']) && !empty($ab['start_time'])) {
+                    $bk_time = substr($bk['start_time'], 0, 5);
+                    $ab_time = substr($ab['start_time'], 0, 5);
+                    $overlap_message = " SIMILAR/OVERLAPPING SCHEDULE - You have another booking at {$ab_time} on this date!";
+                } else {
+                    $overlap_message = " SIMILAR/OVERLAPPING SCHEDULE - You have another booking on this date!";
+                }
+                break;
+            }
+        }
+    }
+    
+    $thumb_bg = !empty($bk['mountain_image']) ? $bk['mountain_image'] : 'https://images.unsplash.com/photo-1613144492511-59984f1cdeb3?w=200';
+    $badge_class = $bk['status'] === 'active' ? 'badge badge-green' : ($bk['status'] === 'pending' ? 'badge badge-amber' : 'badge');
+    $display_time = !empty($bk['start_time']) ? date('g:i A', strtotime($bk['start_time'])) : 'Time TBD';
+?>
+<div class="booking-item" data-date="<?= $bk['hike_date'] ?>" style="<?= $has_overlap ? 'border-left: 3px solid #ffc107;' : '' ?>">
+    <div class="booking-mountain-thumb" style="background-image:url('<?= htmlspecialchars($thumb_bg) ?>');"></div>
+    <div class="booking-info">
+        <div class="booking-name"><?= htmlspecialchars($bk['hiker_name']) ?></div>
+        <div class="booking-meta">
+            <span><i class="fas fa-mountain"></i> <?= htmlspecialchars($bk['mountain_name']) ?></span>
+            <span><i class="fas fa-calendar"></i> <?= fmt_date($bk['hike_date']) ?></span>
+            <span><i class="fas fa-clock"></i> <?= $display_time ?></span>
+            <span><i class="fas fa-users"></i> <?= (int)$bk['number_of_hikers'] ?> pax</span>
+            <span><i class="fas fa-tag"></i> <?= ucfirst(str_replace('_', ' ', $bk['hike_type'])) ?></span>
+        </div>
+        <div style="font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--ink-4); margin-top: 6px;">
+            <i class="fas fa-ticket-alt"></i> Booking ID: <?= htmlspecialchars($bk['booking_number']) ?>
+        </div>
+        <div style="margin-top:6px;">
+            <span class="<?= $badge_class ?>">
+                <i class="fas fa-circle" style="font-size:0.35rem;"></i>
+                <?= ucfirst($bk['status']) ?>
+            </span>
+        </div>
+        <?php if ($has_overlap && $overlap_message): ?>
+        <div class="overlap-warn" style="margin-top: 8px;">
+            <i class="fas fa-triangle-exclamation"></i>
+            <?= $overlap_message ?>
+        </div>
+        <?php endif; ?>
+    </div>
+    <div class="booking-actions">
+        <button class="btn-icon-sm btn-view" title="View Details" onclick="viewBookingDetails(<?= $bk['id'] ?>, '<?= htmlspecialchars($bk['booking_number']) ?>')">
+            <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=<?= $bk['hiker_user_id'] ?>'">
+            <i class="fas fa-comment-dots"></i>
+        </button>
+    </div>
+</div>
+<?php endforeach; ?>
+              <?php endif; ?>
             </div>
           </div>
-          <?php endif; ?>
+
+          <!-- FILTERED BOOKINGS DISPLAY (shows when clicking calendar) -->
+          <div id="filteredBookingsContainer" style="display: none;">
+            <div class="section-header">
+              <div class="section-title" id="filteredBookingsTitle"></div>
+              <button class="see-all" onclick="closeFilteredView()" style="background:none;border:none;color:var(--primary);cursor:pointer;">
+                <i class="fas fa-times"></i> Close
+              </button>
+            </div>
+            <div id="filteredBookingsList" class="booking-list"></div>
+          </div>
 
           <!-- CALENDAR VIEW -->
           <div>
@@ -1271,9 +1391,10 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
           </div>
 
+
         </div>
 
-        <!-- RIGHT COL -->
+                <!-- RIGHT COL -->
         <div class="dash-col">
           <div>
             <div class="section-header">
@@ -1281,32 +1402,94 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
               <div class="live-badge"><span class="live-dot"></span> Live</div>
             </div>
             <div style="max-height: 400px; overflow-y: auto; padding-right: 5px;">
-    <?php if (empty($broadcasts)): ?>
-        <div style="text-align:center;padding:30px;color:var(--ink-4);font-size:0.82rem;">
-            <i class="fas fa-bullhorn" style="font-size:1.8rem;margin-bottom:8px;display:block;opacity:0.3;"></i>
-            No broadcasts yet
-        </div>
-    <?php else: ?>
-        <?php foreach ($broadcasts as $bc): ?>
-        <div class="announcement-card <?= !$bc['is_read'] ? 'unread' : '' ?>" data-id="<?= $bc['id'] ?>"><div class="announcement-header">
-                  <div class="announcement-icon"><i class="fas fa-bullhorn"></i></div>
-                  <span class="announcement-from">
-                    <?= htmlspecialchars($bc['sender_name']) ?>
-                    <?php if (!$bc['is_read']): ?><span class="unread-dot"></span><?php endif; ?>
-                  </span>
-                  <span class="announcement-time"><?= time_ago($bc['created_at']) ?></span>
+              <?php if (empty($broadcasts)): ?>
+                <div style="text-align:center;padding:30px;color:var(--ink-4);font-size:0.82rem;">
+                  <i class="fas fa-bullhorn" style="font-size:1.8rem;margin-bottom:8px;display:block;opacity:0.3;"></i>
+                  No broadcasts yet
                 </div>
-                <div class="announcement-text"><?= htmlspecialchars($bc['message']) ?></div>
+              <?php else: ?>
+                <?php foreach ($broadcasts as $bc): ?>
+                <div class="announcement-card <?= !$bc['is_read'] ? 'unread' : '' ?>" data-id="<?= $bc['id'] ?>">
+                  <div class="announcement-header">
+                    <div class="announcement-icon"><i class="fas fa-bullhorn"></i></div>
+                    <span class="announcement-from">
+                      <?= htmlspecialchars($bc['sender_name']) ?>
+                      <?php if (!$bc['is_read']): ?><span class="unread-dot"></span><?php endif; ?>
+                    </span>
+                    <span class="announcement-time"><?= time_ago($bc['created_at']) ?></span>
+                  </div>
+                  <div class="announcement-text"><?= htmlspecialchars($bc['message']) ?></div>
+                </div>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </div>
+          </div>
+
+          <!-- PERFORMANCE INSIGHTS SECTION - MOVED INSIDE RIGHT COL -->
+          <div class="status-panel" style="margin-bottom: 24px;">
+            <div class="status-panel-title">
+              <i class="fas fa-chart-line" style="margin-right: 8px;"></i>
+              Performance Insights
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+              <?php
+              // Calculate insights (keep all the PHP code)
+              $total_completed = 0;
+              
+              $stmt_insight = $pdo->prepare("SELECT status FROM bookings WHERE guide_id = ?");
+              $stmt_insight->execute([$guide_id]);
+              $all_guide_bookings = $stmt_insight->fetchAll(PDO::FETCH_ASSOC);
+              $total_completed = count(array_filter($all_guide_bookings, function($b) { return $b['status'] === 'finished'; }));
+              $completion_rate = $stats['total_bookings'] > 0 ? round(($total_completed / $stats['total_bookings']) * 100) : 0;
+              
+              // Get average rating from guide_reviews
+              $stmt_insight = $pdo->prepare("SELECT AVG(rating) as avg_rating, COUNT(*) as review_count FROM guide_reviews WHERE guide_id = ? AND status = 'approved'");
+              $stmt_insight->execute([$guide_id]);
+              $review_data = $stmt_insight->fetch(PDO::FETCH_ASSOC);
+              $avg_rating = $review_data['avg_rating'] ? round($review_data['avg_rating'], 1) : 0;
+              $review_count = $review_data['review_count'] ?? 0;
+              
+              // Get upcoming count
+              $upcoming_count = count($upcoming_bookings);
+              
+              // Generate insight messages
+              $insights = [];
+              if ($completion_rate >= 80) {
+                $insights[] = ['icon' => '🎯', 'text' => "Great completion rate! You've finished {$completion_rate}% of your assigned hikes."];
+              } elseif ($completion_rate >= 50) {
+                $insights[] = ['icon' => '📈', 'text' => "You're on track with {$completion_rate}% completion rate. Keep going!"];
+              } else {
+                $insights[] = ['icon' => '🚀', 'text' => "Focus on completing more hikes to build your reputation."];
+              }
+              
+              if ($avg_rating >= 4.5 && $review_count > 0) {
+                $insights[] = ['icon' => '⭐', 'text' => "Excellent rating of {$avg_rating}/5 from {$review_count} reviews! Hikers love you."];
+              } elseif ($avg_rating >= 3.5 && $review_count > 0) {
+                $insights[] = ['icon' => '👍', 'text' => "Good rating of {$avg_rating}/5. Keep exceeding expectations!"];
+              } elseif ($review_count > 0) {
+                $insights[] = ['icon' => '💪', 'text' => "Your rating is {$avg_rating}/5. Focus on communication and safety to improve."];
+              }
+              
+              if ($upcoming_count > 3) {
+                $insights[] = ['icon' => '📅', 'text' => "Busy schedule ahead! You have {$upcoming_count} upcoming hikes."];
+              } elseif ($upcoming_count == 0) {
+                $insights[] = ['icon' => '📢', 'text' => "No upcoming hikes. Make yourself available to get more bookings!"];
+              }
+              
+              if ($stats['total_hikers'] > 20) {
+                $insights[] = ['icon' => '👥', 'text' => "You've guided {$stats['total_hikers']} hikers! Amazing experience builder."];
+              }
+              ?>
+              <?php foreach ($insights as $insight): ?>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 10px; background: rgba(255,255,255,0.5); border-radius: var(--r-md);">
+                <div style="font-size: 1.4rem;"><?= $insight['icon'] ?></div>
+                <div style="font-size: 0.75rem; color: var(--ink-2); line-height: 1.4;"><?= htmlspecialchars($insight['text']) ?></div>
               </div>
               <?php endforeach; ?>
-            <?php endif; ?>
+            </div>
           </div>
-          </div>  
         </div>
       </div>
-
-    </div>
-  </div>
 
   <!-- BOTTOM NAV -->
   <nav class="guide-bottom-nav">
@@ -1509,25 +1692,29 @@ function renderCal() {
     cell.textContent = d;
     cell.dataset.iso = iso;
     
-    // Status Dots
-    const dayBookings = calendarBookings.filter(b => b.hike_date === iso);
-    if (dayBookings.length > 0) {
-        const dotsContainer = document.createElement('div');
-        dotsContainer.className = 'cal-dots';
-        
-        // Get unique statuses for this day
-        const uniqueStatuses = [...new Set(dayBookings.map(b => b.status))];
-        uniqueStatuses.forEach(status => {
-            const dot = document.createElement('div');
-            dot.className = `cal-dot dot-${status}`;
-            dotsContainer.appendChild(dot);
-        });
-        cell.appendChild(dotsContainer);
-        
-        // Tooltip
-        const summary = dayBookings.map(b => `${b.mountain_name} (${b.status})`).join(', ');
-        cell.title = summary;
-    }
+    // Status Dots - show a dot for EACH booking
+const dayBookings = calendarBookings.filter(b => b.hike_date === iso);
+if (dayBookings.length > 0) {
+    const dotsContainer = document.createElement('div');
+    dotsContainer.className = 'cal-dots';
+    
+    // Show a dot for EACH booking
+    dayBookings.forEach(booking => {
+        const dot = document.createElement('div');
+        let dotColor = '';
+        if (booking.status === 'active') dotColor = 'dot-active';
+        else if (booking.status === 'pending') dotColor = 'dot-pending';
+        else if (booking.status === 'cancelled') dotColor = 'dot-cancelled';
+        else if (booking.status === 'finished') dotColor = 'dot-finished';
+        dot.className = `cal-dot ${dotColor}`;
+        dotsContainer.appendChild(dot);
+    });
+    cell.appendChild(dotsContainer);
+    
+    // Tooltip
+    const summary = dayBookings.map(b => `${b.mountain_name} (${b.status})`).join(', ');
+    cell.title = summary;
+}
 
     // Highlight selected date
     if (selectedDate === iso) cell.classList.add('selected');
@@ -1542,7 +1729,6 @@ function renderCal() {
 
 let selectedDate = null;
 let allBookings = <?= $all_bookings_json ?>;
-
 function filterByDate(iso) {
     const header = document.querySelector('.section-title');
     const upcomingContainer = document.getElementById('upcomingBookingsList');
@@ -1569,7 +1755,7 @@ function filterByDate(iso) {
         
         const dateStr = new Date(iso + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
         const statusCounts = {
-            confirmed: dayBookings.filter(b => b.status === 'active').length,
+            active: dayBookings.filter(b => b.status === 'active').length,
             pending: dayBookings.filter(b => b.status === 'pending').length,
             finished: dayBookings.filter(b => b.status === 'finished').length,
             cancelled: dayBookings.filter(b => b.status === 'cancelled').length
@@ -1577,7 +1763,7 @@ function filterByDate(iso) {
         
         filteredTitle.innerHTML = `Bookings for ${dateStr} 
             <span style="font-size:0.7rem; font-weight:normal; color:var(--ink-4);">
-                (${statusCounts.confirmed} confirmed, ${statusCounts.pending} pending, 
+                (${statusCounts.active} confirmed, ${statusCounts.pending} pending, 
                  ${statusCounts.finished} finished, ${statusCounts.cancelled} cancelled)
             </span>`;
         
@@ -1587,11 +1773,14 @@ function filterByDate(iso) {
                 No bookings found for this date.
             </div>`;
         } else {
-            // Sort by status (pending first, then confirmed, then others)
+            // Sort by status (pending first, then active, then others)
             const sortedBookings = [...dayBookings].sort((a, b) => {
                 const order = { 'pending': 1, 'active': 2, 'finished': 3, 'cancelled': 4 };
                 return (order[a.status] || 5) - (order[b.status] || 5);
             });
+            
+            // Get active bookings on this date for overlap detection
+            const activeOnThisDate = sortedBookings.filter(b => b.status === 'active');
             
             filteredList.innerHTML = sortedBookings.map(bk => {
                 const thumb_bg = !empty(bk.mountain_image) ? bk.mountain_image : 'https://images.unsplash.com/photo-1613144492511-59984f1cdeb3?w=200';
@@ -1606,6 +1795,43 @@ function filterByDate(iso) {
                                   (bk.status === 'active' ? '<i class="fas fa-check-circle"></i>' : 
                                   '<i class="fas fa-clock"></i>'));
                 
+                const displayTime = bk.start_time ? bk.start_time.substring(0,5) : 'TBD';
+                const displayTimeFormatted = bk.start_time ? new Date('2000-01-01T' + bk.start_time).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'Time TBD';
+                
+                // Check for overlap (only for pending bookings)
+                let overlapWarning = '';
+                if (bk.status === 'pending' && activeOnThisDate.length > 0) {
+                    // Check if any active booking has same or similar time
+                    let hasOverlap = false;
+                    let activeTime = '';
+                    for (let ab of activeOnThisDate) {
+                        if (ab.start_time) {
+                            const abTime = ab.start_time.substring(0,5);
+                            const bkTime = bk.start_time ? bk.start_time.substring(0,5) : '';
+                            if (bkTime === abTime) {
+                                hasOverlap = true;
+                                activeTime = abTime;
+                                break;
+                            } else if (bkTime && abTime) {
+                                // Check if times are within 2 hours
+                                const bkHour = parseInt(bkTime.split(':')[0]);
+                                const abHour = parseInt(abTime.split(':')[0]);
+                                if (Math.abs(bkHour - abHour) <= 2) {
+                                    hasOverlap = true;
+                                    activeTime = abTime;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (hasOverlap) {
+                        overlapWarning = `<div class="overlap-warn" style="margin-top: 8px;">
+                            <i class="fas fa-triangle-exclamation"></i>
+                             SIMILAR/OVERLAPPING SCHEDULE - You have a confirmed booking at ${activeTime} on this date!
+                        </div>`;
+                    }
+                }
+                
                 // Show appropriate action buttons based on status
                 let actionButtons = '';
                 if (bk.status === 'active') {
@@ -1616,23 +1842,21 @@ function filterByDate(iso) {
                     `;
                 } else if (bk.status === 'pending') {
                     actionButtons = `
-                        <button class="btn-icon-sm btn-confirm" title="Confirm Booking" onclick="confirmBooking(${bk.id}, '${escapeHtml(bk.booking_number)}')">
-                            <i class="fas fa-check-circle"></i>
-                        </button>
-                        <button class="btn-icon-sm btn-cancel" title="Cancel Booking" onclick="showCancelModal(${bk.id}, '${escapeHtml(bk.booking_number)}')">
-                            <i class="fas fa-times-circle"></i>
+                         <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
+                            <i class="fas fa-comment-dots"></i>
                         </button>
                     `;
                 }
                 
                 return `
-                <div class="booking-item">
+                <div class="booking-item" style="${bk.status === 'pending' && activeOnThisDate.length > 0 ? 'border-left: 3px solid #ffc107;' : ''}">
                     <div class="booking-mountain-thumb" style="background-image:url('${escapeHtml(thumb_bg)}');"></div>
                     <div class="booking-info">
                         <div class="booking-name">${escapeHtml(bk.hiker_name)}</div>
                         <div class="booking-meta">
                             <span><i class="fas fa-mountain"></i> ${escapeHtml(bk.mountain_name)}</span>
                             <span><i class="fas fa-calendar"></i> ${fmtDate2(bk.hike_date)}</span>
+                            <span><i class="fas fa-clock"></i> ${displayTimeFormatted}</span>
                             <span><i class="fas fa-users"></i> ${bk.number_of_hikers} pax</span>
                             <span><i class="fas fa-tag"></i> ${bk.hike_type === 'day_hike' ? 'Day Hike' : (bk.hike_type === 'overnight' ? 'Overnight' : bk.hike_type)}</span>
                         </div>
@@ -1645,6 +1869,7 @@ function filterByDate(iso) {
                                 ${bk.status.charAt(0).toUpperCase() + bk.status.slice(1)}
                             </span>
                         </div>
+                        ${overlapWarning}
                     </div>
                     <div class="booking-actions">
                         <button class="btn-icon-sm btn-view" title="View Details" onclick="viewBookingDetails(${bk.id}, '${escapeHtml(bk.booking_number)}')">
@@ -1714,13 +1939,13 @@ function setStatus(s) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            const labels = { safe:'✅ Status: Available (At Basecamp)', on_trail:'🚶 Status: On Trail', completed:'🏁 Status: Hike Completed' };
+            const labels = { safe:' Status: Available (At Basecamp)', on_trail:'🚶 Status: On Trail', completed:'🏁 Status: Hike Completed' };
             showToast(labels[s]);
         } else {
-            showToast('⚠️ Failed to update status');
+            showToast(' Failed to update status');
         }
     })
-    .catch(() => showToast('⚠️ Network error updating status'));
+    .catch(() => showToast(' Network error updating status'));
 }
 
 // ── Modal ───────────────────────────────────────────────────────────────────
@@ -1834,6 +2059,10 @@ function viewBookingDetails(bookingId, bookingNumber) {
                             <div class="detail-label">Hike Date</div>
                             <div class="detail-val">${new Date(booking.hike_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
                         </div>
+                        <div class="detail-item">
+    <div class="detail-label">Start Time</div>
+    <div class="detail-val">${booking.start_time ? booking.start_time.substring(0,5) : 'Not specified'}</div>
+</div>
                         <div class="detail-item">
                             <div class="detail-label">Hike Type</div>
                             <div class="detail-val">${typeMap[booking.hike_type] || booking.hike_type}</div>

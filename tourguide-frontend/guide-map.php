@@ -1266,18 +1266,25 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
         <li><a href="guide-dashboard.php"><i class="fas fa-house"></i> Dashboard</a></li>
         <li><a href="guide-map.php" class="active"><i class="fas fa-map-location-dot"></i> Trail Map</a></li>
         <li><a href="guide-communication.php"><i class="fas fa-comments"></i> Communication</a></li>
-        <li><a href="guide-safety.php"><i class="fas fa-shield-halved"></i> Safety</a></li>
+        <li><a href="guide-bookings.php"><i class="fas fa-shield-halved"></i> Bookings </a></li>
       </ul>
       <div class="sidebar-divider"></div>
       <ul><li><a href="guide-profile.php"><i class="fas fa-circle-user"></i> My Profile</a></li></ul>
     </nav>
     <div class="sidebar-profile">
-      <div class="sidebar-avatar"><?= htmlspecialchars($guideInitials) ?></div>
-      <div class="sidebar-profile-info">
-        <div class="sidebar-profile-name"><?= htmlspecialchars($guideName) ?></div>
-        <div class="sidebar-profile-role">Trail Guide</div>
-      </div>
-    </div>
+  <?php if (!empty($guideRecord['avatar'])): ?>
+    <img src="../<?= htmlspecialchars($guideRecord['avatar']) ?>" class="sidebar-avatar" style="object-fit:cover;" alt="avatar">
+  <?php else: ?>
+    <div class="sidebar-avatar"><?= $guideInitials ?></div>
+  <?php endif; ?>
+  <div class="sidebar-profile-info">
+    <div class="sidebar-profile-name"><?= htmlspecialchars($guideRecord['name']) ?></div>
+    <div class="sidebar-profile-role"><?= htmlspecialchars($guideRecord['specialization'] ?? 'Trail Guide') ?></div>
+  </div>
+  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+    <i class="fas fa-sign-out-alt"></i>
+  </a>
+</div>
   </aside>
 
   <div class="guide-main">

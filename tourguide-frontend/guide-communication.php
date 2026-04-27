@@ -147,18 +147,31 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
       background: #100600;
       border-radius: 0 2px 2px 0;
     }
-    .thread-avatar {
-      width: 42px; height: 42px;
-      border-radius: 50%;
-      background: rgba(16,6,0,0.1);
-      color: #100600;
-      display: flex; align-items: center; justify-content: center;
-      font-family: 'Playfair Display', serif;
-      font-size: 0.9rem;
-      font-weight: 700;
-      flex-shrink: 0;
-      position: relative;
-    }
+    /* Fix avatar letter centering */
+.thread-avatar,
+.chat-header-avatar,
+.msg-av-xs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1;
+}
+
+.thread-avatar {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.chat-header-avatar {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.msg-av-xs {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
     .thread-info { flex: 1; min-width: 0; }
     .thread-name {
       font-size: 0.83rem;
@@ -228,77 +241,97 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
     }
     .chat-header-info { flex: 1; }
     .chat-header-name { font-size: 0.9rem; font-weight: 600; color: var(--ink); }
-    .chat-header-sub { font-size: 0.68rem; color: var(--ink-4); margin-top: 1px; }
-    .chat-header-actions { display: flex; gap: 8px; }
+    .chat-header-sub { font-size: 0.68rem; color: var(--ink-4); }
 
-    /* CHAT MESSAGES - takes remaining space */
+    /* ── CHAT MESSAGES ── */
     .chat-messages-wrapper {
       flex: 1;
       overflow-y: auto;
       min-height: 0;
+      background: #f8f9fa;
     }
     .chat-messages {
-      padding: 18px 20px;
+      padding: 24px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-    }
-    .msg-group { display: flex; flex-direction: column; gap: 4px; max-width: 85%; }
-    .msg-group.mine { align-items: flex-end; margin-left: auto; }
-    .msg-group.theirs { align-items: flex-start; margin-right: auto; }
-
-    .msg-sender {
-      font-size: 0.65rem;
-      font-weight: 600;
-      color: var(--ink-4);
-      padding: 0 12px;
-      margin-bottom: 2px;
-    }
-    .msg-bubble {
-      padding: 10px 14px;
-      border-radius: 18px;
-      font-size: 0.85rem;
-      line-height: 1.5;
-      word-break: break-word;
-    }
-    .msg-group.mine .msg-bubble {
-      background: #100600;
-      color: white;
-      border-radius: 18px 18px 4px 18px;
-    }
-    .msg-group.theirs .msg-bubble {
-      background: white;
-      color: var(--ink-2);
-      border-radius: 18px 18px 18px 4px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    }
-    .msg-time {
-      font-size: 0.6rem;
-      color: var(--ink-5);
-      padding: 0 12px;
-      margin-top: 2px;
+      gap: 16px;
     }
 
-    /* Date divider */
-    .date-divider {
+    .msg-bubble-row {
       display: flex;
-      align-items: center;
       gap: 10px;
-      margin: 8px 0;
+      align-items: flex-start;
       width: 100%;
     }
-    .date-divider span {
-      font-size: 0.65rem;
-      font-weight: 600;
-      color: var(--ink-4);
-      font-family: 'DM Mono', monospace;
-      white-space: nowrap;
+    .msg-bubble-row.mine {
+      justify-content: flex-end;
     }
-    .date-divider::before, .date-divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--line);
+    .msg-bubble-row.mine > div {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      max-width: 80%;
+    }
+    .msg-bubble-row:not(.mine) > div {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      max-width: 80%;
+    }
+
+    .msg-av-xs {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #e9ecef;
+      color: #495057;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      border: 1px solid #dee2e6;
+    }
+
+    .msg-bubble {
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      word-break: break-word;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .msg-bubble.mine {
+      background: #100600;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+    .msg-bubble.theirs {
+      background: white;
+      color: #212529;
+      border-bottom-left-radius: 4px;
+      border: 1px solid #e9ecef;
+    }
+
+    .msg-time {
+      font-size: 0.65rem;
+      color: #adb5bd;
+      margin-top: 4px;
+      padding: 0 4px;
+    }
+
+    .sys-msg {
+      text-align: center;
+      font-size: 11px;
+      color: #6c757d;
+      background: #e9ecef;
+      border-radius: 20px;
+      padding: 4px 12px;
+      align-self: center;
+      margin: 12px 0;
+      font-weight: 600;
+      letter-spacing: 0.3px;
     }
 
     /* booking request card */
@@ -494,6 +527,304 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
     gap: 8px;
     margin-bottom: 12px;
 }
+/* Payment Instructions Card - Blue Theme */
+.msg-card.payment-instructions {
+    background: white;
+    border: 1px solid #e0e7ff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    width: 360px;
+    max-width: 100%;
+}
+
+.msg-card.payment-instructions .msg-card-hdr {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+}
+
+.msg-card.payment-instructions .msg-card-hdr-title {
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+
+.msg-card.payment-instructions .msg-card-hdr-sub {
+    font-size: 10px;
+    opacity: 0.85;
+    margin-top: 2px;
+}
+
+.msg-card.payment-instructions .msg-card-icon {
+    font-size: 22px;
+    flex-shrink: 0;
+}
+
+.msg-card.payment-instructions .msg-card-body {
+    padding: 16px;
+}
+
+.payment-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.payment-detail-row:last-child {
+    border-bottom: none;
+}
+
+.payment-label {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.payment-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.payment-value.amount {
+    color: #2563eb;
+    font-size: 18px;
+}
+
+.payment-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.payment-status.pending {
+    background: #ffffffff;
+    color: #cfbb35ff;
+}
+
+.payment-status.paid {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.payment-status.overdue {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.gcash-details {
+    background: #f0f9ff;
+    border-radius: 12px;
+    padding: 12px;
+    margin: 12px 0;
+}
+
+.gcash-details .gcash-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    padding: 4px 0;
+}
+
+.gcash-details .gcash-row i {
+    width: 20px;
+    color: #2563eb;
+}
+
+.payment-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.payment-actions .btn-payment {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.btn-payment.primary {
+    background: #2563eb;
+    color: white;
+}
+
+.btn-payment.primary:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+.btn-payment.secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+}
+
+.btn-payment.secondary:hover {
+    background: #e5e7eb;
+}
+
+.qr-code-preview {
+    text-align: center;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #e5e7eb;
+}
+
+.qr-code-preview img {
+    max-width: 100px;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    cursor: pointer;
+}
+
+.qr-code-preview small {
+    display: block;
+    margin-top: 6px;
+    font-size: 10px;
+    color: #9ca3af;
+}
+
+    /* ── MESSAGE CARDS ── */
+    .msg-card {
+      background: white;
+      border: 1px solid #dee2e6;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      width: 320px;
+      max-width: 100%;
+    }
+    .msg-card-hdr {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: white;
+    }
+    .msg-card-icon { font-size: 1.2rem; }
+    .msg-card-hdr-title { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.5px; }
+    .msg-card-hdr-sub { font-size: 0.6rem; opacity: 0.8; margin-top: 1px; }
+    .msg-card-body { padding: 16px; }
+    .msg-card-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 8px; }
+    .msg-card-detail { font-size: 0.8rem; margin-bottom: 6px; color: #495057; display: flex; align-items: center; gap: 8px; }
+    
+    .msg-card.payment-instructions .msg-card-hdr { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); }
+    .msg-card.join-request .msg-card-hdr { background: linear-gradient(135deg, #100600 0%, #333 100%); }
+    
+    .payment-detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #f1f3f5;
+    }
+    .payment-label { font-size: 0.7rem; color: #868e96; font-weight: 600; }
+    .payment-value { font-size: 0.85rem; font-weight: 700; color: #212529; }
+    .payment-value.amount { color: #2563eb; font-size: 1.1rem; }
+    
+    .gcash-details {
+      background: #f8f9fa;
+      border-radius: 10px;
+      padding: 10px;
+      margin: 12px 0;
+      border: 1px solid #e9ecef;
+    }
+    .gcash-row { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: #495057; padding: 3px 0; }
+    .gcash-row i { color: #2563eb; width: 16px; }
+
+    .payment-status {
+      margin-left: auto;
+      font-size: 0.6rem;
+      font-weight: 800;
+      padding: 4px 8px;
+      border-radius: 20px;
+    }
+    
+    .payment-actions, .join-action-btns {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .btn-payment, .join-btn {
+      flex: 1;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-payment.primary, .join-btn.approve { background: #100600; color: white; }
+    .btn-payment.secondary, .join-btn.deny { background: #f1f3f5; color: #495057; border: 1px solid #dee2e6; }
+    .btn-payment:hover, .join-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    .join-status-badge {
+      width: 100%;
+      text-align: center;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-top: 10px;
+    }
+    .join-status-badge.approved { background: #d4edda; color: #155724; }
+    .join-status-badge.denied { background: #f8d7da; color: #721c24; }
+    .join-status-badge.pending { background: #fff3cd; color: #856404; }
+
+    /* QR Code Toggle Button */
+.qr-code-section {
+    margin-top: 12px;
+    text-align: center;
+}
+
+.qr-toggle-btn {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.qr-toggle-btn:hover {
+    background: #e5e7eb;
+    transform: translateY(-1px);
+}
+
+.qr-toggle-btn i {
+    color: #2563eb;
+}
   </style>
 </head>
 <body>
@@ -514,10 +845,20 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
       <div class="sidebar-divider"></div>
       <ul><li><a href="guide-profile.php"><i class="fas fa-circle-user"></i> My Profile</a></li></ul>
     </nav>
-    <div class="sidebar-profile">
-      <div class="sidebar-avatar"><?= $initials ?></div>
-      <div class="sidebar-profile-info"><div class="sidebar-profile-name"><?= htmlspecialchars($guide['name']) ?></div><div class="sidebar-profile-role"><?= htmlspecialchars($guide['specialization'] ?? 'Trail Guide') ?></div></div>
-    </div>
+   <div class="sidebar-profile">
+  <?php if (!empty($guide['avatar'])): ?>
+    <img src="../<?= htmlspecialchars($guide['avatar']) ?>" class="sidebar-avatar" style="object-fit:cover;" alt="avatar">
+  <?php else: ?>
+    <div class="sidebar-avatar"><?= $initials ?></div>
+  <?php endif; ?>
+  <div class="sidebar-profile-info">
+    <div class="sidebar-profile-name"><?= htmlspecialchars($guide['name']) ?></div>
+    <div class="sidebar-profile-role"><?= htmlspecialchars($guide['specialization'] ?? 'Trail Guide') ?></div>
+  </div>
+  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+    <i class="fas fa-sign-out-alt"></i>
+  </a>
+</div>
   </aside>
 
   <div class="guide-main">
@@ -637,7 +978,6 @@ async function loadConversations(silent = false) {
         if (!silent) document.getElementById('threadItems').innerHTML = '<div class="loading-spinner" style="text-align:center;padding:40px;color:var(--ink-4);">Network error</div>';
     }
 }
-
 function updateUnreadCounts() {
     document.querySelectorAll('.thread-item').forEach(el => {
         const id = parseInt(el.getAttribute('data-thread-id'));
@@ -658,8 +998,10 @@ function updateUnreadCounts() {
             if (existingUnread) existingUnread.remove();
         }
     });
+    
+    // Update sidebar notification badge
+    updateSidebarNotificationBadge();
 }
-
 function getFilteredThreads() {
     let filtered = [...conversations];
     
@@ -811,7 +1153,7 @@ async function loadMessages(hikerUserId, preserveScroll = false) {
         
         if (data.success) {
             renderMessages(data.messages || []);
-            
+             startCountdownTimers(); // Add this line
             // Handle scroll position
             if (preserveScroll && wrapper) {
                 if (wasAtBottom) {
@@ -833,11 +1175,12 @@ async function loadMessages(hikerUserId, preserveScroll = false) {
 }
 function renderMessages(messages) {
     const area = document.getElementById('chatMessages');
+    
     if (!messages || messages.length === 0) {
-        area.innerHTML = `<div class="chat-empty"><i class="fas fa-comment-dots"></i><p>No messages yet. Send a message to start the conversation!</p></div>`;
+        area.innerHTML = `<div class="chat-empty"><div class="chat-empty-icon">💬</div><div>No messages yet</div><p style="font-size:12px;margin-top:8px;">Send a message to start the conversation</p></div>`;
         return;
     }
-    
+
     let lastDate = '';
     let html = '';
     
@@ -847,124 +1190,372 @@ function renderMessages(messages) {
         const dateStr = msgDate.toLocaleDateString();
         const timeStr = msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const senderInitial = !isMine && msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '';
-        
-        // Date separator
+
+        // Add date separator
         if (dateStr !== lastDate) {
-            html += `<div class="date-divider"><span>${msgDate.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })}</span></div>`;
+            html += `<div class="sys-msg">${msgDate.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })}</div>`;
             lastDate = dateStr;
         }
+
+       // 1. FIRST CHECK: Payment Instructions (Guide View - Read Only, No Buttons)
+if (msg.action_data && msg.action_data !== 'null' && msg.action_data !== '') {
+    try {
+        const ad = typeof msg.action_data === 'string' ? JSON.parse(msg.action_data) : msg.action_data;
         
-        const side = isMine ? 'mine' : 'theirs';
-        
-        // Check for booking request cards (action_data)
-        if (msg.action_data && msg.action_data !== 'null' && msg.action_data !== '') {
-            try {
-                const ad = typeof msg.action_data === 'string' ? JSON.parse(msg.action_data) : msg.action_data;
-                
-                if (ad.type === 'booking_request') {
-                    const status = ad.status || 'pending';
-                    let actionsHtml = '';
-                    
-                    if (!isMine && status === 'pending') {
-                        actionsHtml = `
-                            <div class="brc-actions">
-                                <button class="btn btn-outline btn-sm" onclick="handleBookingRequest(${msg.id}, 'decline', '${ad.booking_id}', '${escapeHtml(ad.hiker_name)}', ${ad.hiker_user_id})">Decline</button>
-                                <button class="btn btn-primary btn-sm" onclick="handleBookingRequest(${msg.id}, 'accept', '${ad.booking_id}', '${escapeHtml(ad.hiker_name)}', ${ad.hiker_user_id})"><i class="fas fa-check"></i> Accept</button>
+        if (ad.type === 'payment_instructions') {
+            const downpayment = ad.downpayment_amount || '₱0.00';
+            const gcashNumber = ad.gcash_number || 'Not set';
+            const gcashName = ad.gcash_name || 'Not set';
+            const bookingNumber = ad.booking_number || 'N/A';
+            const totalAmount = ad.total_amount || 'N/A';
+            const remaining = parseFloat(totalAmount) - parseFloat(downpayment);
+            const qrCodeUrl = ad.qr_code_url || '../assets/images/gcash-qr.jpg';
+            
+            // Get downpayment deadline from the message or booking
+            let deadlineTimestamp = null;
+            let deadlineStr = ad.deadline || null;
+            
+            // Also check if there's a confirmation message body to display
+            const confirmationText = msg.body || '';
+            
+            // QR Toggle functionality
+            const uniqueId = 'qr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+            
+            // Build countdown timer HTML if deadline exists
+            let countdownHtml = '';
+            if (deadlineStr) {
+                deadlineTimestamp = new Date(deadlineStr).getTime();
+                const uniqueTimerId = 'timer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+                countdownHtml = `
+                    <div class="countdown-timer" id="${uniqueTimerId}" data-deadline="${deadlineTimestamp}" style="background: #fff3cd; padding: 8px 12px; border-radius: 8px; margin: 10px 0; text-align: center;">
+                        <div style="font-size: 11px; color: #856404; margin-bottom: 4px;">⏰ DOWNPAYMENT DEADLINE</div>
+                        <div style="font-size: 16px; font-weight: 700; color: #d97706;" class="countdown-display"></div>
+                    </div>
+                `;
+            }
+            
+            // Determine payment status badge
+            let paymentStatusBadge = '';
+            let paymentStatusText = 'AWAITING PAYMENT';
+            let paymentStatusClass = 'pending';
+            
+            if (ad.payment_status === 'paid') {
+                paymentStatusText = '✓ PAYMENT RECEIVED';
+                paymentStatusClass = 'paid';
+                paymentStatusBadge = `<span class="payment-status paid"><i class="fas fa-check-circle"></i> ${paymentStatusText}</span>`;
+            } else if (ad.payment_status === 'expired') {
+                paymentStatusText = '⏰ EXPIRED';
+                paymentStatusClass = 'overdue';
+                paymentStatusBadge = `<span class="payment-status overdue"><i class="fas fa-hourglass-end"></i> ${paymentStatusText}</span>`;
+            } else {
+                paymentStatusBadge = `<span class="payment-status pending"><i class="fas fa-clock"></i> ${paymentStatusText}</span>`;
+            }
+            
+            let confirmationHtml = '';
+            if (confirmationText && !confirmationText.includes('GCASH QR CODE')) {
+                confirmationHtml = `
+                    <div class="msg-card" style="border: none; margin-bottom: 12px;">
+                        <div class="msg-card-hdr" style="background: #059669;">
+                            <span class="msg-card-icon">🎉</span>
+                            <div class="msg-card-hdr-label">
+                                <div class="msg-card-hdr-title">BOOKING CONFIRMED</div>
+                                <div class="msg-card-hdr-sub">Hike Confirmed</div>
                             </div>
-                        `;
-                    } else if (status === 'approved') {
-                        actionsHtml = `
-                            <div class="join-status-badge approved" style="margin-bottom: 12px;">✓ Booking Accepted</div>
-                            <div class="brc-actions">
-                                <button class="btn btn-primary btn-sm" onclick="viewBookingDetails('${ad.booking_id}')" style="width: 100%;">
-                                    <i class="fas fa-eye"></i> View Details
+                        </div>
+                        <div class="msg-card-body">
+                            <div class="msg-card-desc" style="white-space: pre-line; line-height: 1.5;">${escapeHtml(confirmationText)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            const card = `
+                ${confirmationHtml}
+                <div class="msg-card payment-instructions">
+                    <div class="msg-card-hdr">
+                        <span class="msg-card-icon">💰</span>
+                        <div class="msg-card-hdr-label">
+                            <div class="msg-card-hdr-title">PAYMENT INSTRUCTIONS</div>
+                            <div class="msg-card-hdr-sub">Booking #${escapeHtml(bookingNumber)}</div>
+                        </div>
+                        ${paymentStatusBadge}
+                    </div>
+                    <div class="msg-card-body">
+                        <div class="payment-detail-row">
+                            <span class="payment-label">Total Amount</span>
+                            <span class="payment-value amount">₱${escapeHtml(totalAmount)}</span>
+                        </div>
+                        <div class="payment-detail-row">
+                            <span class="payment-label">Downpayment Required</span>
+                            <span class="payment-value amount" style="color:#059669;">₱${escapeHtml(downpayment)}</span>
+                        </div>
+                        <div class="payment-detail-row">
+                            <span class="payment-label">Remaining Balance</span>
+                            <span class="payment-value">₱${escapeHtml(remaining)}</span>
+                        </div>
+                        
+                        ${countdownHtml}
+                        
+                        <div class="gcash-details">
+                            <div class="gcash-row">
+                                <i class="fas fa-mobile-alt"></i>
+                                <span><strong>GCash Number:</strong> ${escapeHtml(gcashNumber)}</span>
+                                <button onclick="copyGCashNumber('${escapeHtml(gcashNumber)}')" style="margin-left: auto; background: none; border: none; cursor: pointer; color: #2563eb;">
+                                    <i class="fas fa-copy"></i>
                                 </button>
                             </div>
-                        `;
-                    } else if (status === 'declined') {
-                        actionsHtml = `<div class="join-status-badge denied">✕ Booking Declined</div>`;
-                    } else if (!isMine && status === 'pending') {
-                        actionsHtml = `<div class="join-status-badge pending">⏳ Pending Response</div>`;
-                    }
-                    
-                    html += `
-                        <div class="msg-group ${side}">
-                            ${!isMine ? `<div class="msg-sender">${escapeHtml(msg.sender_name || 'Hiker')}</div>` : ''}
-                            <div class="booking-request-card">
-                                <div class="brc-header"><i class="fas fa-calendar-check"></i> Booking Request</div>
-                                <div class="brc-row"><span class="brc-label">Mountain</span><span class="brc-val">${escapeHtml(ad.mountain_name || 'Unknown')}</span></div>
-                                <div class="brc-row"><span class="brc-label">Date</span><span class="brc-val">${escapeHtml(ad.booking_date || 'N/A')}</span></div>
-                                <div class="brc-row"><span class="brc-label">Hikers</span><span class="brc-val">${ad.pax || 1} person(s)</span></div>
-                                <div class="brc-row"><span class="brc-label">Booking</span><span class="brc-val">#${escapeHtml(ad.booking_number || 'N/A')}</span></div>
-                                ${actionsHtml}
+                            <div class="gcash-row">
+                                <i class="fas fa-user"></i>
+                                <span><strong>Account Name:</strong> ${escapeHtml(gcashName)}</span>
                             </div>
-                            <div class="msg-time">${timeStr}</div>
                         </div>
-                    `;
-                    return;
-                }
-            } catch (e) {
-                console.error('Error parsing action_data', e);
+                        
+                        <div class="qr-code-section">
+                            <button class="qr-toggle-btn" onclick="toggleQRCode('${uniqueId}')">
+                                <i class="fas fa-qrcode"></i> Show/Hide QR Code
+                            </button>
+                            <div id="${uniqueId}" class="qr-code-preview" style="display: none;">
+                                <img src="${escapeHtml(qrCodeUrl)}" alt="GCash QR Code" 
+                                     onerror="this.style.display='none'"
+                                     onclick="window.open('${escapeHtml(qrCodeUrl)}', '_blank')">
+                                <small>Click image to enlarge</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="msg-time">${timeStr}</div>`;
+            
+            if (isMine) {
+                html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+            } else {
+                html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
             }
+            return;
         }
         
-        // Normal text message
-        const bubbleClass = isMine ? 'msg-bubble mine' : 'msg-bubble theirs';
-        html += `
-            <div class="msg-group ${side}">
-                ${!isMine ? `<div class="msg-sender">${escapeHtml(msg.sender_name || 'Hiker')}</div>` : ''}
-                <div class="${bubbleClass}">${escapeHtml(msg.body || '')}</div>
-                <div class="msg-time">${timeStr}</div>
-            </div>
-        `;
-    });
-    
-    area.innerHTML = html;
-}
+        // 2. Booking Request Card - FIXED: Disable buttons after approval
+        if (ad.type === 'booking_request') {
+            const isGuide = String(msg.receiver_id) === String(CURRENT_USER_ID);
+            const status = ad.status || 'pending';
+            const handled = status === 'approved' || status === 'denied';
 
-async function sendMessage() {
-    const input = document.getElementById('msgInput');
-    const msg = input.value.trim();
-    if (!msg || !activeThread) return;
-    
-    const btn = document.querySelector('.chat-send-btn');
-    input.disabled = true;
-    btn.disabled = true;
-    
-    // Save current scroll position
-    const wrapper = document.getElementById('chatMessagesWrapper');
-    const wasAtBottom = wrapper.scrollHeight - wrapper.scrollTop - wrapper.clientHeight < 50;
-    
-    try {
-        const fd = new FormData();
-        fd.append('action', 'send_message');
-        fd.append('recipient_id', activeThread);
-        fd.append('body', msg);
-        
-        const res = await fetch('../api/guide_messages.php', { method: 'POST', body: fd });
-        const data = await res.json();
-        
-        if (data.success) {
-            input.value = '';
-            await loadMessages(activeThread, true);
-            
-            // If user was at bottom, scroll to bottom after message loads
-            if (wasAtBottom) {
-                setTimeout(() => {
-                    wrapper.scrollTop = wrapper.scrollHeight;
-                }, 50);
+            let actionsHtml = '';
+            if (isGuide && !handled) {
+                actionsHtml = `
+                    <div class="join-action-btns">
+                        <button class="join-btn approve" onclick="handleBookingRequest(${msg.id},'accept','${ad.booking_id}','${escapeHtml(ad.hiker_name)}',${ad.hiker_user_id})">
+                            <i class="fas fa-check"></i> Accept
+                        </button>
+                        <button class="join-btn deny" onclick="handleBookingRequest(${msg.id},'decline','${ad.booking_id}','${escapeHtml(ad.hiker_name)}',${ad.hiker_user_id})">
+                            <i class="fas fa-times"></i> Decline
+                        </button>
+                    </div>`;
+            } else if (handled) {
+                // Show status badge instead of buttons when already handled
+                const statusText = status === 'approved' ? '✓ BOOKING ACCEPTED' : '✕ BOOKING DECLINED';
+                const statusClass = status === 'approved' ? 'approved' : 'denied';
+                actionsHtml = `<div class="join-status-badge ${statusClass}" style="justify-content: center;">${statusText}</div>`;
+            } else if (!isGuide && !handled) {
+                actionsHtml = `<div class="join-status-badge pending"><i class="fas fa-clock"></i> Awaiting guide response</div>`;
             }
-            
-            await loadConversations(true);
-            input.focus();
-        } else {
-            showToast(data.message || 'Failed to send message');
+
+            const card = `
+                <div class="msg-card join-request">
+                    <div class="msg-card-hdr">
+                        <span class="msg-card-icon">🏔️</span>
+                        <div class="msg-card-hdr-label">
+                            <div class="msg-card-hdr-title">NEW BOOKING REQUEST</div>
+                            <div class="msg-card-hdr-sub">${isGuide ? 'Hiker wants to book a hike' : 'Booking request sent'}</div>
+                        </div>
+                    </div>
+                    <div class="msg-card-body">
+                        <div class="msg-card-title">${escapeHtml(ad.hiker_name)}</div>
+                        <div class="msg-card-detail"><i class="fas fa-mountain"></i> ${escapeHtml(ad.mountain_name)}</div>
+                        <div class="msg-card-detail"><i class="fas fa-calendar"></i> ${escapeHtml(ad.booking_date)}</div>
+                        <div class="msg-card-detail"><i class="fas fa-users"></i> ${ad.pax} hiker(s)</div>
+                        <div class="msg-card-detail"><i class="fas fa-tag"></i> #${escapeHtml(ad.booking_number)}</div>
+                        ${actionsHtml}
+                    </div>
+                </div>
+                <div class="msg-time">${timeStr}</div>`;
+
+            if (isGuide) {
+                html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+            } else {
+                html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+            }
+            return;
         }
     } catch (e) {
-        showToast('Network error');
-    } finally {
-        input.disabled = false;
-        btn.disabled = false;
+        console.error('action_data parse error', e);
+    }
+}
+
+        // 3. System Announcement / Booking Confirmation Cards
+        const isSystemAnnouncement = (msg.is_system_announcement == 1) || (msg.sender_role === 'guide' && msg.is_system_announcement == 1);
+        
+        if (isSystemAnnouncement || msg.sender_role === 'system') {
+            let icon = '📢';
+            let title = 'System Announcement';
+            let subTitle = 'Official Update';
+            let headerColor = 'background: #6b7280;';
+            
+            if (msg.body && (msg.body.includes('CONFIRMED') || msg.body.includes('confirmed'))) {
+                icon = '✅';
+                title = 'BOOKING CONFIRMED';
+                subTitle = 'Hike Confirmed';
+                headerColor = 'background: #059669;';
+            } else if (msg.body && msg.body.includes('CANCELLED')) {
+                icon = '❌';
+                title = 'BOOKING CANCELLED';
+                subTitle = 'Cancellation Notice';
+                headerColor = 'background: #dc2626;';
+            } else if (msg.body && msg.body.includes('reminder')) {
+                icon = '🔔';
+                title = 'REMINDER';
+                subTitle = 'Friendly Reminder';
+                headerColor = 'background: #d97706;';
+            }
+            
+            const card = `
+                <div class="msg-card" style="border: none;">
+                    <div class="msg-card-hdr" style="${headerColor}">
+                        <span class="msg-card-icon">${icon}</span>
+                        <div class="msg-card-hdr-label">
+                            <div class="msg-card-hdr-title">${title}</div>
+                            <div class="msg-card-hdr-sub">${subTitle}</div>
+                        </div>
+                    </div>
+                    <div class="msg-card-body">
+                        <div class="msg-card-desc" style="white-space: pre-line; line-height: 1.5;">${escapeHtml(msg.body || '')}</div>
+                    </div>
+                </div>
+                <div class="msg-time">${timeStr}</div>`;
+            
+            if (isMine) {
+                html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+            } else {
+                html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+            }
+            return;
+        }
+
+        // 4. NORMAL TEXT MESSAGE BUBBLE
+        const bubble = `<div class="msg-bubble ${isMine ? 'mine' : 'theirs'}">${escapeHtml(msg.body || '')}</div>`;
+        
+        if (isMine) {
+            html += `
+                <div class="msg-bubble-row mine">
+                    <div>
+                        ${bubble}
+                        <div class="msg-time">${timeStr}</div>
+                    </div>
+                </div>`;
+        } else {
+            html += `
+                <div class="msg-bubble-row">
+                    <div class="msg-av-xs">${senderInitial}</div>
+                    <div>
+                        ${bubble}
+                        <div class="msg-time">${timeStr}</div>
+                    </div>
+                </div>`;
+        }
+    });
+
+    area.innerHTML = html;
+     startCountdownTimers(); // Add this line
+
+    const wrapper = document.getElementById('chatMessagesWrapper');
+    if (wrapper) {
+        wrapper.scrollTop = wrapper.scrollHeight;
+    }
+}
+
+// Countdown timer for downpayment deadlines
+function startCountdownTimers() {
+    const timers = document.querySelectorAll('.countdown-timer');
+    
+    timers.forEach(timer => {
+        const deadline = parseInt(timer.getAttribute('data-deadline'));
+        const displayElement = timer.querySelector('.countdown-display');
+        
+        if (!deadline || !displayElement) return;
+        
+        function updateCountdown() {
+            const now = new Date().getTime();
+            const distance = deadline - now;
+            
+            if (distance < 0) {
+                displayElement.innerHTML = '⏰ EXPIRED';
+                displayElement.style.color = '#dc2626';
+                timer.style.background = '#fee2e2';
+                clearInterval(timer.interval);
+                return;
+            }
+            
+            const hours = Math.floor(distance / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            
+            displayElement.innerHTML = `${hours}h ${minutes}m ${seconds}s`;
+            
+            // Warning color when less than 1 hour
+            if (distance < 3600000) {
+                displayElement.style.color = '#dc2626';
+                displayElement.style.fontWeight = '800';
+            } else if (distance < 10800000) { // less than 3 hours
+                displayElement.style.color = '#d97706';
+            }
+        }
+        
+        updateCountdown();
+        timer.interval = setInterval(updateCountdown, 1000);
+    });
+}
+
+// Call this after rendering messages
+function startAllCountdowns() {
+    startCountdownTimers();
+}
+
+// Override the existing renderMessages function to call countdown after rendering
+// Add this at the end of renderMessages function, after setting innerHTML:
+// startCountdownTimers();   
+
+
+// QR Code Toggle Function
+function toggleQRCode(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        if (element.style.display === 'none' || element.style.display === '') {
+            element.style.display = 'block';
+        } else {
+            element.style.display = 'none';
+        }
+    }
+}
+// Helper functions for GCash actions
+function copyGCashNumber(number) {
+    navigator.clipboard.writeText(number).then(() => {
+        showToast('✅ GCash number copied to clipboard!');
+    }).catch(() => {
+        showToast('Could not copy number');
+    });
+}
+
+function markPaymentAsSent(messageId, bookingNumber) {
+    if (confirm(`📱 Have you sent the downpayment for booking #${bookingNumber}?\n\nAfter confirming, the hiker will be notified and can upload their payment receipt.`)) {
+        showToast('✅ Notifying hiker to upload payment receipt...');
+        
+        // Here you would call an API to:
+        // 1. Update the booking payment status to 'awaiting_confirmation'
+        // 2. Send a message to the hiker asking for receipt upload
+        // 3. Update the payment card status
+        
+        setTimeout(() => {
+            showToast('✅ Reminder sent to hiker. Please wait for receipt upload.');
+        }, 1000);
     }
 }
 
@@ -983,9 +1574,57 @@ async function markAsRead(hikerUserId) {
     } catch (e) {}
 }
 
+function updateSidebarNotificationBadge() {
+    // Update the Communication tab in sidebar and bottom nav
+    const totalUnread = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0);
+    
+    // Update sidebar navigation badge
+    const sidebarLink = document.querySelector('.sidebar-nav a[href="guide-communication.php"]');
+    if (sidebarLink) {
+        let badge = sidebarLink.querySelector('.notification-badge');
+        if (totalUnread > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'notification-badge';
+                sidebarLink.appendChild(badge);
+            }
+            badge.textContent = totalUnread > 9 ? '9+' : totalUnread;
+            badge.style.cssText = 'position: absolute; right: 12px; top: 8px; background: #dc2626; color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 20px; min-width: 18px; text-align: center;';
+            sidebarLink.style.position = 'relative';
+        } else if (badge) {
+            badge.remove();
+        }
+    }
+    
+    // Update bottom navigation badge
+    const bottomLink = document.querySelector('.guide-bottom-nav a[href="guide-communication.php"]');
+    if (bottomLink) {
+        let badge = bottomLink.querySelector('.notification-badge');
+        if (totalUnread > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'notification-badge';
+                bottomLink.appendChild(badge);
+            }
+            badge.textContent = totalUnread > 9 ? '9+' : totalUnread;
+            badge.style.cssText = 'position: absolute; top: -5px; right: 5px; background: #dc2626; color: white; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 20px; min-width: 16px; text-align: center;';
+            bottomLink.style.position = 'relative';
+        } else if (badge) {
+            badge.remove();
+        }
+    }
+}
+let isProcessing = false;
+
 async function handleBookingRequest(messageId, action, bookingId, hikerName, hikerUserId) {
+    if (isProcessing) {
+        showToast('Please wait, processing...');
+        return;
+    }
+    
     if (!confirm(`Are you sure you want to ${action} this booking request?`)) return;
     
+    isProcessing = true;
     showToast('Processing...');
     
     const fd = new FormData();
@@ -1001,13 +1640,20 @@ async function handleBookingRequest(messageId, action, bookingId, hikerName, hik
         
         showToast(data.message || (data.success ? 'Done!' : 'Failed'));
         if (data.success) {
-            setTimeout(() => {
-                if (activeThread) loadMessages(activeThread, true);
-                loadConversations();
+            // Refresh messages and conversations to update the button state
+            setTimeout(async () => {
+                if (activeThread) {
+                    await loadMessages(activeThread, true);
+                }
+                await loadConversations();
             }, 600);
         }
     } catch (err) {
         showToast('Network error');
+    } finally {
+        setTimeout(() => {
+            isProcessing = false;
+        }, 1000);
     }
 }
 function viewBookingDetails(bookingId) {
