@@ -825,6 +825,41 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
 .qr-toggle-btn i {
     color: #2563eb;
 }
+
+/* Nudge / Reminder Card */
+.msg-card.booking-update {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    width: 320px;
+    max-width: 100%;
+}
+
+.msg-card.booking-update .msg-card-hdr {
+    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+}
+
+.msg-card.booking-update .msg-card-detail {
+    font-size: 0.8rem;
+    margin-bottom: 6px;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.msg-card.booking-update .msg-card-detail i {
+    width: 16px;
+    color: #d97706;
+}
+
   </style>
 </head>
 <body>
@@ -1152,8 +1187,8 @@ async function loadMessages(hikerUserId, preserveScroll = false) {
         const data = await res.json();
         
         if (data.success) {
-            renderMessages(data.messages || []);
-             startCountdownTimers(); // Add this line
+            await renderMessages(data.messages || []);  // Add await
+    startCountdownTimers();
             // Handle scroll position
             if (preserveScroll && wrapper) {
                 if (wasAtBottom) {
@@ -1173,7 +1208,7 @@ async function loadMessages(hikerUserId, preserveScroll = false) {
         }
     }
 }
-function renderMessages(messages) {
+async function renderMessages(messages) {
     const area = document.getElementById('chatMessages');
     
     if (!messages || messages.length === 0) {
@@ -1184,7 +1219,9 @@ function renderMessages(messages) {
     let lastDate = '';
     let html = '';
     
-    messages.forEach(msg => {
+    for (const msg of messages) {
+      
+
         const isMine = String(msg.sender_id) === String(CURRENT_USER_ID);
         const msgDate = new Date(msg.created_at);
         const dateStr = msgDate.toLocaleDateString();
@@ -1197,248 +1234,596 @@ function renderMessages(messages) {
             lastDate = dateStr;
         }
 
-       // 1. FIRST CHECK: Payment Instructions (Guide View - Read Only, No Buttons)
-if (msg.action_data && msg.action_data !== 'null' && msg.action_data !== '') {
-    try {
-        const ad = typeof msg.action_data === 'string' ? JSON.parse(msg.action_data) : msg.action_data;
-        
-        if (ad.type === 'payment_instructions') {
-            const downpayment = ad.downpayment_amount || '₱0.00';
-            const gcashNumber = ad.gcash_number || 'Not set';
-            const gcashName = ad.gcash_name || 'Not set';
-            const bookingNumber = ad.booking_number || 'N/A';
-            const totalAmount = ad.total_amount || 'N/A';
-            const remaining = parseFloat(totalAmount) - parseFloat(downpayment);
-            const qrCodeUrl = ad.qr_code_url || '../assets/images/gcash-qr.jpg';
-            
-            // Get downpayment deadline from the message or booking
-            let deadlineTimestamp = null;
-            let deadlineStr = ad.deadline || null;
-            
-            // Also check if there's a confirmation message body to display
-            const confirmationText = msg.body || '';
-            
-            // QR Toggle functionality
-            const uniqueId = 'qr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-            
-            // Build countdown timer HTML if deadline exists
-            let countdownHtml = '';
-            if (deadlineStr) {
-                deadlineTimestamp = new Date(deadlineStr).getTime();
-                const uniqueTimerId = 'timer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-                countdownHtml = `
-                    <div class="countdown-timer" id="${uniqueTimerId}" data-deadline="${deadlineTimestamp}" style="background: #fff3cd; padding: 8px 12px; border-radius: 8px; margin: 10px 0; text-align: center;">
-                        <div style="font-size: 11px; color: #856404; margin-bottom: 4px;">⏰ DOWNPAYMENT DEADLINE</div>
-                        <div style="font-size: 16px; font-weight: 700; color: #d97706;" class="countdown-display"></div>
-                    </div>
-                `;
-            }
-            
-            // Determine payment status badge
-            let paymentStatusBadge = '';
-            let paymentStatusText = 'AWAITING PAYMENT';
-            let paymentStatusClass = 'pending';
-            
-            if (ad.payment_status === 'paid') {
-                paymentStatusText = '✓ PAYMENT RECEIVED';
-                paymentStatusClass = 'paid';
-                paymentStatusBadge = `<span class="payment-status paid"><i class="fas fa-check-circle"></i> ${paymentStatusText}</span>`;
-            } else if (ad.payment_status === 'expired') {
-                paymentStatusText = '⏰ EXPIRED';
-                paymentStatusClass = 'overdue';
-                paymentStatusBadge = `<span class="payment-status overdue"><i class="fas fa-hourglass-end"></i> ${paymentStatusText}</span>`;
-            } else {
-                paymentStatusBadge = `<span class="payment-status pending"><i class="fas fa-clock"></i> ${paymentStatusText}</span>`;
-            }
-            
-            let confirmationHtml = '';
-            if (confirmationText && !confirmationText.includes('GCASH QR CODE')) {
-                confirmationHtml = `
-                    <div class="msg-card" style="border: none; margin-bottom: 12px;">
-                        <div class="msg-card-hdr" style="background: #059669;">
-                            <span class="msg-card-icon">🎉</span>
-                            <div class="msg-card-hdr-label">
-                                <div class="msg-card-hdr-title">BOOKING CONFIRMED</div>
-                                <div class="msg-card-hdr-sub">Hike Confirmed</div>
-                            </div>
-                        </div>
-                        <div class="msg-card-body">
-                            <div class="msg-card-desc" style="white-space: pre-line; line-height: 1.5;">${escapeHtml(confirmationText)}</div>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            const card = `
-                ${confirmationHtml}
-                <div class="msg-card payment-instructions">
-                    <div class="msg-card-hdr">
-                        <span class="msg-card-icon">💰</span>
-                        <div class="msg-card-hdr-label">
-                            <div class="msg-card-hdr-title">PAYMENT INSTRUCTIONS</div>
-                            <div class="msg-card-hdr-sub">Booking #${escapeHtml(bookingNumber)}</div>
-                        </div>
-                        ${paymentStatusBadge}
-                    </div>
-                    <div class="msg-card-body">
-                        <div class="payment-detail-row">
-                            <span class="payment-label">Total Amount</span>
-                            <span class="payment-value amount">₱${escapeHtml(totalAmount)}</span>
-                        </div>
-                        <div class="payment-detail-row">
-                            <span class="payment-label">Downpayment Required</span>
-                            <span class="payment-value amount" style="color:#059669;">₱${escapeHtml(downpayment)}</span>
-                        </div>
-                        <div class="payment-detail-row">
-                            <span class="payment-label">Remaining Balance</span>
-                            <span class="payment-value">₱${escapeHtml(remaining)}</span>
-                        </div>
-                        
-                        ${countdownHtml}
-                        
-                        <div class="gcash-details">
-                            <div class="gcash-row">
-                                <i class="fas fa-mobile-alt"></i>
-                                <span><strong>GCash Number:</strong> ${escapeHtml(gcashNumber)}</span>
-                                <button onclick="copyGCashNumber('${escapeHtml(gcashNumber)}')" style="margin-left: auto; background: none; border: none; cursor: pointer; color: #2563eb;">
-                                    <i class="fas fa-copy"></i>
-                                </button>
-                            </div>
-                            <div class="gcash-row">
-                                <i class="fas fa-user"></i>
-                                <span><strong>Account Name:</strong> ${escapeHtml(gcashName)}</span>
-                            </div>
-                        </div>
-                        
-                        <div class="qr-code-section">
-                            <button class="qr-toggle-btn" onclick="toggleQRCode('${uniqueId}')">
-                                <i class="fas fa-qrcode"></i> Show/Hide QR Code
-                            </button>
-                            <div id="${uniqueId}" class="qr-code-preview" style="display: none;">
-                                <img src="${escapeHtml(qrCodeUrl)}" alt="GCash QR Code" 
-                                     onerror="this.style.display='none'"
-                                     onclick="window.open('${escapeHtml(qrCodeUrl)}', '_blank')">
-                                <small>Click image to enlarge</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="msg-time">${timeStr}</div>`;
-            
-            if (isMine) {
-                html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
-            } else {
-                html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
-            }
-            return;
-        }
-        
-        // 2. Booking Request Card - FIXED: Disable buttons after approval
-        if (ad.type === 'booking_request') {
-            const isGuide = String(msg.receiver_id) === String(CURRENT_USER_ID);
-            const status = ad.status || 'pending';
-            const handled = status === 'approved' || status === 'denied';
-
-            let actionsHtml = '';
-            if (isGuide && !handled) {
-                actionsHtml = `
-                    <div class="join-action-btns">
-                        <button class="join-btn approve" onclick="handleBookingRequest(${msg.id},'accept','${ad.booking_id}','${escapeHtml(ad.hiker_name)}',${ad.hiker_user_id})">
-                            <i class="fas fa-check"></i> Accept
-                        </button>
-                        <button class="join-btn deny" onclick="handleBookingRequest(${msg.id},'decline','${ad.booking_id}','${escapeHtml(ad.hiker_name)}',${ad.hiker_user_id})">
-                            <i class="fas fa-times"></i> Decline
-                        </button>
-                    </div>`;
-            } else if (handled) {
-                // Show status badge instead of buttons when already handled
-                const statusText = status === 'approved' ? '✓ BOOKING ACCEPTED' : '✕ BOOKING DECLINED';
-                const statusClass = status === 'approved' ? 'approved' : 'denied';
-                actionsHtml = `<div class="join-status-badge ${statusClass}" style="justify-content: center;">${statusText}</div>`;
-            } else if (!isGuide && !handled) {
-                actionsHtml = `<div class="join-status-badge pending"><i class="fas fa-clock"></i> Awaiting guide response</div>`;
-            }
-
-            const card = `
-                <div class="msg-card join-request">
-                    <div class="msg-card-hdr">
-                        <span class="msg-card-icon">🏔️</span>
-                        <div class="msg-card-hdr-label">
-                            <div class="msg-card-hdr-title">NEW BOOKING REQUEST</div>
-                            <div class="msg-card-hdr-sub">${isGuide ? 'Hiker wants to book a hike' : 'Booking request sent'}</div>
-                        </div>
-                    </div>
-                    <div class="msg-card-body">
-                        <div class="msg-card-title">${escapeHtml(ad.hiker_name)}</div>
-                        <div class="msg-card-detail"><i class="fas fa-mountain"></i> ${escapeHtml(ad.mountain_name)}</div>
-                        <div class="msg-card-detail"><i class="fas fa-calendar"></i> ${escapeHtml(ad.booking_date)}</div>
-                        <div class="msg-card-detail"><i class="fas fa-users"></i> ${ad.pax} hiker(s)</div>
-                        <div class="msg-card-detail"><i class="fas fa-tag"></i> #${escapeHtml(ad.booking_number)}</div>
-                        ${actionsHtml}
-                    </div>
-                </div>
-                <div class="msg-time">${timeStr}</div>`;
-
-            if (isGuide) {
-                html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
-            } else {
-                html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
-            }
-            return;
-        }
-    } catch (e) {
-        console.error('action_data parse error', e);
+          if (msg.source_type === 'nudge') {
+    const reminderMessage = "Hi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋";
+    
+    // Build additional details if available
+    let detailsHtml = '';
+    if (msg.booking_number) {
+        detailsHtml += `<div class="msg-card-detail"><i class="fas fa-ticket-alt"></i> Booking #${escapeHtml(msg.booking_number)}</div>`;
     }
+    if (msg.mountain_name) {
+        detailsHtml += `<div class="msg-card-detail"><i class="fas fa-mountain"></i> ${escapeHtml(msg.mountain_name)}</div>`;
+    }
+    if (msg.hike_date) {
+        const hikeDate = new Date(msg.hike_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+        detailsHtml += `<div class="msg-card-detail"><i class="fas fa-calendar"></i> ${escapeHtml(hikeDate)}</div>`;
+    }
+    
+    const card = `
+        <div class="msg-card booking-update">
+            <div class="msg-card-hdr" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%);">
+                <span class="msg-card-icon">🔔</span>
+                <div class="msg-card-hdr-label">
+                    <div class="msg-card-hdr-title">REMINDER</div>
+                    <div class="msg-card-hdr-sub">Friendly Reminder from ${escapeHtml(msg.sender_name || 'Hiker')}</div>
+                </div>
+            </div>
+            <div class="msg-card-body">
+                <div class="msg-card-desc" style="white-space: pre-line; line-height: 1.5;">${escapeHtml(reminderMessage)}</div>
+                ${detailsHtml}
+            </div>
+        </div>
+        <div class="msg-time" style="margin-top: 4px;">${timeStr}</div>`;
+    
+    if (isMine) {
+        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+    } else {
+        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+    }
+    continue; // Skip all other message type checks
 }
 
-        // 3. System Announcement / Booking Confirmation Cards
-        const isSystemAnnouncement = (msg.is_system_announcement == 1) || (msg.sender_role === 'guide' && msg.is_system_announcement == 1);
-        
-        if (isSystemAnnouncement || msg.sender_role === 'system') {
-            let icon = '📢';
-            let title = 'System Announcement';
-            let subTitle = 'Official Update';
-            let headerColor = 'background: #6b7280;';
-            
-            if (msg.body && (msg.body.includes('CONFIRMED') || msg.body.includes('confirmed'))) {
-                icon = '✅';
-                title = 'BOOKING CONFIRMED';
-                subTitle = 'Hike Confirmed';
-                headerColor = 'background: #059669;';
-            } else if (msg.body && msg.body.includes('CANCELLED')) {
-                icon = '❌';
-                title = 'BOOKING CANCELLED';
-                subTitle = 'Cancellation Notice';
-                headerColor = 'background: #dc2626;';
-            } else if (msg.body && msg.body.includes('reminder')) {
-                icon = '🔔';
-                title = 'REMINDER';
-                subTitle = 'Friendly Reminder';
-                headerColor = 'background: #d97706;';
-            }
+        // 0. FIRST CHECK: PAYMENT PROOF SUBMITTED (regular text message, NOT action_data)
+if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
+    const bodyText = msg.body || '';
+    
+    const refMatch = bodyText.match(/Reference Number:\s*([^\n]+)/);
+    const referenceNumber = refMatch ? refMatch[1] : 'N/A';
+    
+    const imgMatch = bodyText.match(/Proof:\s*(\S+\.(jpg|jpeg|png))/i);
+    const proofImageUrl = imgMatch ? imgMatch[1] : null;
+    
+    const bookingMatch = bodyText.match(/booking #([^\s\.]+)/);  // ← Changed: exclude dot and space
+    let bookingNumber = bookingMatch ? bookingMatch[1] : 'N/A';
+    // Remove any trailing punctuation
+    bookingNumber = bookingNumber.replace(/[.,;:!?]$/, '');
             
             const card = `
-                <div class="msg-card" style="border: none;">
-                    <div class="msg-card-hdr" style="${headerColor}">
-                        <span class="msg-card-icon">${icon}</span>
-                        <div class="msg-card-hdr-label">
-                            <div class="msg-card-hdr-title">${title}</div>
-                            <div class="msg-card-hdr-sub">${subTitle}</div>
+                <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
+                    <div class="msg-card-hdr" style="background:linear-gradient(135deg, #059669 0%, #047857 100%);padding:12px 16px;display:flex;align-items:center;gap:10px;color:white;">
+                        <span class="msg-card-icon" style="font-size:20px;">💵</span>
+                        <div class="msg-card-hdr-label" style="flex:1;">
+                            <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">PAYMENT PROOF SUBMITTED</div>
+                            <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${escapeHtml(bookingNumber)}</div>
+                        </div>
+                        <span class="payment-status-badge" style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">PENDING VERIFICATION</span>
+                    </div>
+                    <div class="msg-card-body" style="padding:16px;">
+                        <div class="payment-detail-row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                            <span class="payment-label" style="font-size:12px;color:#6b7280;">📝 Reference Number</span>
+                            <span class="payment-value" style="font-size:13px;font-weight:700;color:#1f2937;">${escapeHtml(referenceNumber)}</span>
+                        </div>
+                        
+                        <div class="gcash-details" style="background:#f0fdf4;border-radius:12px;padding:12px;margin:12px 0;">
+                            <div class="gcash-row" style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;">
+                                <i class="fas fa-receipt" style="color:#059669;width:20px;"></i>
+                                <span><strong>Payment Proof:</strong></span>
+                            </div>
+                            ${proofImageUrl ? `
+                                <div class="proof-image-preview" style="margin-top:8px;text-align:center;">
+                                    <img src="${escapeHtml(proofImageUrl)}" alt="Payment Proof" style="max-width:100%;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('${escapeHtml(proofImageUrl)}', '_blank')">
+                                    <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
+                                </div>
+                            ` : '<div style="font-size:12px;color:#6b7280;">No image uploaded</div>'}
+                        </div>
+                        
+                        <div class="payment-actions" style="display:flex;gap:10px;margin-top:16px;">
+                            <button class="btn-payment primary" onclick="verifyAndConfirmPayment('${escapeHtml(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:none;background:#059669;color:white;cursor:pointer;">
+                                <i class="fas fa-check-circle"></i> Verify & Confirm Payment
+                            </button>
+                            <button class="btn-payment secondary" onclick="rejectPaymentProof('${escapeHtml(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid #e5e7eb;background:#f3f4f6;cursor:pointer;">
+                                <i class="fas fa-times-circle"></i> Reject
+                            </button>
                         </div>
                     </div>
-                    <div class="msg-card-body">
-                        <div class="msg-card-desc" style="white-space: pre-line; line-height: 1.5;">${escapeHtml(msg.body || '')}</div>
-                    </div>
                 </div>
-                <div class="msg-time">${timeStr}</div>`;
+                <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
             
             if (isMine) {
                 html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
             } else {
                 html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
             }
-            return;
+            continue;
         }
+
+        // 0.5. PAYMENT CONFIRMED / REJECTED / RESUBMIT REQUIRED CARDS
+if (msg.body && (msg.body.includes('PAYMENT CONFIRMED') || 
+                 msg.body.includes('PAYMENT PROOF REJECTED') ||
+                 msg.body.includes('PAYMENT REQUIRED AGAIN'))) {
+    
+    const isConfirmed = msg.body.includes('PAYMENT CONFIRMED');
+    const isRejected = msg.body.includes('PAYMENT PROOF REJECTED');
+    const isResubmit = msg.body.includes('PAYMENT REQUIRED AGAIN');
+    
+    let icon = isConfirmed ? '✅' : (isRejected ? '❌' : '💰');
+    let title = 'PAYMENT CONFIRMED';
+    let bgColor = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
+    
+    if (isRejected) {
+        title = 'PAYMENT REJECTED';
+        bgColor = 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)';
+    } else if (isResubmit) {
+        title = 'PAYMENT REQUIRED AGAIN';
+        bgColor = 'linear-gradient(135deg, #d97706 0%, #b45309 100%)';
+    }
+    
+    // Extract booking number
+    const bookingMatch = msg.body.match(/booking #([^\s\.]+)/);
+    let bookingNumber = bookingMatch ? bookingMatch[1] : 'N/A';
+    bookingNumber = bookingNumber.replace(/[.,;:!?]$/, '');
+    
+    // Build summary rows for key amounts
+    let summaryHtml = '';
+    if (isConfirmed) {
+        const dpVerifiedMatch = msg.body.match(/downpayment of ₱([\d,]+(?:\.\d{2})?)/i);
+        const remainingMatch  = msg.body.match(/[Rr]emaining balance[^:]*:\s*₱([\d,]+(?:\.\d{2})?)/);
+        if (dpVerifiedMatch) {
+            summaryHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #d1fae5;">
+                <span style="font-size:12px;color:#059669;font-weight:600;">💰 Downpayment Verified</span>
+                <span style="font-size:15px;font-weight:800;color:#059669;">₱${dpVerifiedMatch[1]}</span>
+            </div>`;
+        }
+        if (remainingMatch) {
+            summaryHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #e5e7eb;">
+                <span style="font-size:12px;color:#6b7280;">📦 Remaining Balance (to guide)</span>
+                <span style="font-size:14px;font-weight:700;color:#374151;">₱${remainingMatch[1]}</span>
+            </div>`;
+        }
+    } else if (isRejected) {
+        const dpMatch  = msg.body.match(/[Dd]ownpayment [Rr]equired[:\s]*₱([\d,]+(?:\.\d{2})?)/);
+        const feeMatch = msg.body.match(/[Gg]uide [Ff]ee[:\s]*₱([\d,]+(?:\.\d{2})?)/);
+        if (dpMatch) {
+            summaryHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #fee2e2;">
+                <span style="font-size:12px;color:#dc2626;font-weight:600;">💰 Downpayment Required</span>
+                <span style="font-size:15px;font-weight:800;color:#dc2626;">₱${dpMatch[1]}</span>
+            </div>`;
+        }
+        if (feeMatch) {
+            summaryHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #e5e7eb;">
+                <span style="font-size:12px;color:#6b7280;">🏔️ Tour Guide Fee</span>
+                <span style="font-size:14px;font-weight:700;color:#374151;">₱${feeMatch[1]}</span>
+            </div>`;
+        }
+    }
+
+    // Split body into lines, skip title/booking-number lines already shown in header/summary
+    const bodyLinesHtml = msg.body
+        .replace(/\*\*/g, '')
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0)
+        .filter(l => !l.match(/^(✅|❌|💰)\s*(DOWNPAYMENT CONFIRMED|PAYMENT REJECTED|PAYMENT PROOF REJECTED|PAYMENT REQUIRED AGAIN)/))
+        .filter(l => !l.match(/^[Bb]ooking #/))
+        .filter(l => !l.match(/^[Dd]ownpayment [Rr]equired/))
+        .filter(l => !l.match(/^[Rr]emaining balance/i))
+        .filter(l => !l.match(/^\(Tour Guide Fee/))
+        .filter(l => !l.match(/^🏔️ Tour Guide Fee/))
+        .map(l => `<div style="padding:3px 0;font-size:13px;color:#374151;line-height:1.6;">${escapeHtml(l)}</div>`)
+        .join('');
+
+    const card = `
+        <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
+            <div class="msg-card-hdr" style="background:${bgColor};padding:12px 16px;display:flex;align-items:center;gap:10px;color:white;">
+                <span class="msg-card-icon" style="font-size:20px;">${icon}</span>
+                <div class="msg-card-hdr-label" style="flex:1;">
+                    <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">${title}</div>
+                    <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${escapeHtml(bookingNumber)}</div>
+                </div>
+            </div>
+            <div class="msg-card-body" style="padding:16px;">
+                ${summaryHtml}
+                <div style="margin-top:${summaryHtml ? '12px' : '0'};padding-top:${summaryHtml ? '4px' : '0'};">
+                    ${bodyLinesHtml}
+                </div>
+            </div>
+        </div>
+        <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
+    
+    if (isMine) {
+        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+    } else {
+        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+    }
+    continue;
+}
+
+
+        // THEN Check for action_data messages (payment instructions, booking requests)
+        if (msg.action_data && msg.action_data !== 'null' && msg.action_data !== '') {
+            try {
+                const ad = typeof msg.action_data === 'string' ? JSON.parse(msg.action_data) : msg.action_data;
+                
+                // 1. Payment Instructions (Guide View - Read Only, No Buttons)
+if (ad.type === 'payment_instructions') {
+    const gcashNumber = ad.gcash_number || 'Not set';
+    const gcashName = ad.gcash_name || 'Not set';
+    const bookingNumber = ad.booking_number || 'N/A';
+    const totalAmount = ad.total_amount || 'N/A';
+    const qrCodeUrl = ad.qr_code_url || '../assets/images/gcash-qr.jpg';
+    
+    // Calculate guide fee based on hike type
+    let guideFee = ad.guide_fee || 0;
+    if (!guideFee) {
+        guideFee = ad.hike_type === 'overnight' ? 1500 : 801;
+    }
+    
+    // Use stored downpayment_amount if available, otherwise calculate
+    let downpayment;
+    if (ad.downpayment_amount) {
+        downpayment = parseFloat(String(ad.downpayment_amount).replace(/,/g, ''));
+    } else {
+        downpayment = Math.max(200, Math.round(guideFee * 0.2));
+    }
+    // Remaining balance: use stored value if available, otherwise calculate
+    const remainingBalance = ad.remaining_balance
+        ? parseFloat(String(ad.remaining_balance).replace(/,/g, ''))
+        : (Number(guideFee) - downpayment);
+    
+    let deadlineTimestamp = null;
+    let deadlineStr = ad.deadline || null;
+    
+    const confirmationText = msg.body || '';
+    const uniqueId = 'qr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+    
+    let countdownHtml = '';
+    if (deadlineStr) {
+        // PHP stores deadline in Asia/Manila (UTC+8). Force correct parsing by appending offset.
+        const deadlineNormalized = deadlineStr.replace(' ', 'T') + (deadlineStr.includes('+') ? '' : '+08:00');
+        deadlineTimestamp = new Date(deadlineNormalized).getTime();
+        const uniqueTimerId = 'timer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        countdownHtml = `
+            <div class="countdown-timer" id="${uniqueTimerId}" data-deadline="${deadlineTimestamp}" style="background: #fff3cd; padding: 8px 12px; border-radius: 8px; margin: 10px 0; text-align: center;">
+                <div style="font-size: 11px; color: #856404; margin-bottom: 4px;">⏰ DOWNPAYMENT DEADLINE</div>
+                <div style="font-size: 16px; font-weight: 700; color: #d97706;" class="countdown-display"></div>
+            </div>
+        `;
+    }
+    
+    let paymentStatusBadge = '';
+let paymentStatusText = 'AWAITING PAYMENT';
+let paymentStatusClass = 'pending';
+
+if (ad.payment_status === 'paid') {
+    paymentStatusText = '✓ PAYMENT RECEIVED';
+    paymentStatusClass = 'paid';
+    paymentStatusBadge = `<span class="payment-status paid"><i class="fas fa-check-circle"></i> ${paymentStatusText}</span>`;
+} else if (ad.payment_status === 'expired') {
+    paymentStatusText = '⏰ EXPIRED';
+    paymentStatusClass = 'overdue';
+    paymentStatusBadge = `<span class="payment-status overdue"><i class="fas fa-hourglass-end"></i> ${paymentStatusText}</span>`;
+} else if (ad.payment_status === 'rejected') {
+    paymentStatusText = '❌ REJECTED';
+    paymentStatusClass = 'overdue';
+    paymentStatusBadge = `<span class="payment-status overdue"><i class="fas fa-times-circle"></i> ${paymentStatusText}</span>`;
+} else {
+    paymentStatusBadge = `<span class="payment-status pending"><i class="fas fa-clock"></i> ${paymentStatusText}</span>`;
+}
+    
+    let confirmationHtml = '';
+if (confirmationText && confirmationText.includes('BOOKING CONFIRMED')) {
+    const bkNumMatch  = confirmationText.match(/booking #(\S+)/i);
+    const dateMatch   = confirmationText.match(/Hike Date:\s*(.+)/);
+    const mtnMatch    = confirmationText.match(/Mountain:\s*(.+)/);
+    const totalMatch  = confirmationText.match(/Total Amount:\s*\u20b1([\d,]+(?:\.\d{2})?)/);
+    const dpMatch     = confirmationText.match(/Downpayment Required:\s*\u20b1([\d,]+(?:\.\d{2})?)/);
+    const balMatch    = confirmationText.match(/Remaining Balance:\s*\u20b1([\d,]+(?:\.\d{2})?)/);
+    const guideMatch  = confirmationText.match(/confirmed by (.+?)\./);
+
+    const cfBkNum = bkNumMatch ? bkNumMatch[1].replace(/[.,;:!?]$/, '') : (ad.booking_number || '');
+    const cfDate  = dateMatch  ? dateMatch[1].trim()  : '';
+    const cfMtn   = mtnMatch   ? mtnMatch[1].trim()   : '';
+    const cfTotal = totalMatch ? totalMatch[1]         : (ad.total_amount || '');
+    const cfDp    = dpMatch    ? dpMatch[1]            : '';
+    const cfBal   = balMatch   ? balMatch[1]           : '';
+    const cfGuide = guideMatch ? guideMatch[1].trim()  : '';
+
+    const detailRows = [
+        cfDate  ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4C5} Hike Date</span><span style="font-weight:700;font-size:12px;">${escapeHtml(cfDate)}</span></div>` : '',
+        cfMtn   ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4CD} Mountain</span><span style="font-weight:700;font-size:12px;text-align:right;max-width:58%;">${escapeHtml(cfMtn)}</span></div>` : '',
+        cfTotal ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4B0} Total Amount</span><span style="font-weight:700;font-size:13px;">\u{20B1}${escapeHtml(cfTotal)}</span></div>` : '',
+        cfDp    ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4B5} Downpayment</span><span style="font-weight:800;font-size:13px;color:#fef08a;">\u{20B1}${escapeHtml(cfDp)}</span></div>` : '',
+        cfBal   ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;"><span style="opacity:0.8;font-size:12px;">\u{1F4E6} Remaining Balance</span><span style="font-weight:700;font-size:12px;">\u{20B1}${escapeHtml(cfBal)}</span></div>` : '',
+    ].filter(Boolean).join('');
+
+    confirmationHtml = `
+        <div style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(5,150,105,0.25);margin-bottom:10px;">
+            <div style="background:linear-gradient(135deg,#059669 0%,#047857 100%);padding:14px 16px;display:flex;align-items:center;gap:12px;color:white;">
+                <span style="font-size:28px;">\u{1F389}</span>
+                <div style="flex:1;">
+                    <div style="font-size:12px;font-weight:800;letter-spacing:0.6px;text-transform:uppercase;">BOOKING CONFIRMED</div>
+                    <div style="font-size:10px;opacity:0.85;">Booking #${escapeHtml(cfBkNum)}${cfGuide ? ' &middot; ' + escapeHtml(cfGuide) : ''}</div>
+                </div>
+                <span style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">\u2713 CONFIRMED</span>
+            </div>
+            <div style="background:linear-gradient(135deg,#047857 0%,#065f46 100%);color:white;">
+                ${detailRows}
+            </div>
+            <div style="background:#f0fdf4;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+                <span style="font-size:14px;">\u23F0</span>
+                <span style="font-size:11px;color:#065f46;font-weight:600;">Complete downpayment within 5 hours to secure your booking</span>
+            </div>
+        </div>
+    `;
+}
+
+    const card = `
+        ${confirmationHtml}
+        <div class="msg-card payment-instructions">
+            <div class="msg-card-hdr">
+                <span class="msg-card-icon">💰</span>
+                <div class="msg-card-hdr-label">
+                    <div class="msg-card-hdr-title">PAYMENT INSTRUCTIONS</div>
+                    <div class="msg-card-hdr-sub">Booking #${escapeHtml(bookingNumber)}</div>
+                </div>
+                ${paymentStatusBadge}
+            </div>
+            <div class="msg-card-body">
+                <div class="payment-detail-row">
+                    <span class="payment-label">Total Amount</span>
+                    <span class="payment-value amount">${escapeHtml(totalAmount)}</span>
+                </div>
+                <div class="payment-detail-row">
+                    <span class="payment-label">Tour Guide Fee</span>
+                    <span class="payment-value">₱${escapeHtml(guideFee)}</span>
+                </div>
+                <div class="payment-detail-row">
+                    <span class="payment-label">Downpayment Required</span>
+                    <span class="payment-value amount" style="color:#059669;">₱${downpayment.toFixed(2)}</span>
+                </div>
+                <div class="payment-detail-row">
+                    <span class="payment-label">Remaining Balance (to guide)</span>
+                    <span class="payment-value">₱${remainingBalance.toFixed(2)}</span>
+                </div>
+                
+                ${countdownHtml}
+                
+                <div class="gcash-details">
+                    <div class="gcash-row">
+                        <i class="fas fa-mobile-alt"></i>
+                        <span><strong>GCash Number:</strong> ${escapeHtml(gcashNumber)}</span>
+                        <button onclick="copyGCashNumber('${escapeHtml(gcashNumber)}')" style="margin-left: auto; background: none; border: none; cursor: pointer; color: #2563eb;">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    <div class="gcash-row">
+                        <i class="fas fa-user"></i>
+                        <span><strong>Account Name:</strong> ${escapeHtml(gcashName)}</span>
+                    </div>
+                </div>
+                
+                <div class="qr-code-section">
+                    <button class="qr-toggle-btn" onclick="toggleQRCode('${uniqueId}')">
+                        <i class="fas fa-qrcode"></i> Show/Hide QR Code
+                    </button>
+                    <div id="${uniqueId}" class="qr-code-preview" style="display: none;">
+                        <img src="${escapeHtml(qrCodeUrl)}" alt="GCash QR Code" 
+                             onerror="this.style.display='none'"
+                             onclick="window.open('${escapeHtml(qrCodeUrl)}', '_blank')">
+                        <small>Click image to enlarge</small>
+                    </div>
+                </div>
+                
+                <div class="info-note" style="background:#fef3c7;border-radius:8px;padding:10px;margin-top:12px;text-align:center;">
+                    <span style="font-size:11px;color:#d97706;">⚠️ Downpayment is 20% of guide fee (min ₱200). Hiker must pay this amount to confirm the booking.</span>
+                </div>
+            </div>
+        </div>
+        <div class="msg-time">${timeStr}</div>`;
+    
+    if (isMine) {
+        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+    } else {
+        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+    }
+    continue;
+}
+                
+                // 2. Booking Request Card - Check actual booking status from database
+if (ad.type === 'booking_request') {
+    const isGuide = String(msg.receiver_id) === String(CURRENT_USER_ID);
+    
+    // Fetch actual booking status from database
+    let bookingStatus = ad.status || 'pending';
+    let bookingNumber = ad.booking_number || '';
+    
+    // If we're the guide, check the actual database status
+    if (isGuide) {
+        try {
+            const statusRes = await fetch(`../api/guide_messages.php?action=get_booking_status&booking_id=${ad.booking_id}`);
+            const statusData = await statusRes.json();
+            if (statusData.success && statusData.status) {
+                bookingStatus = statusData.status;
+                // If booking is cancelled, mark as denied in action_data
+                if (bookingStatus === 'cancelled') {
+                    bookingStatus = 'cancelled';
+                }
+            }
+        } catch(e) {
+            console.error('Error fetching booking status:', e);
+        }
+    }
+    
+    const handled = (bookingStatus === 'approved' || bookingStatus === 'denied' || bookingStatus === 'cancelled' || bookingStatus === 'active');
+    
+    let finalStatus = bookingStatus;
+    let finalStatusText = '';
+    let finalStatusClass = '';
+    let showButtons = (isGuide && !handled && bookingStatus === 'pending');
+    
+    if (finalStatus === 'approved' || finalStatus === 'active') {
+        finalStatusText = '✓ BOOKING ACCEPTED & CONFIRMED';
+        finalStatusClass = 'approved';
+    } else if (finalStatus === 'denied') {
+        finalStatusText = '✕ BOOKING DECLINED';
+        finalStatusClass = 'denied';
+    } else if (finalStatus === 'cancelled') {
+        finalStatusText = '✕ BOOKING CANCELLED BY HIKER';
+        finalStatusClass = 'denied';
+    } else {
+        finalStatusText = '⏳ AWAITING YOUR RESPONSE';
+        finalStatusClass = 'pending';
+    }
+    
+    let actionsHtml = '';
+    if (showButtons) {
+        actionsHtml = `
+            <div class="join-action-btns">
+                <button class="join-btn approve" onclick="handleBookingRequest(${msg.id},'accept','${ad.booking_id}','${escapeHtml(ad.hiker_name)}',${ad.hiker_user_id})">
+                    <i class="fas fa-check"></i> Accept & Confirm
+                </button>
+                <button class="join-btn deny" onclick="handleBookingRequest(${msg.id},'decline','${ad.booking_id}','${escapeHtml(ad.hiker_name)}',${ad.hiker_user_id})">
+                    <i class="fas fa-times"></i> Decline
+                </button>
+            </div>`;
+    } else if (handled) {
+        actionsHtml = `<div class="join-status-badge ${finalStatusClass}" style="justify-content: center; display: flex; align-items: center; gap: 8px;">
+            <i class="fas ${(finalStatus === 'approved' || finalStatus === 'active') ? 'fa-check-circle' : 'fa-times-circle'}"></i>
+            ${finalStatusText}
+        </div>`;
+    }
+
+    const card = `
+        <div class="msg-card join-request">
+            <div class="msg-card-hdr">
+                <span class="msg-card-icon">🏔️</span>
+                <div class="msg-card-hdr-label">
+                    <div class="msg-card-hdr-title">${showButtons ? 'NEW BOOKING REQUEST' : (finalStatus === 'cancelled' ? 'BOOKING CANCELLED' : 'BOOKING REQUEST')}</div>
+                    <div class="msg-card-hdr-sub">${isGuide ? (showButtons ? 'Hiker wants to book a hike' : (finalStatus === 'cancelled' ? 'This booking was cancelled by the hiker' : 'Request processed')) : 'Booking request sent'}</div>
+                </div>
+            </div>
+            <div class="msg-card-body">
+                <div class="msg-card-title">${escapeHtml(ad.hiker_name)}</div>
+                <div class="msg-card-detail"><i class="fas fa-mountain"></i> ${escapeHtml(ad.mountain_name)}</div>
+                <div class="msg-card-detail"><i class="fas fa-calendar"></i> ${escapeHtml(ad.booking_date)}</div>
+                <div class="msg-card-detail"><i class="fas fa-users"></i> ${ad.pax} hiker(s)</div>
+                <div class="msg-card-detail"><i class="fas fa-tag"></i> #${escapeHtml(ad.booking_number)}</div>
+                ${actionsHtml}
+            </div>
+        </div>
+        <div class="msg-time">${timeStr}</div>`;
+
+    if (isGuide) {
+        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+    } else {
+        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+    }
+                continue;
+            }
+        } catch (e) {
+            console.error('action_data parse error', e, msg.action_data);
+        }
+    }
+
+        // 3. System Announcement / Booking Confirmation Cards
+const isSystemAnnouncement = (msg.is_system_announcement == 1) || (msg.sender_role === 'guide' && msg.is_system_announcement == 1);
+
+if (isSystemAnnouncement || msg.sender_role === 'system') {
+    let icon = '📢';
+    let title = 'System Announcement';
+    let subTitle = 'Official Update';
+    let headerColor = 'background: #6b7280;';
+    
+    // Check if this is a booking confirmation message - render it as a styled card
+    if (msg.body && msg.body.includes('BOOKING CONFIRMED')) {
+        const bkNumMatch  = msg.body.match(/booking #(\S+)/i);
+        const dateMatch   = msg.body.match(/Hike Date:\s*(.+)/);
+        const mtnMatch    = msg.body.match(/Mountain:\s*(.+)/);
+        const totalMatch  = msg.body.match(/Total Amount:\s*\u20b1([\d,]+(?:\.\d{2})?)/);
+        const dpMatch     = msg.body.match(/Downpayment Required:\s*\u20b1([\d,]+(?:\.\d{2})?)/);
+        const balMatch    = msg.body.match(/Remaining Balance:\s*\u20b1([\d,]+(?:\.\d{2})?)/);
+        const guideMatch  = msg.body.match(/confirmed by (.+?)\./);
+
+        const cfBkNum = bkNumMatch ? bkNumMatch[1].replace(/[.,;:!?]$/, '') : '';
+        const cfDate  = dateMatch  ? dateMatch[1].trim()  : '';
+        const cfMtn   = mtnMatch   ? mtnMatch[1].trim()   : '';
+        const cfTotal = totalMatch ? totalMatch[1]         : '';
+        const cfDp    = dpMatch    ? dpMatch[1]            : '';
+        const cfBal   = balMatch   ? balMatch[1]           : '';
+        const cfGuide = guideMatch ? guideMatch[1].trim()  : '';
+
+        const sysDetailRows = [
+            cfDate  ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4C5} Hike Date</span><span style="font-weight:700;font-size:12px;">${escapeHtml(cfDate)}</span></div>` : '',
+            cfMtn   ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4CD} Mountain</span><span style="font-weight:700;font-size:12px;text-align:right;max-width:58%;">${escapeHtml(cfMtn)}</span></div>` : '',
+            cfTotal ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4B0} Total Amount</span><span style="font-weight:700;font-size:13px;">\u{20B1}${escapeHtml(cfTotal)}</span></div>` : '',
+            cfDp    ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4B5} Downpayment</span><span style="font-weight:800;font-size:13px;color:#fef08a;">\u{20B1}${escapeHtml(cfDp)}</span></div>` : '',
+            cfBal   ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;"><span style="opacity:0.8;font-size:12px;">\u{1F4E6} Remaining Balance</span><span style="font-weight:700;font-size:12px;">\u{20B1}${escapeHtml(cfBal)}</span></div>` : '',
+        ].filter(Boolean).join('');
+
+        const styledCard = `
+            <div style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(5,150,105,0.25);">
+                <div style="background:linear-gradient(135deg,#059669 0%,#047857 100%);padding:14px 16px;display:flex;align-items:center;gap:12px;color:white;">
+                    <span style="font-size:28px;">\u{1F389}</span>
+                    <div style="flex:1;">
+                        <div style="font-size:12px;font-weight:800;letter-spacing:0.6px;text-transform:uppercase;">BOOKING CONFIRMED</div>
+                        <div style="font-size:10px;opacity:0.85;">Booking #${escapeHtml(cfBkNum)}${cfGuide ? ' &middot; ' + escapeHtml(cfGuide) : ''}</div>
+                    </div>
+                    <span style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">\u2713 CONFIRMED</span>
+                </div>
+                <div style="background:linear-gradient(135deg,#047857 0%,#065f46 100%);color:white;">
+                    ${sysDetailRows}
+                </div>
+                <div style="background:#f0fdf4;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:14px;">\u23F0</span>
+                    <span style="font-size:11px;color:#065f46;font-weight:600;">Complete downpayment within 5 hours to secure your booking</span>
+                </div>
+            </div>
+            <div class="msg-time">${timeStr}</div>`;
+        
+        if (isMine) {
+            html += `<div class="msg-bubble-row mine"><div>${styledCard}</div></div>`;
+        } else {
+            html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${styledCard}</div></div>`;
+        }
+        continue;
+    }
+    
+    // For other system announcements, use the default card
+    if (msg.body && msg.body.includes('CANCELLED')) {
+        icon = '❌';
+        title = 'BOOKING CANCELLED';
+        subTitle = 'Cancellation Notice';
+        headerColor = 'background: #dc2626;';
+    } else if (msg.body && msg.body.includes('reminder')) {
+        icon = '🔔';
+        title = 'REMINDER';
+        subTitle = 'Friendly Reminder';
+        headerColor = 'background: #d97706;';
+    }
+    
+    const card = `
+        <div class="msg-card" style="border: none;">
+            <div class="msg-card-hdr" style="${headerColor}">
+                <span class="msg-card-icon">${icon}</span>
+                <div class="msg-card-hdr-label">
+                    <div class="msg-card-hdr-title">${title}</div>
+                    <div class="msg-card-hdr-sub">${subTitle}</div>
+                </div>
+            </div>
+            <div class="msg-card-body">
+                <div>${(msg.body || '').replace(/\*\*/g, '').split('\n').map(l => l.trim()).filter(l => l.length > 0).map(l => `<div style="padding:3px 0;font-size:13px;color:#4A5568;line-height:1.6;">${escapeHtml(l)}</div>`).join('')}</div>
+            </div>
+        </div>
+        <div class="msg-time">${timeStr}</div>`;
+    
+    if (isMine) {
+        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+    } else {
+        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+    }
+    continue;
+}
 
         // 4. NORMAL TEXT MESSAGE BUBBLE
         const bubble = `<div class="msg-bubble ${isMine ? 'mine' : 'theirs'}">${escapeHtml(msg.body || '')}</div>`;
@@ -1461,10 +1846,11 @@ if (msg.action_data && msg.action_data !== 'null' && msg.action_data !== '') {
                     </div>
                 </div>`;
         }
-    });
+    }  // <-- This closes the for loop (NOT });)
 
+    // After the for loop, set the HTML
     area.innerHTML = html;
-     startCountdownTimers(); // Add this line
+    startCountdownTimers();
 
     const wrapper = document.getElementById('chatMessagesWrapper');
     if (wrapper) {
@@ -1559,6 +1945,39 @@ function markPaymentAsSent(messageId, bookingNumber) {
     }
 }
 
+async function sendMessage() {
+    const input = document.getElementById('msgInput');
+    const body = input ? input.value.trim() : '';
+    if (!body || !activeThread) return;
+
+    input.value = '';
+    input.disabled = true;
+
+    try {
+        const fd = new FormData();
+        fd.append('action', 'send_message');
+        fd.append('recipient_id', activeThread);  // ✅ This is correct
+        fd.append('body', body);
+
+        const res = await fetch('../api/guide_messages.php', { method: 'POST', body: fd });
+        const data = await res.json();
+
+        if (data.success) {
+            await loadMessages(activeThread);  // ❌ This line uses activeThread correctly
+            // But note: loadMessages already has activeThread as parameter
+        } else {
+            showToast('Failed to send message');
+            input.value = body;
+        }
+    } catch (e) {
+        showToast('Error sending message');
+        input.value = body;
+    } finally {
+        input.disabled = false;
+        input.focus();
+    }
+}
+
 function sendQuick(text) {
     document.getElementById('msgInput').value = text;
     sendMessage();
@@ -1622,10 +2041,23 @@ async function handleBookingRequest(messageId, action, bookingId, hikerName, hik
         return;
     }
     
-    if (!confirm(`Are you sure you want to ${action} this booking request?`)) return;
+    let confirmMessage = action === 'accept' 
+        ? `Accept booking request from ${hikerName}? This will send payment instructions.` 
+        : `Decline booking request from ${hikerName}?`;
+    
+    if (!confirm(confirmMessage)) return;
     
     isProcessing = true;
     showToast('Processing...');
+    
+    let cancelReason = '';
+    if (action === 'decline') {
+        cancelReason = prompt('Please provide a reason for declining this booking:', 'Guide not available for this date');
+        if (!cancelReason) {
+            isProcessing = false;
+            return;
+        }
+    }
     
     const fd = new FormData();
     fd.append('action', `${action}_booking_request`);
@@ -1633,13 +2065,21 @@ async function handleBookingRequest(messageId, action, bookingId, hikerName, hik
     fd.append('booking_id', bookingId);
     fd.append('hiker_name', hikerName);
     fd.append('hiker_user_id', hikerUserId);
+    if (cancelReason) {
+        fd.append('reason', cancelReason);
+    }
     
     try {
         const res = await fetch('../api/guide_messages.php', { method: 'POST', body: fd });
         const data = await res.json();
         
-        showToast(data.message || (data.success ? 'Done!' : 'Failed'));
         if (data.success) {
+            if (action === 'accept') {
+                showToast(`✅ Booking ${data.booking_number || bookingId} confirmed! Payment instructions sent.`);
+            } else {
+                showToast(`❌ Booking declined.`);
+            }
+            
             // Refresh messages and conversations to update the button state
             setTimeout(async () => {
                 if (activeThread) {
@@ -1647,8 +2087,11 @@ async function handleBookingRequest(messageId, action, bookingId, hikerName, hik
                 }
                 await loadConversations();
             }, 600);
+        } else {
+            showToast(data.message || 'Failed to process request');
         }
     } catch (err) {
+        console.error('Error:', err);
         showToast('Network error');
     } finally {
         setTimeout(() => {
@@ -1656,6 +2099,7 @@ async function handleBookingRequest(messageId, action, bookingId, hikerName, hik
         }, 1000);
     }
 }
+
 function viewBookingDetails(bookingId) {
     // Store the current scroll position before navigating away
     if (activeThread) {
@@ -1731,6 +2175,117 @@ pollInterval = setInterval(() => {
         loadConversations(true);
     }
 }, 10000);
+
+// Modal variables
+let currentVerifyBookingNumber = null;
+let currentVerifyMessageId = null;
+
+function verifyAndConfirmPayment(bookingNumber, messageId) {
+    currentVerifyBookingNumber = bookingNumber;
+    currentVerifyMessageId = messageId;
+    
+    // Open modal to enter downpayment amount
+    openVerifyModal(bookingNumber);
+}
+
+function openVerifyModal(bookingNumber) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('verifyPaymentModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'verifyPaymentModal';
+        modal.style.cssText = 'display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1001; align-items:center; justify-content:center;';
+        modal.innerHTML = `
+            <div style="background:white; border-radius:16px; width:90%; max-width:400px; overflow:hidden;">
+                <div style="background:linear-gradient(135deg, #059669 0%, #047857 100%);padding:16px 20px;color:white;">
+                    <h3 style="margin:0;font-size:16px;">💵 Verify Downpayment</h3>
+                    <p style="margin:4px 0 0;font-size:12px;opacity:0.9;">Booking #<span id="verifyBookingNumber"></span></p>
+                </div>
+                <div style="padding:20px;">
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:6px;">Downpayment Amount</label>
+                        <input type="number" id="downpaymentAmount" class="inp" placeholder="₱" style="width:100%;padding:12px;border:1.5px solid #e5e7eb;border-radius:12px;">
+                    </div>
+                    <p style="font-size:11px;color:#6b7280;margin-bottom:16px;">⚠️ Verify that the amount matches the receipt before confirming.</p>
+                    <div style="display:flex;gap:12px;">
+                        <button class="btn btn-outline" style="flex:1;" onclick="closeVerifyModal()">Cancel</button>
+                        <button class="btn btn-primary" style="flex:1;background:#059669;" onclick="submitVerification()">Confirm Payment</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    document.getElementById('verifyBookingNumber').textContent = bookingNumber;
+    document.getElementById('downpaymentAmount').value = '';
+    modal.style.display = 'flex';
+}
+
+function closeVerifyModal() {
+    const modal = document.getElementById('verifyPaymentModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function submitVerification() {
+    const amount = document.getElementById('downpaymentAmount').value.trim();
+    
+    if (!amount) {
+        showToast('❌ Please enter the downpayment amount');
+        return;
+    }
+    
+    closeVerifyModal();
+    
+    showToast('Verifying payment...');
+    
+    const fd = new FormData();
+    fd.append('action', 'verify_payment');
+    fd.append('booking_number', currentVerifyBookingNumber);
+    fd.append('message_id', currentVerifyMessageId);
+    fd.append('downpayment_amount', amount);
+    
+    fetch('../api/guide_messages.php', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast('✅ Payment confirmed! Hiker has been notified.');
+                if (activeThread) loadMessages(activeThread, true);
+            } else {
+                showToast('❌ Error: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('❌ Network error');
+        });
+}
+
+function rejectPaymentProof(bookingNumber, messageId) {
+    if (confirm(`❌ REJECT PAYMENT PROOF for booking #${bookingNumber}?\n\nAre you sure you want to reject this payment proof? The hiker will be notified to resubmit.`)) {
+        showToast('Rejecting payment proof...');
+        
+        const fd = new FormData();
+        fd.append('action', 'reject_payment');
+        fd.append('booking_number', bookingNumber);
+        fd.append('message_id', messageId);
+        
+        fetch('../api/guide_messages.php', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('❌ Payment rejected. Hiker has been notified.');
+                    if (activeThread) loadMessages(activeThread, true);
+                } else {
+                    showToast('❌ Error: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast('❌ Network error');
+            });
+    }
+}
 </script>
 </body>
 </html>

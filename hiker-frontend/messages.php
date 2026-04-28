@@ -756,97 +756,249 @@ function renderMessages(messages) {
             return;
         }
 
+        // 0.5. PAYMENT CONFIRMED / REJECTED CARDS (for hiker view)
+if (msg.body && (msg.body.includes('PAYMENT CONFIRMED') || msg.body.includes('PAYMENT PROOF REJECTED') || msg.body.includes('PAYMENT REJECTED'))) {
+    const isConfirmed = msg.body.includes('PAYMENT CONFIRMED');
+    const icon = isConfirmed ? '✅' : '❌';
+    const title = isConfirmed ? 'PAYMENT CONFIRMED' : 'PAYMENT REJECTED';
+    const bgColor = isConfirmed ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)';
+    
+    // Extract booking number
+    const bookingMatch = msg.body.match(/[Bb]ooking #([^\s\.\n]+)/);
+    let bookingNumber = bookingMatch ? bookingMatch[1] : 'N/A';
+    bookingNumber = bookingNumber.replace(/[.,;:!?]$/, '');
+    
+    // For confirmed: extract the key amounts for the summary row at top
+    let summaryHtml = '';
+    if (isConfirmed) {
+        const amountMatch = msg.body.match(/downpayment of ₱([\d,]+(?:\.\d{2})?)/i);
+        const remainingMatch = msg.body.match(/[Rr]emaining balance[^:]*:\s*₱([\d,]+(?:\.\d{2})?)/);
+        if (amountMatch) {
+            summaryHtml += `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #d1fae5;">
+                <span style="font-size:12px;color:#059669;font-weight:600;">💰 Downpayment Verified</span>
+                <span style="font-size:15px;font-weight:800;color:#059669;">₱${amountMatch[1]}</span>
+            </div>`;
+        }
+        if (remainingMatch) {
+            summaryHtml += `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #e5e7eb;">
+                <span style="font-size:12px;color:#6b7280;">📦 Remaining Balance (to guide)</span>
+                <span style="font-size:14px;font-weight:700;color:#374151;">₱${remainingMatch[1]}</span>
+            </div>`;
+        }
+    } else {
+        // For rejected: extract downpayment required and guide fee
+        const dpMatch = msg.body.match(/[Dd]ownpayment [Rr]equired[:\s]*₱([\d,]+(?:\.\d{2})?)/);
+        const feeMatch = msg.body.match(/[Gg]uide [Ff]ee[:\s]*₱([\d,]+(?:\.\d{2})?)/);
+        if (dpMatch) {
+            summaryHtml += `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #fee2e2;">
+                <span style="font-size:12px;color:#dc2626;font-weight:600;">💰 Downpayment Required</span>
+                <span style="font-size:15px;font-weight:800;color:#dc2626;">₱${dpMatch[1]}</span>
+            </div>`;
+        }
+        if (feeMatch) {
+            summaryHtml += `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #e5e7eb;">
+                <span style="font-size:12px;color:#6b7280;">🏔️ Tour Guide Fee</span>
+                <span style="font-size:14px;font-weight:700;color:#374151;">₱${feeMatch[1]}</span>
+            </div>`;
+        }
+    }
+    
+    // Build the message lines — strip markdown **, skip the title line and booking number line, render each line separately
+    const cleanLines = msg.body
+        .replace(/\*\*/g, '')
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0)
+        // Skip lines already shown in the header or summary rows
+        .filter(l => !l.match(/^(✅|❌)\s*(DOWNPAYMENT CONFIRMED|PAYMENT REJECTED|PAYMENT PROOF REJECTED)/) )
+        .filter(l => !l.match(/^[Bb]ooking #/))
+        .filter(l => !l.match(/^[Dd]ownpayment [Rr]equired/))
+        .filter(l => !l.match(/^[Rr]emaining balance/i))
+        .filter(l => !l.match(/^\(Tour Guide Fee/))
+        .filter(l => !l.match(/^🏔️ Tour Guide Fee/));
+
+    const bodyLinesHtml = cleanLines.map(line => 
+        `<div style="padding:3px 0;font-size:13px;color:#374151;line-height:1.6;">${esc(line)}</div>`
+    ).join('');
+    
+    const card = `
+        <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
+            <div class="msg-card-hdr" style="background:${bgColor};padding:12px 16px;display:flex;align-items:center;gap:10px;color:white;">
+                <span class="msg-card-icon" style="font-size:20px;">${icon}</span>
+                <div class="msg-card-hdr-label" style="flex:1;">
+                    <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">${title}</div>
+                    <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${esc(bookingNumber)}</div>
+                </div>
+            </div>
+            <div class="msg-card-body" style="padding:16px;">
+                ${summaryHtml}
+                <div style="margin-top:${summaryHtml ? '12px' : '0'};padding-top:${summaryHtml ? '4px' : '0'};">
+                    ${bodyLinesHtml}
+                </div>
+            </div>
+        </div>
+        <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
+    
+    if (isMine) {
+        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+    } else {
+        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+    }
+    return;
+}
+
         // Check for action_data messages (payment instructions, booking requests, join requests)
         if (msg.action_data && msg.action_data !== 'null' && msg.action_data !== '') {
             try {
                 const ad = typeof msg.action_data === 'string' ? JSON.parse(msg.action_data) : msg.action_data;
 
                 // 1. PAYMENT INSTRUCTIONS CARD (GCash details)
-                if (ad.type === 'payment_instructions') {
-                    const downpayment = ad.downpayment_amount || '₱0.00';
-                    const gcashNumber = ad.gcash_number || 'Not set';
-                    const gcashName = ad.gcash_name || 'Not set';
-                    const bookingNumber = ad.booking_number || 'N/A';
-                    const totalAmount = ad.total_amount || 'N/A';
-                    const remaining = parseFloat(totalAmount) - parseFloat(downpayment);
-                    const qrCodeUrl = ad.qr_code_url || '../assets/images/gcash-qr.jpg';
-                    
-                    let deadlineHtml = '';
-                    if (ad.deadline) {
-                        const deadlineDate = new Date(ad.deadline).toLocaleString();
-                        deadlineHtml = `<div class="payment-detail-row">
-                            <span class="payment-label">⏰ Pay before</span>
-                            <span class="payment-value" style="color:#dc2626;">${deadlineDate}</span>
-                        </div>`;
-                    }
-                    
-                    let statusText = 'AWAITING PAYMENT';
-                    let buttonHtml = `
-                        <button class="btn-payment primary" onclick="markPaymentAsSent('${esc(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:none;background:#2563eb;color:white;cursor:pointer;">
-                            <i class="fas fa-check-circle"></i> I've Paid
-                        </button>
-                    `;
+if (ad.type === 'payment_instructions') {
+    const gcashNumber = ad.gcash_number || 'Not set';
+    const gcashName = ad.gcash_name || 'Not set';
+    const bookingNumber = ad.booking_number || 'N/A';
+    const totalAmount = ad.total_amount || 'N/A';
+    const qrCodeUrl = ad.qr_code_url || '../assets/images/gcash-qr.jpg';
+    
+    // Calculate guide fee based on hike type (from ad or fallback)
+    let guideFee = ad.guide_fee || 0;
+    // If not in ad, we need to calculate - but ideally should be passed from backend
+    if (!guideFee) {
+        // Fallback: assume day hike = 801, overnight = 1500
+        guideFee = ad.hike_type === 'overnight' ? 1500 : 801;
+    }
+    
+    // Use downpayment_amount from action_data if stored, otherwise calculate
+    let downpayment;
+    if (ad.downpayment_amount) {
+        downpayment = parseFloat(String(ad.downpayment_amount).replace(/,/g, ''));
+    } else {
+        downpayment = Math.max(200, Math.round(guideFee * 0.2));
+    }
+    // Remaining balance: use stored value if available, otherwise calculate
+    const remainingBalance = ad.remaining_balance
+        ? parseFloat(String(ad.remaining_balance).replace(/,/g, ''))
+        : (Number(guideFee) - downpayment);
+    
+    // Get deadline
+    let deadlineHtml = '';
+    let deadlineTimestamp = null;
+    if (ad.deadline) {
+        deadlineTimestamp = new Date(ad.deadline).getTime();
+        const uniqueTimerId = 'timer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        deadlineHtml = `
+            <div class="countdown-timer" id="${uniqueTimerId}" data-deadline="${deadlineTimestamp}" style="background: #fff3cd; padding: 8px 12px; border-radius: 8px; margin: 10px 0; text-align: center;">
+                <div style="font-size: 11px; color: #856404; margin-bottom: 4px;">⏰ DOWNPAYMENT DEADLINE</div>
+                <div style="font-size: 16px; font-weight: 700; color: #d97706;" class="countdown-display"></div>
+            </div>
+        `;
+    }
+    
+    let statusText = 'AWAITING PAYMENT';
+    let buttonHtml = `
+        <button class="btn-payment primary" onclick="markPaymentAsSent('${esc(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:none;background:#2563eb;color:white;cursor:pointer;">
+            <i class="fas fa-check-circle"></i> I've Paid
+        </button>
+    `;
 
-                    if (ad.payment_status === 'paid') {
-                        statusText = '✓ PAYMENT CONFIRMED';
-                        buttonHtml = `<div style="background:#d1fae5; color:#059669; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:700;">
-                            <i class="fas fa-check-circle"></i> Payment Confirmed by Guide
-                        </div>`;
-                    } else if (ad.payment_status === 'pending_approval') {
-                        statusText = '⏳ AWAITING APPROVAL';
-                        buttonHtml = `<div style="background:#fef3c7; color:#d97706; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:700;">
-                            <i class="fas fa-hourglass-half"></i> Waiting for Guide to Verify
-                        </div>`;
-                    } else if (ad.payment_status === 'expired') {
-                        statusText = '⏰ EXPIRED';
-                        buttonHtml = `<div style="background:#fee2e2; color:#dc2626; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:700;">
-                            <i class="fas fa-times-circle"></i> Payment Deadline Passed
-                        </div>`;
-                    }
-                    
-                    const uniqueQrId = 'qr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-                    
-                    const card = `
-                        <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
-                            <div class="msg-card-hdr" style="background:linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);padding:12px 16px;display:flex;align-items:center;gap:10px;color:white;">
-                                <span class="msg-card-icon" style="font-size:20px;">💰</span>
-                                <div class="msg-card-hdr-label" style="flex:1;">
-                                    <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">PAYMENT INSTRUCTIONS</div>
-                                    <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${esc(bookingNumber)}</div>
-                                </div>
-                                <span class="payment-status-badge" style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">${statusText}</span>
-                            </div>
-                            <div class="msg-card-body" style="padding:16px;">
-                                <div class="payment-detail-row"><span class="payment-label">Total Amount</span><span class="payment-value amount">₱${esc(totalAmount)}</span></div>
-                                <div class="payment-detail-row"><span class="payment-label">Downpayment Required</span><span class="payment-value amount" style="color:#059669;">₱${esc(downpayment)}</span></div>
-                                <div class="payment-detail-row"><span class="payment-label">Remaining Balance</span><span class="payment-value">₱${esc(remaining)}</span></div>
-                                ${deadlineHtml}
-                                <div class="gcash-details">
-                                    <div class="gcash-row"><i class="fas fa-mobile-alt"></i><span><strong>GCash Number:</strong> ${esc(gcashNumber)}</span><button onclick="copyGCashNumber('${esc(gcashNumber)}')" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#2563eb;"><i class="fas fa-copy"></i></button></div>
-                                    <div class="gcash-row"><i class="fas fa-user"></i><span><strong>Account Name:</strong> ${esc(gcashName)}</span></div>
-                                </div>
-                                <div class="qr-code-section">
-                                    <button class="qr-toggle-btn" onclick="toggleQRCode('${uniqueQrId}')"><i class="fas fa-qrcode"></i> Show/Hide QR Code</button>
-                                    <div id="${uniqueQrId}" class="qr-code-preview" style="display:none;margin-top:12px;">
-                                        <img src="${esc(qrCodeUrl)}" alt="GCash QR Code" style="max-width:120px;border-radius:12px;cursor:pointer;" onclick="window.open('${esc(qrCodeUrl)}', '_blank')">
-                                        <small>Click to enlarge</small>
-                                    </div>
-                                </div>
-                                <div class="payment-actions">
-                                    <button class="btn-payment secondary" onclick="copyGCashNumber('${esc(gcashNumber)}')">Copy Number</button>
-                                    ${buttonHtml}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
-                    
-                    if (isMine) {
-                        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
-                    } else {
-                        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
-                    }
-                    return;
-                }
+    if (ad.payment_status === 'paid') {
+        statusText = '✓ PAYMENT CONFIRMED';
+        buttonHtml = `<div style="background:#d1fae5; color:#059669; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:700;">
+            <i class="fas fa-check-circle"></i> Payment Confirmed by Guide
+        </div>`;
+    } else if (ad.payment_status === 'pending_approval') {
+        statusText = '⏳ AWAITING APPROVAL';
+        buttonHtml = `<div style="background:#fef3c7; color:#d97706; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:700;">
+            <i class="fas fa-hourglass-half"></i> Waiting for Guide to Verify
+        </div>`;
+    } else if (ad.payment_status === 'expired') {
+        statusText = '⏰ EXPIRED';
+        buttonHtml = `<div style="background:#fee2e2; color:#dc2626; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:700;">
+            <i class="fas fa-times-circle"></i> Payment Deadline Passed
+        </div>`;
+    }
+    
+    const uniqueQrId = 'qr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    
+    const card = `
+        <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
+            <div class="msg-card-hdr" style="background:linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);padding:12px 16px;display:flex;align-items:center;gap:10px;color:white;">
+                <span class="msg-card-icon" style="font-size:20px;">💰</span>
+                <div class="msg-card-hdr-label" style="flex:1;">
+                    <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">PAYMENT INSTRUCTIONS</div>
+                    <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${esc(bookingNumber)}</div>
+                </div>
+                <span class="payment-status-badge" style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">${statusText}</span>
+            </div>
+            <div class="msg-card-body" style="padding:16px;">
+                <div class="payment-detail-row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                    <span class="payment-label" style="font-size:12px;color:#6b7280;">Total Amount</span>
+                    <span class="payment-value amount" style="font-size:16px;font-weight:700;color:#2563eb;">₱${esc(totalAmount)}</span>
+                </div>
+                <div class="payment-detail-row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                    <span class="payment-label" style="font-size:12px;color:#6b7280;">Tour Guide Fee</span>
+                    <span class="payment-value" style="font-size:14px;font-weight:600;">₱${esc(guideFee)}</span>
+                </div>
+                <div class="payment-detail-row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                    <span class="payment-label" style="font-size:12px;color:#6b7280;">Downpayment Required</span>
+                    <span class="payment-value amount" style="font-size:16px;font-weight:700;color:#059669;">₱${downpayment.toFixed(2)}</span>
+                </div>
+                <div class="payment-detail-row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                    <span class="payment-label" style="font-size:12px;color:#6b7280;">Remaining Balance (to guide)</span>
+                    <span class="payment-value" style="font-size:14px;font-weight:600;">₱${remainingBalance.toFixed(2)}</span>
+                </div>
+                
+                ${deadlineHtml}
+                
+                <div class="gcash-details" style="background:#f0f9ff;border-radius:12px;padding:12px;margin:12px 0;">
+                    <div class="gcash-row" style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;">
+                        <i class="fas fa-mobile-alt" style="color:#2563eb;width:20px;"></i>
+                        <span><strong>GCash Number:</strong> ${esc(gcashNumber)}</span>
+                        <button onclick="copyGCashNumber('${esc(gcashNumber)}')" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#2563eb;">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    <div class="gcash-row" style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;">
+                        <i class="fas fa-user" style="color:#2563eb;width:20px;"></i>
+                        <span><strong>Account Name:</strong> ${esc(gcashName)}</span>
+                    </div>
+                </div>
+                
+                <div class="qr-code-section" style="text-align:center;margin-top:12px;">
+                    <button class="qr-toggle-btn" onclick="toggleQRCode('${uniqueQrId}')" style="background:#f3f4f6;border:1px solid #e5e7eb;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                        <i class="fas fa-qrcode"></i> Show/Hide QR Code
+                    </button>
+                    <div id="${uniqueQrId}" class="qr-code-preview" style="display:none;margin-top:12px;">
+                        <img src="${esc(qrCodeUrl)}" alt="GCash QR Code" style="max-width:120px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('${esc(qrCodeUrl)}', '_blank')">
+                        <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to enlarge</small>
+                    </div>
+                </div>
+                
+                <div class="payment-actions" style="display:flex;gap:10px;margin-top:16px;">
+                    <button class="btn-payment secondary" onclick="copyGCashNumber('${esc(gcashNumber)}')" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid #e5e7eb;background:#f3f4f6;cursor:pointer;">
+                        <i class="fas fa-copy"></i> Copy Number
+                    </button>
+                    ${buttonHtml}
+                </div>
+                
+                <div class="info-note" style="background:#fef3c7;border-radius:8px;padding:10px;margin-top:12px;text-align:center;">
+                    <span style="font-size:11px;color:#d97706;">⚠️ Downpayment is 20% of guide fee (min ₱200). Pay directly to guide via GCash.</span>
+                </div>
+            </div>
+        </div>
+        <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
+    
+    if (isMine) {
+        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+    } else {
+        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+    }
+    return;
+}
 
 
                 // 2. BOOKING REQUEST CARD
@@ -967,7 +1119,7 @@ function renderMessages(messages) {
                         </div>
                     </div>
                     <div class="msg-card-body">
-                        <div class="msg-card-desc">${esc(msg.body || '')}</div>
+                        <div>${(msg.body || '').replace(/\*\*/g, '').split('\n').map(l => l.trim()).filter(l => l.length > 0).map(l => `<div style="padding:3px 0;font-size:13px;color:#4A5568;line-height:1.6;">${esc(l)}</div>`).join('')}</div>
                     </div>
                 </div>
                 <div class="msg-time" style="margin-top: 4px;">${timeStr}</div>`;
@@ -992,7 +1144,7 @@ function renderMessages(messages) {
                         </div>
                     </div>
                     <div class="msg-card-body">
-                        <div class="msg-card-desc">${esc(msg.body || '')}</div>
+                        <div>${(msg.body || '').replace(/\*\*/g, '').split('\n').map(l => l.trim()).filter(l => l.length > 0).map(l => `<div style="padding:3px 0;font-size:13px;color:#4A5568;line-height:1.6;">${esc(l)}</div>`).join('')}</div>
                     </div>
                 </div>
                 <div class="msg-time" style="margin-top: 4px;">${timeStr}</div>`;
@@ -1033,30 +1185,82 @@ function renderMessages(messages) {
         }
 
         // Check if this is a system announcement 
-        const isSystemAnnouncement = (msg.is_system_announcement == 1) || 
-                                      (msg.sender_role === 'guide' && msg.is_system_announcement == 1) ||
-                                      (msg.body && (msg.body.includes('reminder') || msg.body.includes('confirmed') || msg.body.includes('Confirmed')));
-        
+        const isSystemAnnouncement = (msg.is_system_announcement == 1) ||
+                                      (msg.sender_role === 'guide' && msg.is_system_announcement == 1);
+
         if (isSystemAnnouncement || msg.is_system_announcement == 1 || msg.sender_role === 'system') {
-            let cardType = 'system-announcement-card';
+
+            // BOOKING CONFIRMED - structured card with parsed fields
+            if (msg.body && msg.body.includes('BOOKING CONFIRMED')) {
+                const bkNumMatch  = msg.body.match(/booking #(\S+)/i);
+                const dateMatch   = msg.body.match(/Hike Date:\s*(.+)/);
+                const mtnMatch    = msg.body.match(/Mountain:\s*(.+)/);
+                const totalMatch  = msg.body.match(/Total Amount:\s*\u20b1([\d,]+(?:\.\d{2})?)/);
+                const dpMatch     = msg.body.match(/Downpayment Required:\s*\u20b1([\d,]+(?:\.\d{2})?)/);
+                const balMatch    = msg.body.match(/Remaining Balance:\s*\u20b1([\d,]+(?:\.\d{2})?)/);
+                const guideMatch  = msg.body.match(/confirmed by (.+?)\./);
+
+                const cfBkNum = bkNumMatch ? bkNumMatch[1].replace(/[.,;:!?]$/, '') : '';
+                const cfDate  = dateMatch  ? dateMatch[1].trim()  : '';
+                const cfMtn   = mtnMatch   ? mtnMatch[1].trim()   : '';
+                const cfTotal = totalMatch ? totalMatch[1]         : '';
+                const cfDp    = dpMatch    ? dpMatch[1]            : '';
+                const cfBal   = balMatch   ? balMatch[1]           : '';
+                const cfGuide = guideMatch ? guideMatch[1].trim()  : '';
+
+                const detailRows = [
+                    cfDate  ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4C5} Hike Date</span><span style="font-weight:700;font-size:12px;">${esc(cfDate)}</span></div>` : '',
+                    cfMtn   ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4CD} Mountain</span><span style="font-weight:700;font-size:12px;text-align:right;max-width:58%;">${esc(cfMtn)}</span></div>` : '',
+                    cfTotal ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4B0} Total Amount</span><span style="font-weight:700;font-size:13px;">\u{20B1}${esc(cfTotal)}</span></div>` : '',
+                    cfDp    ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.12);"><span style="opacity:0.8;font-size:12px;">\u{1F4B5} Downpayment</span><span style="font-weight:800;font-size:13px;color:#fef08a;">\u{20B1}${esc(cfDp)}</span></div>` : '',
+                    cfBal   ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;"><span style="opacity:0.8;font-size:12px;">\u{1F4E6} Remaining Balance</span><span style="font-weight:700;font-size:12px;">\u{20B1}${esc(cfBal)}</span></div>` : '',
+                ].filter(Boolean).join('');
+
+                const styledCard = `
+                    <div style="width:340px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(5,150,105,0.25);">
+                        <div style="background:linear-gradient(135deg,#059669 0%,#047857 100%);padding:14px 16px;display:flex;align-items:center;gap:12px;color:white;">
+                            <span style="font-size:28px;">\u{1F389}</span>
+                            <div style="flex:1;">
+                                <div style="font-size:12px;font-weight:800;letter-spacing:0.6px;text-transform:uppercase;">BOOKING CONFIRMED</div>
+                                <div style="font-size:10px;opacity:0.85;">Booking #${esc(cfBkNum)}${cfGuide ? ' &middot; ' + esc(cfGuide) : ''}</div>
+                            </div>
+                            <span style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">\u2713 CONFIRMED</span>
+                        </div>
+                        <div style="background:linear-gradient(135deg,#047857 0%,#065f46 100%);color:white;">
+                            ${detailRows}
+                        </div>
+                        <div style="background:#f0fdf4;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:14px;">\u23F0</span>
+                            <span style="font-size:11px;color:#065f46;font-weight:600;">Complete downpayment within 3-4 hours to secure your booking</span>
+                        </div>
+                    </div>
+                    <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
+
+                if (isMine) {
+                    html += `<div class="msg-bubble-row mine"><div>${styledCard}</div></div>`;
+                } else {
+                    html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${styledCard}</div></div>`;
+                }
+                return;
+            }
+
+            // Other system announcements (reminders, cancelled, etc.)
             let icon = '📢';
             let title = 'System Announcement';
             let subTitle = 'Official Update';
-            
-            if (msg.body && (msg.body.includes('confirmed') || msg.body.includes('Confirmed'))) {
-                cardType = 'booking-update';
-                icon = '✅';
-                title = 'Booking Confirmed';
-                subTitle = 'Tour Update';
-            } else if (msg.body && msg.body.includes('reminder')) {
-                cardType = 'booking-update';
+
+            if (msg.body && msg.body.includes('reminder')) {
                 icon = '🔔';
                 title = 'Reminder';
                 subTitle = 'Friendly Reminder';
+            } else if (msg.body && msg.body.includes('CANCELLED')) {
+                icon = '❌';
+                title = 'Booking Cancelled';
+                subTitle = 'Cancellation Notice';
             }
-            
+
             const card = `
-                <div class="msg-card ${cardType}">
+                <div class="msg-card system-announcement-card">
                     <div class="msg-card-hdr">
                         <span class="msg-card-icon">${icon}</span>
                         <div class="msg-card-hdr-label">
@@ -1065,11 +1269,11 @@ function renderMessages(messages) {
                         </div>
                     </div>
                     <div class="msg-card-body">
-                        <div class="msg-card-desc">${esc(msg.body || '')}</div>
+                        <div>${(msg.body || '').replace(/\*\*/g, '').split('\n').map(l => l.trim()).filter(l => l.length > 0).map(l => `<div style="padding:3px 0;font-size:13px;color:#4A5568;line-height:1.6;">${esc(l)}</div>`).join('')}</div>
                     </div>
                 </div>
                 <div class="msg-time" style="margin-top: 4px;">${timeStr}</div>`;
-            
+
             if (isMine) {
                 html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
             } else {
@@ -1103,7 +1307,49 @@ function renderMessages(messages) {
 
     area.innerHTML = html;
     area.scrollTop = area.scrollHeight;
+    startCountdownTimers();
 }
+// Countdown timer for downpayment deadlines
+function startCountdownTimers() {
+    const timers = document.querySelectorAll('.countdown-timer');
+    
+    timers.forEach(timer => {
+        const deadline = parseInt(timer.getAttribute('data-deadline'));
+        const displayElement = timer.querySelector('.countdown-display');
+        
+        if (!deadline || !displayElement) return;
+        
+        function updateCountdown() {
+            const now = new Date().getTime();
+            const distance = deadline - now;
+            
+            if (distance < 0) {
+                displayElement.innerHTML = '⏰ EXPIRED';
+                displayElement.style.color = '#dc2626';
+                timer.style.background = '#fee2e2';
+                clearInterval(timer.interval);
+                return;
+            }
+            
+            const hours = Math.floor(distance / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            
+            displayElement.innerHTML = `${hours}h ${minutes}m ${seconds}s`;
+            
+            if (distance < 3600000) {
+                displayElement.style.color = '#dc2626';
+                displayElement.style.fontWeight = '800';
+            } else if (distance < 10800000) {
+                displayElement.style.color = '#d97706';
+            }
+        }
+        
+        updateCountdown();
+        timer.interval = setInterval(updateCountdown, 1000);
+    });
+}
+
 
 
 

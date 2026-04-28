@@ -3,6 +3,7 @@
 // hiker frontend/bookings.php - LAKBAY Bookings Page (Database Connected)
 require_once __DIR__ . '/../config/db.php';
 date_default_timezone_set('Asia/Manila');
+
 session_start();
 // At top of file, BEFORE session_start()
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && 
@@ -370,33 +371,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
                     $dbType = 'day_hike';
                 }
 
-                $currentTime = date('Y-m-d H:i:s');
+// Set timezone to Asia/Manila for accurate deadline calculation
+date_default_timezone_set('Asia/Manila');
+
+$currentTime = date('Y-m-d H:i:s');
+
+// Calculate downpayment deadline - 5 hours from current time
+$deadlineTimestamp = strtotime('+5 hours');
+$downpaymentDeadline = date('Y-m-d H:i:s', $deadlineTimestamp);
+
+// DEBUG: Log to verify
+error_log("Booking Creation - Current Time: " . $currentTime);
+error_log("Booking Creation - Deadline Time: " . $downpaymentDeadline);
+error_log("Booking Creation - Deadline Timestamp: " . $deadlineTimestamp);
+
 $stmt = $pdo->prepare("
     INSERT INTO bookings (
         booking_number, user_id, mountain_id, guide_id,
         booking_date, hike_date, start_time, hike_type, number_of_hikers,
         total_amount, downpayment_amount, downpayment_status, payment_status, status,
-        special_requests, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        special_requests, created_at, updated_at, downpayment_deadline
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
+
 $stmt->execute([
-    $bookingNumber,                                    // 1 - booking_number
-    $currentUserId,                                    // 2 - user_id  
-    $bookingData['mountainId'],                        // 3 - mountain_id
-    $bookingData['guideId'],                           // 4 - guide_id
-    $currentTime,                                      // 5 - booking_date
-    $bookingData['date'],                              // 6 - hike_date
-    $bookingData['time'],                              // 7 - start_time
-    $dbType,                                           // 8 - hike_type
-    $bookingData['pax'],                               // 9 - number_of_hikers
-    $totalAmount,                                      // 10 - total_amount
-    $bookingData['downpaymentAmount'] ?? 0,           // 11 - downpayment_amount
-    'unpaid',                                          // 12 - downpayment_status
-    'pending',                                         // 13 - payment_status
-    'pending',                                         // 14 - status
-    $bookingData['notes'] ?? '',                       // 15 - special_requests
-    $currentTime,                                      // 16 - created_at
-    $currentTime                                       // 17 - updated_at
+    $bookingNumber,
+    $currentUserId,
+    $bookingData['mountainId'],
+    $bookingData['guideId'],
+    $currentTime,  // booking_date
+    $bookingData['date'],
+    $bookingData['time'],
+    $dbType,
+    $bookingData['pax'],
+    $totalAmount,
+    $bookingData['downpaymentAmount'] ?? 0,
+    'unpaid',
+    'pending',
+    'pending',
+    $bookingData['notes'] ?? '',
+    $currentTime,  // created_at - explicitly set
+    $currentTime,  // updated_at - explicitly set
+    $downpaymentDeadline  // downpayment_deadline
 ]);
 
                 $dbBookingId = $pdo->lastInsertId();
@@ -890,6 +906,29 @@ if ($action === 'check_pending_request') {
     exit;
 }
 
+// Helper function to get guide fee from guide_mountain_rates
+function getGuideFee($pdo, $guideId, $mountainId, $hikeType) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT CASE WHEN ? = 'overnight' THEN guide_fee_overnight ELSE guide_fee_day END as guide_fee
+            FROM guide_mountain_rates
+            WHERE guide_id = ? AND mountain_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$hikeType, $guideId, $mountainId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($result && $result['guide_fee']) {
+            return floatval($result['guide_fee']);
+        }
+    } catch (PDOException $e) {
+        error_log('Guide fee fetch error: ' . $e->getMessage());
+    }
+    
+    // Fallback defaults if no rate found
+    return $hikeType === 'overnight' ? 1500 : 801;
+}
+
 // Get data for JavaScript
 $mountainsJSON = json_encode($dbMountains);
 $guidesJSON = json_encode($dbGuides);
@@ -1077,6 +1116,7 @@ body {
 .status-completed { background: #e8eaf6; color: #283593; border: 1px solid rgba(40,53,147,0.2); }
 .status-cancelled { background: #fce4ec; color: #c62828; border: 1px solid rgba(198,40,40,0.2); }
 .status-joined { background: #e8f5e9; color: #2e7d32; border: 1px solid rgba(46,125,50,0.2); }
+.status-waiting_payment { background: #fff8e1; color: #f57f17; border: 1px solid rgba(245,127,23,0.2); }
 
 /* ── REVIEW MODAL STARS ── */
 .star-rating { display: flex; gap: 8px; font-size: 28px; color: #ddd; cursor: pointer; }
@@ -2752,6 +2792,29 @@ echo "const currentUserName = " . json_encode($user_name) . ";\n";
 echo "const currentUserId = " . json_encode($currentUserId) . ";\n";
 echo "let bookings = " . json_encode($dbUserBookings) . ";\n";
 echo "let nextId = Math.max(...bookings.map(b => parseInt(b.id?.replace('BK', '')) || 0), 10) + 1;\n";
+
+
+// Build guide fee map for faster JS lookup
+$guideFeeMap = [];
+foreach ($dbGuides as $guide) {
+    foreach ($dbMountains as $mountain) {
+        $stmt = $pdo->prepare("
+            SELECT guide_fee_day, guide_fee_overnight 
+            FROM guide_mountain_rates 
+            WHERE guide_id = ? AND mountain_id = ?
+        ");
+        $stmt->execute([$guide['id'], $mountain['id']]);
+        $fees = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($fees) {
+            $guideFeeMap["{$guide['id']}_{$mountain['id']}"] = [
+                'day' => floatval($fees['guide_fee_day']),
+                'overnight' => floatval($fees['guide_fee_overnight'])
+            ];
+        }
+    }
+}
+echo "const guideFeeMap = " . json_encode($guideFeeMap) . ";\n";
+
 ?>
 
 
@@ -3130,12 +3193,14 @@ else if(n===3) {
     document.getElementById('flowSubtitle').textContent = 'Booking summary';
     const m=flowState.mtn,f=m.fees,pax=flowState.hikers.length;
     const isON=flowState.type==='overnight';
-    // Get guide fee from guide_mountain_rates (based on hike type)
-let guideFee = 0;
-if (flowState.type === 'overnight') {
-    guideFee = 1500; // guide_fee_overnight from your rates table
+// Get actual guide fee from guideFeeMap
+let guideFee = 801; // default fallback
+const feeKey = `${flowState.guide.id}_${flowState.mtn.id}`;
+if (guideFeeMap[feeKey]) {
+    guideFee = flowState.type === 'overnight' ? guideFeeMap[feeKey].overnight : guideFeeMap[feeKey].day;
 } else {
-    guideFee = 801; // guide_fee_day from your rates table
+    // Fallback based on hike type
+    guideFee = flowState.type === 'overnight' ? 1500 : 801;
 }
 const guideF = guideFee;
     const regTotal=f.regFee*pax, envTotal=f.envFee?f.envFee*pax:0;
@@ -3160,7 +3225,7 @@ const guideF = guideFee;
       </div>
       <div class="warning-card">
     <h4><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Payment Policy</h4>
-    <p><strong>Downpayment: ₱${Math.max(200, total * 0.2).toLocaleString()}</strong> (20% of guide fee, min ₱200)<br>
+    <p><strong>Downpayment: ₱${Math.max(200, Math.round(guideF * 0.2)).toLocaleString()}</strong> (20% of guide fee, min ₱200)<br>
     • Pay downpayment within 3-4 hours of guide confirmation<br>
     • Remaining balance paid to guide after hike<br>
     • No refund for cancellations after confirmation</p>
@@ -3579,7 +3644,17 @@ function todayCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                Cancel
            </button>`;
-    }
+    } else if (b.status === 'waiting_payment') {
+    // Waiting for downpayment - can cancel but not nudge
+    actions = `
+        <button class="btn btn-outline btn-sm" onclick="viewActiveHikeDetails('${b.id}')">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/></svg> View Details
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel
+        </button>
+    `;
+}
     // confirmed / active → no cancel button
  
     const feeNote = !isJoined
@@ -3676,9 +3751,9 @@ function renderBookings(){
     }
  
     // Separate arrays for different purposes
-    const regularStatuses = ['pending', 'confirmed', 'joined', 'active'];  // For non-today current
-    const todayStatuses = ['active', 'confirmed'];  // For today section only
-    const historyStatuses = ['cancelled', 'completed', 'finished'];
+    const regularStatuses = ['pending', 'waiting_payment', 'active', 'joined'];  // For non-today current
+    const todayStatuses = ['active'];  // For today section only - only active hikes show as today card
+    const historyStatuses = ['finished', 'cancelled', 'completed'];
 
     // ── Apply search filter ──
     const q = searchQuery.toLowerCase().trim();
@@ -3914,11 +3989,19 @@ function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
       </a>
     `;
   }
-  
-  // Status labels mapping
-  const statusLabels = {pending:'Pending', confirmed:'Confirmed', completed:'Completed', cancelled:'Cancelled', joined:'Joined', active:'Active', finished:'Finished'};
-  const statusLabel = statusLabels[b.status] || b.status;
-  
+ 
+// Status labels mapping - add waiting_payment and active
+const statusLabels = {
+    pending: 'Pending', 
+    waiting_payment: 'Awaiting Payment', 
+    active: 'Active', 
+    finished: 'Finished', 
+    completed: 'Completed', 
+    cancelled: 'Cancelled', 
+    joined: 'Joined'
+};
+const statusLabel = statusLabels[b.status] || b.status;
+
   return `
     <div class="booking-card">
       <div class="booking-card-header">
@@ -4003,8 +4086,15 @@ function viewActiveHikeDetails(bookingId) {
   if (!b) return;
   
   const typeMap = { day: 'Day Hike (12am–3pm)', late: 'Late Hike (4pm–12am)', overnight: 'Overnight' };
-  const statusLabel = { pending: 'Pending', confirmed: 'Confirmed', active: 'Active', joined: 'Joined' }[b.status] || b.status;
-  const canStart = false; // Not today, so cannot start
+ const statusLabel = { 
+    pending: 'Pending', 
+    waiting_payment: 'Awaiting Payment', 
+    active: 'Active', 
+    finished: 'Finished', 
+    completed: 'Completed', 
+    joined: 'Joined' 
+}[b.status] || b.status;
+const canStart = false; // Not today, so cannot start
   
   document.getElementById('vjTitle').textContent = b.mountain;
   document.getElementById('vjBody').innerHTML = `
@@ -4354,7 +4444,7 @@ function switchTab(tab, el, keepSearch = false){
   }
 
   // Toggle chip visibility per tab
-  const currentChips = ['pending','confirmed','active','joined'];
+  const currentChips = ['pending', 'waiting_payment', 'active', 'joined'];
   const historyChips = ['finished','cancelled'];
   document.querySelectorAll('.filter-chip[data-filter]').forEach(chip => {
     const f = chip.dataset.filter;
@@ -4397,9 +4487,19 @@ function showToast(msg) {
 function createBooking() {
     const m = flowState.mtn, f = m.fees, pax = flowState.hikers.length;
     const isON = flowState.type === 'overnight';
-    const total = f.regFee * pax + (f.envFee ? f.envFee * pax : 0) + 
-                  (isON ? f.guideON : f.guideDay) + 
-                  ((isON && flowState.camping && f.campFee) ? f.campFee * pax : 0);
+    let guideFee = 801; // default
+    const feeKey = `${flowState.guide.id}_${flowState.mtn.id}`;
+    if (typeof guideFeeMap !== 'undefined' && guideFeeMap[feeKey]) {
+        guideFee = flowState.type === 'overnight' ? guideFeeMap[feeKey].overnight : guideFeeMap[feeKey].day;
+    } else {
+        guideFee = flowState.type === 'overnight' ? 1500 : 801;
+    }
+
+    const regTotal = f.regFee * pax;
+    const envTotal = f.envFee ? f.envFee * pax : 0;
+    const campF = (isON && flowState.camping && f.campFee) ? f.campFee * pax : 0;
+    const total = regTotal + envTotal + guideFee + campF;
+    const downpaymentAmount = Math.max(200, Math.round(guideFee * 0.2));
    const nb = {
     mountainId: m.id, mountain: m.name, date: flowState.date,
     time: flowState.time || '08:00', type: flowState.type, status: 'pending',
@@ -4409,7 +4509,7 @@ function createBooking() {
     createdAt: Date.now(), nudges: 0, lastNudge: 0,
     camping: flowState.camping || false, notes: '',
     // NEW DOWNPAYMENT FIELDS
-    downpaymentAmount: Math.max(200, total * 0.2), // 20% min ₱200
+    downpaymentAmount: downpaymentAmount,
     downpaymentDeadline: null,
     downpaymentStatus: 'unpaid'
 };

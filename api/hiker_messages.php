@@ -280,6 +280,7 @@ function getMessages($pdo, $hikerId, $otherUserId) {
             m.created_at,
             m.is_read,
             m.action_data,
+            m.is_system_announcement,
             (SELECT name FROM users WHERE id = m.sender_id) as sender_name,
             'message' as source_type
         FROM messages m

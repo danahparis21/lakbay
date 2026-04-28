@@ -298,68 +298,151 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
-// ── NEW: Handle CONFIRM booking ──────────────────────────────────────────────
+// ── Handle CONFIRM booking (UPDATED with payment instructions) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_booking') {
     if (ob_get_length()) ob_clean();
-    error_reporting(0); 
     header('Content-Type: application/json');
     
     try {
         $booking_id = $_POST['booking_id'] ?? 0;
         
-        // Update booking status to 'active' (matches DB enum)
-        $stmt = $pdo->prepare("UPDATE bookings SET status = 'active' WHERE id = ? AND guide_id = ?");
-        $success = $stmt->execute([$booking_id, $guide_id]);
+        // Get booking details with mountain and guide fee info
+        $stmt = $pdo->prepare("
+            SELECT b.user_id, b.booking_number, b.total_amount, 
+                   b.hike_date, b.hike_type, b.mountain_id, b.status,
+                   m.name as mountain_name
+            FROM bookings b
+            JOIN mountains m ON m.id = b.mountain_id
+            WHERE b.id = ? AND b.guide_id = (SELECT id FROM guides WHERE user_id = ?)
+        ");
+        $stmt->execute([$booking_id, $user_id]);
+        $bk = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if ($success && $stmt->rowCount() > 0) {
-            // Send a system message to the hiker
-            $stmt = $pdo->prepare("SELECT user_id, booking_number FROM bookings WHERE id = ?");
-            $stmt->execute([$booking_id]);
-            $bk = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($bk && isset($bk['user_id'])) {
-                $hiker_user_id = $bk['user_id'];
-                $guide_name = isset($guide['name']) ? $guide['name'] : 'Your guide';
-                $bk_num = isset($bk['booking_number']) ? $bk['booking_number'] : ('#' . $booking_id);
-                $msg_body = "Your booking " . $bk_num . " has been confirmed! Guide " . $guide_name . " is ready for your hike. See you on the trail!";
-                
-                // FIXED: Use all positional parameters (?) instead of mixing with named (:key)
-                $stmt = $pdo->prepare("
-                    INSERT INTO messages 
-                        (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement)
-                    VALUES (?, ?, AES_ENCRYPT(?, ?), 0, NOW(), 'guide', 'hiker', 1)
-                ");
-                $stmt->execute([$user_id, $hiker_user_id, $msg_body, MSG_AES_KEY]);
-            }
-
-            echo json_encode(['success' => true, 'message' => 'Booking confirmed successfully']);
-        } else {
-            // Check if it was already active
-            $stmt = $pdo->prepare("SELECT status FROM bookings WHERE id = ?");
-            $stmt->execute([$booking_id]);
-            $curr = $stmt->fetch();
-            $msg = ($curr && $curr['status'] === 'active') ? 'Booking is already active.' : 'Failed to confirm booking. Permission denied or invalid ID.';
-            echo json_encode(['success' => false, 'message' => $msg]);
+        if (!$bk) {
+            echo json_encode(['success' => false, 'message' => 'Booking not found']);
+            exit;
         }
+        
+        if ($bk['status'] === 'active') {
+            echo json_encode(['success' => false, 'message' => 'Booking is already active']);
+            exit;
+        }
+        
+        // Get guide fee
+        $stmt_fee = $pdo->prepare("
+            SELECT CASE WHEN ? = 'overnight' THEN gm.guide_fee_overnight ELSE gm.guide_fee_day END as guide_fee
+            FROM guide_mountain_rates gm
+            WHERE gm.guide_id = (SELECT id FROM guides WHERE user_id = ?) AND gm.mountain_id = ?
+            LIMIT 1
+        ");
+        $stmt_fee->execute([$bk['hike_type'], $user_id, $bk['mountain_id']]);
+        $fee_row = $stmt_fee->fetch();
+        $guideFee = $fee_row ? $fee_row['guide_fee'] : ($bk['hike_type'] === 'overnight' ? 1500 : 801);
+        
+        $downpayment = max(200, round($guideFee * 0.2));
+        $deadline = date('Y-m-d H:i:s', strtotime('+5 hours'));
+        
+        // Get guide's GCash details
+        $stmt_guide = $pdo->prepare("
+            SELECT u.name, g.gcash_name, g.gcash_number, g.gcash_qr_code 
+            FROM guides g
+            JOIN users u ON u.id = g.user_id
+            WHERE g.user_id = ?
+        ");
+        $stmt_guide->execute([$user_id]);
+        $guide_info = $stmt_guide->fetch(PDO::FETCH_ASSOC);
+        
+        $guide_name = $guide_info['name'];
+        $gcash_number = $guide_info['gcash_number'] ?? '0999 999 9999';
+        $gcash_name = $guide_info['gcash_name'] ?? $guide_name;
+        $gcash_qr = !empty($guide_info['gcash_qr_code']) ? '../' . $guide_info['gcash_qr_code'] : '../assets/images/gcash-qr.jpg';
+        
+        // Update booking
+        $stmt = $pdo->prepare("
+            UPDATE bookings SET 
+                status = 'waiting_payment', 
+                downpayment_deadline = ?,
+                downpayment_amount = ?,
+                downpayment_status = 'unpaid',
+                updated_at = NOW() 
+            WHERE id = ?
+        ");
+        $stmt->execute([$deadline, $downpayment, $booking_id]);
+        
+        $remainingToGuide = $guideFee - $downpayment;
+        $total_amount = number_format($bk['total_amount'], 2);
+        $hike_date = date('F j, Y', strtotime($bk['hike_date']));
+        
+        // MESSAGE 1: BOOKING CONFIRMED (System announcement)
+        $confirmedMessage = "🎉 BOOKING CONFIRMED\n";
+        $confirmedMessage .= "Booking #{$bk['booking_number']} · {$guide_name}\n\n";
+        $confirmedMessage .= "✓ CONFIRMED\n\n";
+        $confirmedMessage .= "📅 Hike Date: {$hike_date}\n";
+        $confirmedMessage .= "📍 Mountain: " . htmlspecialchars($bk['mountain_name']) . "\n";
+        $confirmedMessage .= "💰 Total Amount: ₱{$total_amount}\n";
+        $confirmedMessage .= "🏔️ Tour Guide Fee: ₱" . number_format($guideFee, 2) . "\n";
+        $confirmedMessage .= "💵 Downpayment Required: ₱" . number_format($downpayment, 2) . "\n";
+        $confirmedMessage .= "📦 Remaining Balance (to guide): ₱" . number_format($remainingToGuide, 2) . "\n\n";
+        $confirmedMessage .= "⏰ Complete downpayment within 5 hours to secure your booking.\n";
+        $confirmedMessage .= "Payment instructions have been sent below. 🏔️";
+        
+        $stmt_msg = $pdo->prepare("
+            INSERT INTO messages 
+                (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement)
+            VALUES (?, ?, AES_ENCRYPT(?, ?), 0, NOW(), 'guide', 'hiker', 1)
+        ");
+        $stmt_msg->execute([$user_id, $bk['user_id'], $confirmedMessage, MSG_AES_KEY]);
+        
+        // MESSAGE 2: PAYMENT INSTRUCTIONS CARD
+        $instructionsMessage = "💰 Please complete your downpayment using the details below.";
+        
+        $actionData = json_encode([
+            'type' => 'payment_instructions',
+            'gcash_number' => $gcash_number,
+            'gcash_name' => $gcash_name,
+            'qr_code_url' => $gcash_qr,
+            'downpayment_amount' => number_format($downpayment, 2),
+            'remaining_balance' => number_format($remainingToGuide, 2),
+            'booking_number' => $bk['booking_number'],
+            'total_amount' => $total_amount,
+            'deadline' => $deadline,
+            'guide_fee' => $guideFee,
+            'hike_type' => $bk['hike_type'],
+            'payment_status' => 'unpaid',
+        ]);
+        
+        $stmt_instructions = $pdo->prepare("
+            INSERT INTO messages 
+                (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, action_data, is_system_announcement)
+            VALUES (?, ?, AES_ENCRYPT(?, ?), 0, NOW(), 'guide', 'hiker', ?, 0)
+        ");
+        $stmt_instructions->execute([$user_id, $bk['user_id'], $instructionsMessage, MSG_AES_KEY, $actionData]);
+        
+        echo json_encode(['success' => true, 'message' => 'Booking confirmed! Payment instructions sent to hiker.']);
+        
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
     }
     exit;
 }
 
-// ── NEW: Handle CANCEL booking ───────────────────────────────────────────────
+// ── Handle CANCEL booking (UPDATED with proper messaging) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'cancel_booking') {
     if (ob_get_length()) ob_clean();
-    error_reporting(0);
     header('Content-Type: application/json');
     
     try {
         $booking_id = $_POST['booking_id'] ?? 0;
-        $cancel_reason = $_POST['cancel_reason'] ?? 'Cancelled by guide';
+        $cancel_reason = $_POST['cancel_reason'] ?? 'Booking cancelled by guide.';
         
         // Get booking details before updating
-        $stmt = $pdo->prepare("SELECT user_id, booking_number FROM bookings WHERE id = ? AND guide_id = ?");
-        $stmt->execute([$booking_id, $guide_id]);
+        $stmt = $pdo->prepare("
+            SELECT b.user_id, b.booking_number, b.mountain_id, m.name as mountain_name
+            FROM bookings b
+            JOIN mountains m ON m.id = b.mountain_id
+            WHERE b.id = ? AND b.guide_id = (SELECT id FROM guides WHERE user_id = ?)
+        ");
+        $stmt->execute([$booking_id, $user_id]);
         $bk = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$bk) {
@@ -368,30 +451,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
         
         // Update booking status to 'cancelled'
-        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ? AND guide_id = ?");
-        $success = $stmt->execute([$booking_id, $guide_id]);
+        $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$booking_id]);
         
-        if ($success && $stmt->rowCount() > 0) {
-            // Send cancellation message to hiker
-            $hiker_user_id = $bk['user_id'];
-            $guide_name = $guide['name'];
-            $bk_num = $bk['booking_number'];
-            $msg_body = "❌ Your booking {$bk_num} has been CANCELLED by the guide.\n\nReason: {$cancel_reason}\n\nPlease contact support if you have questions or need to rebook.";
-            
-            // FIXED: Use all positional parameters (?) instead of mixing with named (:key)
-            $stmt_msg = $pdo->prepare("
-                INSERT INTO messages 
-                    (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement)
-                VALUES (?, ?, AES_ENCRYPT(?, ?), 0, NOW(), 'guide', 'hiker', 1)
-            ");
-            $stmt_msg->execute([$user_id, $hiker_user_id, $msg_body, MSG_AES_KEY]);
-            
-            echo json_encode(['success' => true, 'message' => 'Booking cancelled successfully']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Failed to cancel booking']);
-        }
+        // Get guide name
+        $stmt_guide = $pdo->prepare("SELECT u.name FROM guides g JOIN users u ON u.id = g.user_id WHERE g.user_id = ?");
+        $stmt_guide->execute([$user_id]);
+        $guide_name = $stmt_guide->fetchColumn();
+        
+        // Send cancellation message to hiker
+        $msg_body = "❌ **BOOKING CANCELLED**\n\n";
+        $msg_body .= "Your booking #{$bk['booking_number']} has been CANCELLED by the guide.\n\n";
+        $msg_body .= "📍 Mountain: {$bk['mountain_name']}\n";
+        $msg_body .= "👤 Guide: {$guide_name}\n\n";
+        $msg_body .= "📝 Reason: {$cancel_reason}\n\n";
+        $msg_body .= "Please contact support if you have questions or need to rebook.\n\n";
+        $msg_body .= "We hope to see you on another adventure soon! 🏔️";
+        
+        $stmt_msg = $pdo->prepare("
+            INSERT INTO messages 
+                (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement)
+            VALUES (?, ?, AES_ENCRYPT(?, ?), 0, NOW(), 'guide', 'hiker', 1)
+        ");
+        $stmt_msg->execute([$user_id, $bk['user_id'], $msg_body, MSG_AES_KEY]);
+        
+        echo json_encode(['success' => true, 'message' => 'Booking cancelled successfully']);
+        
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
     }
     exit;
 }
@@ -452,22 +539,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $booking_id = $_POST['booking_id'] ?? 0;
         
         $stmt = $pdo->prepare("
-    SELECT 
-        b.id, b.booking_number, b.mountain_id, b.guide_id,
-        b.hike_date, b.start_time, b.hike_type, b.status, b.number_of_hikers,
-        b.total_amount, b.downpayment_amount, b.payment_status, b.special_requests,
-        b.user_id as hiker_user_id,
-        m.name as mountain_name,
-        u.name as hiker_name, u.email as hiker_email, u.phone as hiker_phone
-    FROM bookings b
-    JOIN mountains m ON b.mountain_id = m.id
-    JOIN users u ON b.user_id = u.id
-    WHERE b.id = ? AND b.guide_id = ?
-");
+            SELECT 
+                b.id, b.booking_number, b.mountain_id, b.guide_id,
+                b.hike_date, b.start_time, b.hike_type, b.status, b.number_of_hikers,
+                b.total_amount, b.downpayment_amount, b.payment_status, b.special_requests,
+                b.downpayment_status, b.guide_payment_status,
+                b.user_id as hiker_user_id,
+                m.name as mountain_name,
+                u.name as hiker_name, u.email as hiker_email, u.phone as hiker_phone
+            FROM bookings b
+            JOIN mountains m ON b.mountain_id = m.id
+            JOIN users u ON b.user_id = u.id
+            WHERE b.id = ? AND b.guide_id = ?
+        ");
         $stmt->execute([$booking_id, $guide_id]);
         $booking = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($booking) {
+            // Get the correct guide fee from guide_mountain_rates
+            $stmt_fee = $pdo->prepare("
+                SELECT 
+                    CASE WHEN ? = 'overnight' THEN gm.guide_fee_overnight ELSE gm.guide_fee_day END as guide_fee
+                FROM guide_mountain_rates gm
+                WHERE gm.guide_id = ? AND gm.mountain_id = ?
+                LIMIT 1
+            ");
+            $stmt_fee->execute([$booking['hike_type'], $booking['guide_id'], $booking['mountain_id']]);
+            $fee_row = $stmt_fee->fetch();
+            
+            $guideFee = $fee_row ? floatval($fee_row['guide_fee']) : ($booking['hike_type'] === 'overnight' ? 1500 : 801);
+            $booking['guide_fee'] = $guideFee;
+            
             // Get additional hikers
             $stmt2 = $pdo->prepare("
                 SELECT hiker_name, age, emergency_contact_name, emergency_contact_number
@@ -486,7 +588,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
     exit;
 }
-
 // ── 9. Fetch alerts created by this guide ─────────────────────────────────
 $stmt = $pdo->prepare("
     SELECT id, title, description, location, type, severity, status, created_at,
@@ -2009,6 +2110,23 @@ function viewBookingDetails(bookingId, bookingNumber) {
         if (data.success) {
             const booking = data.booking;
             const typeMap = { day_hike: 'Day Hike', overnight: 'Overnight', multi_day: 'Multi-Day' };
+
+            // Calculate guide fee based on hike type (use fee from database if available)
+            let guideFee = booking.guide_fee || (booking.hike_type === 'overnight' ? 1500 : 801);
+            let downpaymentPaid = parseFloat(booking.downpayment_amount || 0);
+            let remainingGuideFee = guideFee - downpaymentPaid;
+
+            // Downpayment status badge
+            let downpaymentBadge = '';
+            if (booking.downpayment_status === 'paid') downpaymentBadge = '<span class="badge badge-green">Paid</span>';
+            else if (booking.downpayment_status === 'expired') downpaymentBadge = '<span class="badge badge-gray">Expired</span>';
+            else downpaymentBadge = '<span class="badge badge-amber">Unpaid</span>';
+
+            // Guide payment status badge
+            let guidePaymentBadge = '';
+            if (booking.guide_payment_status === 'paid') guidePaymentBadge = '<span class="badge badge-green">Guide Fee Paid</span>';
+            else if (remainingGuideFee <= 0) guidePaymentBadge = '<span class="badge badge-green">Fully Paid</span>';
+            else guidePaymentBadge = '<span class="badge badge-amber">Pending (₱' + remainingGuideFee.toLocaleString() + ')</span>';
             
             const paymentBadgeClass = booking.payment_status === 'paid' ? 'badge-green' : 
                                       (booking.payment_status === 'pending' ? 'badge-amber' : 'badge-gray');
@@ -2079,20 +2197,39 @@ function viewBookingDetails(bookingId, bookingNumber) {
                             <div class="detail-label">Total Amount</div>
                             <div class="detail-val">₱${parseFloat(booking.total_amount).toLocaleString()}</div>
                         </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Downpayment</div>
-                            <div class="detail-val">₱${parseFloat(booking.downpayment_amount || 0).toLocaleString()}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Remaining Balance</div>
-                            <div class="detail-val" style="color:var(--ink); font-weight:700;">₱${parseFloat(booking.total_amount - (booking.downpayment_amount || 0)).toLocaleString()}</div>
-                        </div>
+
                         ${booking.special_requests ? `
                         <div class="detail-item span2">
                             <div class="detail-label">Special Requests</div>
                             <div class="detail-val">${escapeHtml(booking.special_requests)}</div>
                         </div>
                         ` : ''}
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <div class="detail-section-title">Tour Guide Fee Breakdown</div>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">Total Guide Fee</div>
+                            <div class="detail-val">₱${guideFee.toLocaleString()}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Downpayment Status</div>
+                            <div class="detail-val">${downpaymentBadge}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Downpayment Amount</div>
+                            <div class="detail-val">₱${downpaymentPaid.toLocaleString()}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Guide Payment Status</div>
+                            <div class="detail-val">${guidePaymentBadge}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Remaining Balance (For Guide)</div>
+                            <div class="detail-val" style="color:var(--forest); font-weight:700;">₱${remainingGuideFee.toLocaleString()}</div>
+                        </div>
                     </div>
                 </div>
                 
