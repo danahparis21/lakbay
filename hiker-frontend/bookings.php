@@ -145,8 +145,14 @@ function getGuidesFromDB($pdo) {
 }
 function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
     $bookings = [];
+    $debugFile = 'C:\Users\63945\Documents\lakbay_docker\lakbay\api\debug.log';
     
     if (!$currentUserId) return $bookings;
+    
+    // Write to debug log
+    file_put_contents($debugFile, "\n=== getUserBookingsFromDB called ===\n", FILE_APPEND);
+    file_put_contents($debugFile, "Current User ID: $currentUserId\n", FILE_APPEND);
+    file_put_contents($debugFile, "Current User Name: $currentUserName\n", FILE_APPEND);
     
     try {
         // Simplified query - first get all bookings where user is owner
@@ -171,6 +177,8 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
         $stmt->execute([$currentUserId]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            file_put_contents($debugFile, "Found booking: {$row['booking_number']} - Status: {$row['status']}\n", FILE_APPEND);
+            
             // Get hikers for this booking
             $hikers = [];
             $stmt2 = $pdo->prepare("SELECT hiker_name FROM booking_hikers WHERE booking_id = ?");
@@ -197,10 +205,10 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
             $bookingId = $row['booking_number'];
             
             $timeValue = $row['start_time'] ?? '06:00';
-// If start_time exists, format it, otherwise default
-if (!empty($row['start_time'])) {
-    $timeValue = date('H:i', strtotime($row['start_time']));
-}
+            // If start_time exists, format it, otherwise default
+            if (!empty($row['start_time'])) {
+                $timeValue = date('H:i', strtotime($row['start_time']));
+            }
             $bookings[] = [
                 'id' => $bookingId,
                 'db_id' => $row['id'],
@@ -227,7 +235,7 @@ if (!empty($row['start_time'])) {
         }
         
         // Now get joined bookings (where user is in booking_hikers but not owner)
-     $stmt = $pdo->prepare("
+        $stmt = $pdo->prepare("
     SELECT 
         b.id, b.booking_number, b.mountain_id, b.guide_id,
         b.user_id,
@@ -241,12 +249,12 @@ if (!empty($row['start_time'])) {
     FROM booking_hikers bh
     JOIN bookings b ON bh.booking_id = b.id
     JOIN mountains m ON b.mountain_id = m.id
-    LEFT JOIN guides g ON b.guide_id = g.id      
+LEFT JOIN guides g ON b.guide_id = g.id      
     LEFT JOIN users u ON g.user_id = u.id        
     WHERE bh.hiker_name = ? AND b.user_id != ?
     ORDER BY b.created_at DESC
 ");
-$stmt->execute([$currentUserName, $currentUserId]);
+        $stmt->execute([$currentUserName, $currentUserId]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             // Get hikers for this booking
@@ -266,9 +274,9 @@ $stmt->execute([$currentUserName, $currentUserId]);
             }
             
             $timeValue = $row['start_time'] ?? '06:00';
-if (!empty($row['start_time'])) {
-    $timeValue = date('H:i', strtotime($row['start_time']));
-}
+            if (!empty($row['start_time'])) {
+                $timeValue = date('H:i', strtotime($row['start_time']));
+            }
 
             $bookingId = 'JO-' . $row['booking_number'];
             
@@ -298,22 +306,34 @@ if (!empty($row['start_time'])) {
             ];
         }
         
+        // ========== DEBUG CODE ==========
+        file_put_contents($debugFile, "\n=== CHECKING FOR WAITING_PAYMENT BOOKINGS ===\n", FILE_APPEND);
+        $checkStmt = $pdo->prepare("SELECT id, booking_number, status, user_id FROM bookings WHERE status = 'waiting_payment' AND user_id = ?");
+        $checkStmt->execute([$currentUserId]);
+        $waitingCount = 0;
+        while ($checkRow = $checkStmt->fetch()) {
+            $waitingCount++;
+            file_put_contents($debugFile, "Found waiting_payment booking: " . $checkRow['booking_number'] . " for user " . $currentUserId . "\n", FILE_APPEND);
+        }
+        if ($waitingCount == 0) {
+            file_put_contents($debugFile, "No waiting_payment bookings found for user $currentUserId\n", FILE_APPEND);
+        }
+        
+        // Also log all statuses found in the main query for debugging
+        file_put_contents($debugFile, "\n=== ALL BOOKINGS STATUSES FOUND ===\n", FILE_APPEND);
+        foreach ($bookings as $b) {
+            file_put_contents($debugFile, "Booking: " . $b['id'] . " - Status: " . $b['status'] . "\n", FILE_APPEND);
+        }
+        file_put_contents($debugFile, "Total bookings: " . count($bookings) . "\n", FILE_APPEND);
+        
     } catch (PDOException $e) {
-        error_log('Bookings fetch error: ' . $e->getMessage());
-    }
-
-    error_log('=== RAW BOOKINGS FROM DB ===');
-$pendingFound = 0;
-while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    if ($row['status'] == 'pending') {
-        $pendingFound++;
-        error_log("Found pending: {$row['booking_number']} | mountain_id: {$row['mountain_id']} | guide_id: {$row['guide_id']} | guide_name: {$row['guideName']}");
+        file_put_contents($debugFile, "Bookings fetch error: " . $e->getMessage() . "\n", FILE_APPEND);
     }
     
-  }
-
+    
     return $bookings;
 }
+
 // Get data from database
 $dbMountains = getMountainsFromDB($pdo);
 $dbGuides = getGuidesFromDB($pdo);
@@ -2345,6 +2365,11 @@ body {
         gap: 5px;
     }
 }
+.status-waiting_payment { 
+    background: #fff8e1; 
+    color: #f57f17; 
+    border: 1px solid rgba(245,127,23,0.2); 
+}
 
 /* Extra small devices */
 @media (max-width: 480px) {
@@ -2500,12 +2525,16 @@ $currentPage = 'bookings'; // Change per page: 'explore', 'bookings', 'quiz', 'm
         <button class="search-clear" id="searchClear" onclick="clearSearch()">&times;</button>
       </div>
       <div class="filter-chips" id="filterChips">
-        <div class="filter-chip active" data-filter="all" onclick="setFilter('all',this)">All <span class="chip-count" id="countAll">0</span></div>
-        <div class="filter-chip" data-filter="pending" onclick="setFilter('pending',this)">Pending <span class="chip-count" id="countPending">0</span></div>
-        <div class="filter-chip" data-filter="confirmed" onclick="setFilter('confirmed',this)">Confirmed <span class="chip-count" id="countConfirmed">0</span></div>
-        <div class="filter-chip" data-filter="active" onclick="setFilter('active',this)">Active <span class="chip-count" id="countActive">0</span></div>
-        <div class="filter-chip" data-filter="joined" onclick="setFilter('joined',this)">Joined <span class="chip-count" id="countJoined">0</span></div>
-        <!-- History-only chips (hidden by default) -->
+    <div class="filter-chip active" data-filter="all" onclick="setFilter('all',this)">All <span class="chip-count" id="countAll">0</span></div>
+    <div class="filter-chip" data-filter="pending" onclick="setFilter('pending',this)">Pending <span class="chip-count" id="countPending">0</span></div>
+    <div class="filter-chip" data-filter="waiting_payment" onclick="setFilter('waiting_payment',this)">Awaiting Payment <span class="chip-count" id="countWaitingPayment">0</span></div>
+    <div class="filter-chip" data-filter="active" onclick="setFilter('active',this)">Active <span class="chip-count" id="countActive">0</span></div>
+    <div class="filter-chip" data-filter="finished" onclick="setFilter('finished',this)">Finished <span class="chip-count" id="countFinished">0</span></div>
+    <div class="filter-chip" data-filter="cancelled" onclick="setFilter('cancelled',this)">Cancelled <span class="chip-count" id="countCancelled">0</span></div>
+    <div class="filter-chip" data-filter="completed" onclick="setFilter('completed',this)">Completed <span class="chip-count" id="countCompleted">0</span></div>
+
+
+<!-- History-only chips (hidden by default) -->
         <div class="filter-chip" data-filter="finished" onclick="setFilter('finished',this)" style="display:none;">Finished <span class="chip-count" id="countFinished">0</span></div>
         <div class="filter-chip" data-filter="cancelled" onclick="setFilter('cancelled',this)" style="display:none;">Cancelled <span class="chip-count" id="countCancelled">0</span></div>
       </div>
@@ -3622,7 +3651,7 @@ function todayCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
     // Pass both integer ID and booking number to be safe
     const startUrl = `active-hike.php?booking_id=${b.db_id}&booking_number=${b.id}`;
  
-    // Secondary actions: message guide
+    // Secondary actions: message guide and view details
     const msgBtn = `
         <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}"
            class="btn btn-outline btn-sm">
@@ -3630,43 +3659,28 @@ function todayCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
             Message Guide
         </a>`;
  
-    // Cancel/Leave logic: only pending gets cancel, joined gets leave, confirmed/active get nothing
+    // Cancel/Leave logic
     let cancelBtn = '';
     if (isJoined) {
-        cancelBtn = `<button class="btn btn-danger btn-sm"
-                   onclick="cancelBooking('${b.id}','leave')">
+        cancelBtn = `<button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}','leave')">
                <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                Leave
            </button>`;
     } else if (b.status === 'pending') {
-        cancelBtn = `<button class="btn btn-danger btn-sm"
-                   onclick="cancelBooking('${b.id}')">
+        cancelBtn = `<button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">
                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                Cancel
            </button>`;
-    } else if (b.status === 'waiting_payment') {
-    // Waiting for downpayment - can cancel but not nudge
-    actions = `
-        <button class="btn btn-outline btn-sm" onclick="viewActiveHikeDetails('${b.id}')">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/></svg> View Details
-        </button>
-        <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">
-            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel
-        </button>
-    `;
-}
-    // confirmed / active → no cancel button
+    }
  
     const feeNote = !isJoined
         ? `<div class="today-fee">₱${b.totalFee.toLocaleString()} <span>pay after hike</span></div>`
         : `<div style="font-size:12px;color:var(--stone);">Fees managed by organizer</div>`;
  
-    // Status badge colour override for today (show confirmed green prominently)
     const statusLabel = { pending:'Pending', confirmed:'Confirmed', active:'Active', joined:'Joined' }[b.status] || b.status;
  
     return `
     <div class="today-hike-card">
- 
       <!-- Green top banner -->
       <div class="today-banner">
         <div class="today-icon-ring">⛰️</div>
@@ -3685,7 +3699,6 @@ function todayCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
  
       <!-- Body -->
       <div class="today-body">
- 
         <!-- Left: details -->
         <div class="today-details">
           <div class="today-meta">
@@ -3712,6 +3725,9 @@ function todayCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
  
           <!-- Secondary actions inline -->
           <div class="booking-actions" style="margin-top:12px;">
+            <button class="btn btn-outline btn-sm" onclick="viewActiveHikeDetails('${b.id}')">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/></svg> View Details
+            </button>
             ${msgBtn}
             ${cancelBtn}
           </div>
@@ -3727,7 +3743,6 @@ function todayCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
             Enables GPS tracking &amp; checkpoint badges
           </div>
         </div>
- 
       </div>
     </div>`;
 }
@@ -3807,27 +3822,32 @@ function renderBookings(){
         return b.status === activeFilter;
     }
 
-    // "Today" cards: only confirmed or active (NOT pending)
+    // "Today" cards: only active hikes
     const todayBookings = bookings.filter(b =>
         todayStatuses.includes(b.status) && isHikeToday(b) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b))
     );
  
-    // Regular current: regularStatuses bookings (including today's pending)
-// Regular current: Exclude any bookings that are already in today's section
-const current = bookings.filter(b => {
-    // Skip if this booking is already in today's section
-    if (todayStatuses.includes(b.status) && isHikeToday(b)) {
-        return false;  // Don't duplicate in regular cards
-    }
+    // Regular current: Show all regular statuses except those already shown in today section
+    const current = bookings.filter(b => {
+        // Special handling for waiting_payment - ALWAYS show in regular list
+        if (b.status === 'waiting_payment') {
+            return regularStatuses.includes(b.status) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b));
+        }
+        
+        // Skip if this booking is already in today's section (active hikes today)
+        if (todayStatuses.includes(b.status) && isHikeToday(b)) {
+            return false;  // Don't duplicate in regular cards
+        }
+        
+        // For pending: show all regardless of date
+        if (b.status === 'pending') {
+            return regularStatuses.includes(b.status) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b));
+        }
+        
+        // For all other statuses in regularStatuses, show if NOT today
+        return regularStatuses.includes(b.status) && !isHikeToday(b) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b));
+    });
     
-    // For pending: show all regardless of date
-    if (b.status === 'pending') {
-        return regularStatuses.includes(b.status) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b));
-    }
-    
-    // For all other statuses in regularStatuses, show if NOT today
-    return regularStatuses.includes(b.status) && !isHikeToday(b) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b));
-});
     const history = bookings.filter(b =>
         historyStatuses.includes(b.status) && matchesSearch(b) && (matchesFilter(b) || isExactIDMatch(b))
     );
@@ -3889,7 +3909,6 @@ const current = bookings.filter(b => {
         else hc.insertAdjacentHTML('beforeend', hintHTML);
     }
 }
-
 function getTimeMinForType(type) {
     if (type === 'day') return '00:00';
     if (type === 'late') return '16:00';
@@ -4035,6 +4054,11 @@ const statusLabel = statusLabels[b.status] || b.status;
         <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-sm">
           <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Message Guide
         </a>
+        <!-- VIEW DETAILS BUTTON - Show for ALL bookings -->
+    <button class="btn btn-outline btn-sm" onclick="viewActiveHikeDetails('${b.id}')">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/></svg> View Details
+    </button>
+
         ${isJoined ? `
           <button class="btn btn-outline btn-sm" onclick="viewJoinedHike('${b.id}')">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/></svg> View Details
@@ -4079,54 +4103,142 @@ const statusLabel = statusLabels[b.status] || b.status;
     </div>
   `;
 }
-
-// ── VIEW ACTIVE/CONFIRMED HIKE DETAILS (for future hikes) ──
+// ── VIEW HIKE DETAILS (Enhanced with Mountain + Guide Fee Breakdown) ──
 function viewActiveHikeDetails(bookingId) {
-  const b = bookings.find(x => x.id === bookingId);
-  if (!b) return;
-  
-  const typeMap = { day: 'Day Hike (12am–3pm)', late: 'Late Hike (4pm–12am)', overnight: 'Overnight' };
- const statusLabel = { 
-    pending: 'Pending', 
-    waiting_payment: 'Awaiting Payment', 
-    active: 'Active', 
-    finished: 'Finished', 
-    completed: 'Completed', 
-    joined: 'Joined' 
-}[b.status] || b.status;
-const canStart = false; // Not today, so cannot start
-  
-  document.getElementById('vjTitle').textContent = b.mountain;
-  document.getElementById('vjBody').innerHTML = `
-    <div class="summary-box">
-      <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M4 10l8-6 8 6"/><rect x="4" y="10" width="16" height="12" rx="2"/></svg><span class="sr-label">Mountain</span><span class="sr-val">${b.mountain}</span></div>
-      <div class="summary-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/></svg><span class="sr-label">Date & Time</span><span class="sr-val">${b.date}${b.time ? ' at ' + b.time : ''}</span></div>
-      <div class="summary-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/></svg><span class="sr-label">Type</span><span class="sr-val">${typeMap[b.type] || b.type}</span></div>
-      <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="sr-label">Guide</span><span class="sr-val">${b.guideName}</span></div>
-      <div class="summary-row"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/></svg><span class="sr-label">Booking ID</span><span class="sr-val" style="font-family:'DM Mono',monospace;">${b.id}</span></div>
-      <div class="summary-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg><span class="sr-label">Status</span><span class="sr-val"><span class="badge status-${b.status}">${statusLabel}</span></span></div>
-    </div>
-    <div class="detail-section-label">Hiker List</div>
-    <div class="detail-hikers-list">
-      ${b.hikers.map(h => `<div class="detail-hiker-chip"><div class="dh-av">${h.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>${h}</div>`).join('')}
-    </div>
-    ${!b.hasReviewed && (b.status === 'completed' || b.status === 'finished') ? `
-    <div class="info-note" style="margin-top: 16px;">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span>Don't forget to leave a review for this hike!</span>
-    </div>` : ''}
-    ${(b.status === 'pending' || b.status === 'confirmed' || b.status === 'active' || b.status === 'joined') ? `
-    <div class="info-note" style="margin-top:14px;">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span>This hike is scheduled for ${b.date}. The Start Hike button will appear on the day of your hike.</span>
-    </div>` : ''}
-    <div style="margin-top: 20px;">
-      <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-full" style="margin-bottom: 8px;">
-        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Message Guide
-      </a>
-    </div>`;
-  
-  document.getElementById('viewJoinedModal').classList.add('open');
+    const b = bookings.find(x => x.id === bookingId);
+    if (!b) return;
+    
+    // Fetch mountain data to get fees
+    const mountain = mountains.find(m => m.id === b.mountainId);
+    const mountainFees = mountain ? mountain.fees : { regFee: 150, envFee: 120 };
+    
+    const pax = b.pax;
+    const registrationTotal = mountainFees.regFee * pax;
+    const environmentalTotal = (mountainFees.envFee || 0) * pax;
+    
+    // Get guide fee from the booking (or calculate)
+    let guideFee = 801;
+    const feeKey = `${b.guideId}_${b.mountainId}`;
+    if (typeof guideFeeMap !== 'undefined' && guideFeeMap[feeKey]) {
+        guideFee = b.type === 'overnight' ? guideFeeMap[feeKey].overnight : guideFeeMap[feeKey].day;
+    } else {
+        guideFee = b.type === 'overnight' ? 1500 : 801;
+    }
+    
+    const downpaymentPaid = b.downpaymentAmount || 0;
+    const remainingGuideFee = guideFee - downpaymentPaid;
+    
+    const typeMap = { day: 'Day Hike (4am–2pm)', late: 'Late Hike (3pm–5pm)', overnight: 'Overnight (2pm–6pm)' };
+    const statusLabel = { 
+        pending: 'Pending', 
+        waiting_payment: 'Awaiting Payment', 
+        active: 'Active', 
+        finished: 'Finished', 
+        completed: 'Completed', 
+        cancelled: 'Cancelled', 
+        joined: 'Joined' 
+    }[b.status] || b.status;
+    
+    // Status badge class
+    let statusClass = 'status-pending';
+    if (b.status === 'active') statusClass = 'status-confirmed';
+    else if (b.status === 'waiting_payment') statusClass = 'status-pending';
+    else if (b.status === 'joined') statusClass = 'status-joined';
+    else if (b.status === 'finished' || b.status === 'completed') statusClass = 'status-completed';
+    else if (b.status === 'cancelled') statusClass = 'status-cancelled';
+    
+    // Payment status badge
+    let paymentStatusBadge = '';
+    if (b.payment_status === 'paid') paymentStatusBadge = '<span class="badge badge-green">Paid</span>';
+    else if (b.payment_status === 'partial') paymentStatusBadge = '<span class="badge badge-amber">Partial (Downpayment Paid)</span>';
+    else paymentStatusBadge = '<span class="badge badge-amber">Pending</span>';
+    
+    // Downpayment status badge
+    let downpaymentBadge = '';
+    if (b.downpaymentStatus === 'paid') downpaymentBadge = '<span class="badge badge-green">Paid</span>';
+    else if (b.downpaymentStatus === 'expired') downpaymentBadge = '<span class="badge badge-gray">Expired</span>';
+    else downpaymentBadge = '<span class="badge badge-amber">Unpaid</span>';
+    
+    // Guide payment status badge
+    let guidePaymentBadge = '';
+    if (b.guide_payment_status === 'paid') guidePaymentBadge = '<span class="badge badge-green">Guide Fee Paid</span>';
+    else if (remainingGuideFee <= 0) guidePaymentBadge = '<span class="badge badge-green">Fully Paid</span>';
+    else guidePaymentBadge = '<span class="badge badge-amber">Pending (₱' + remainingGuideFee.toLocaleString() + ')</span>';
+    
+    document.getElementById('vjTitle').textContent = b.mountain;
+    document.getElementById('vjBody').innerHTML = `
+        <!-- Booking Information -->
+        <div class="summary-box" style="margin-bottom:16px;">
+            <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M4 10l8-6 8 6"/><rect x="4" y="10" width="16" height="12" rx="2"/></svg><span class="sr-label">Mountain</span><span class="sr-val">${b.mountain}</span></div>
+            <div class="summary-row"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span class="sr-label">Date & Time</span><span class="sr-val">${b.date}${b.time ? ' at ' + b.time : ''}</span></div>
+            <div class="summary-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/></svg><span class="sr-label">Type</span><span class="sr-val">${typeMap[b.type] || b.type}</span></div>
+            <div class="summary-row"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="sr-label">Guide</span><span class="sr-val">${b.guideName}</span></div>
+            <div class="summary-row"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/></svg><span class="sr-label">Booking ID</span><span class="sr-val" style="font-family:'DM Mono',monospace;">${b.id}</span></div>
+            <div class="summary-row"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg><span class="sr-label">Status</span><span class="sr-val"><span class="badge ${statusClass}">${statusLabel}</span></span></div>
+        </div>
+        
+        <!-- Mountain Fee Breakdown -->
+        <div style="background:var(--white);border-radius:12px;border:1px solid rgba(16,6,0,0.08);padding:16px;margin-bottom:16px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--sage);margin-bottom:10px;">🏔️ Mountain Fee Breakdown</div>
+            <div class="fee-row"><span>Registration Fee (₱${mountainFees.regFee} × ${pax})</span><span>₱${registrationTotal}</span></div>
+            ${environmentalTotal > 0 ? `<div class="fee-row"><span>Environmental Fee (₱${mountainFees.envFee} × ${pax})</span><span>₱${environmentalTotal}</span></div>` : ''}
+            <div class="fee-row total"><span>Total Mountain Fees</span><span>₱${(registrationTotal + environmentalTotal).toLocaleString()}</span></div>
+        </div>
+        
+        <!-- Tour Guide Fee Breakdown -->
+        <div style="background:var(--white);border-radius:12px;border:1px solid rgba(16,6,0,0.08);padding:16px;margin-bottom:16px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--sage);margin-bottom:10px;">🥾 Tour Guide Fee Breakdown</div>
+            <div class="fee-row"><span>Guide Fee (${b.type === 'overnight' ? 'Overnight' : 'Day'})</span><span>₱${guideFee.toLocaleString()}</span></div>
+            <div class="fee-row"><span>Downpayment Status</span><span>${downpaymentBadge}</span></div>
+            <div class="fee-row"><span>Downpayment Paid</span><span>₱${downpaymentPaid.toLocaleString()}</span></div>
+            <div class="fee-row"><span>Guide Payment Status</span><span>${guidePaymentBadge}</span></div>
+            <div class="fee-row total"><span>Remaining Balance (to guide)</span><span style="color:${remainingGuideFee > 0 ? '#e67e22' : '#1E7B48'};">₱${remainingGuideFee.toLocaleString()}</span></div>
+        </div>
+        
+        <!-- Payment Summary -->
+        <div style="background:linear-gradient(135deg, var(--sky), rgba(201,168,76,0.08));border-radius:12px;padding:16px;margin-bottom:16px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--sage);margin-bottom:10px;">💰 Payment Summary</div>
+            <div class="fee-row"><span>Total Amount</span><span>₱${b.totalFee.toLocaleString()}</span></div>
+            <div class="fee-row"><span>Payment Status</span><span>${paymentStatusBadge}</span></div>
+        </div>
+        
+        <!-- Hiker List -->
+        <div class="detail-section-label">Hiker List (${b.pax})</div>
+        <div class="detail-hikers-list" style="margin-bottom:16px;">
+            ${b.hikers.map(h => `<div class="detail-hiker-chip"><div class="dh-av">${h.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>${h}</div>`).join('')}
+        </div>
+        
+        ${b.notes ? `
+        <div class="detail-section-label">Notes & Advisories</div>
+        <div class="advisory-box" style="margin-bottom:16px;">
+            ${b.notes.split('\n').filter(Boolean).map(line => `
+                <div class="advisory-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${line}</div>
+            `).join('')}
+        </div>
+        ` : ''}
+        
+        ${!b.hasReviewed && (b.status === 'completed' || b.status === 'finished') ? `
+        <div class="info-note" style="margin-top: 16px;">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Don't forget to leave a review for this hike!</span>
+            <button class="btn btn-primary btn-sm" onclick="openReviewModal('${b.id}')" style="margin-left: auto;">Write Review</button>
+        </div>
+        ` : (b.hasReviewed && (b.status === 'completed' || b.status === 'finished')) ? `
+        <div class="info-note" style="margin-top: 16px;">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>You have already reviewed this hike.</span>
+            <button class="btn btn-outline btn-sm" onclick="openReviewModal('${b.id}')" style="margin-left: auto;">Edit Review</button>
+        </div>
+        ` : ''}
+        
+        <div style="margin-top: 20px;">
+            <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-full" style="margin-bottom: 8px;">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Message Guide
+            </a>
+        </div>
+    `;
+    
+    document.getElementById('viewJoinedModal').classList.add('open');
 }
 
 function updateNudgeDisplay() {

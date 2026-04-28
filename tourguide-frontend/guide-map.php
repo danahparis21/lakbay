@@ -218,6 +218,8 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
   <title>LAKBAY Guide — Live Trail Map</title>
   <link rel="stylesheet" href="guide-shared.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     /* Override guide-shared to allow full height */

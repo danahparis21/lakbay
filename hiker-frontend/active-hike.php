@@ -1455,6 +1455,17 @@ if (!$activeSession) {
     background: #ffd700;
     animation: blink-gold 1s ease-in-out infinite;
 }
+/* Completion mini map */
+#completionMap {
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+#completionMap:hover {
+    transform: scale(1.01);
+}
+.leaflet-control-attribution {
+    display: none !important;
+}
 
 @keyframes blink-gold {
     0%, 100% { opacity: 1; }
@@ -1467,6 +1478,8 @@ if (!$activeSession) {
         right: calc((100% - 1200px) / 2 + 24px);
     }
 }
+
+
     </style>
 </head>
 <body>
@@ -1674,6 +1687,10 @@ if (!$activeSession) {
         <div class="completion-emoji">🎉</div>
         <div class="completion-title" id="compTitle">Hike Complete!</div>
         <div class="completion-sub" id="compSub">Amazing work on the trail today</div>
+        
+        <!-- Mini map preview -->
+        <div id="completionMap" style="height: 160px; width: 100%; border-radius: 16px; margin-bottom: 16px; overflow: hidden; background: #1a2e1a;"></div>
+        
         <div class="completion-stats">
             <div class="comp-stat">
                 <div class="comp-stat-val" id="compDist">0.0</div>
@@ -1683,12 +1700,36 @@ if (!$activeSession) {
                 <div class="comp-stat-val" id="compTime">0:00</div>
                 <div class="comp-stat-label">duration</div>
             </div>
+            <div class="comp-stat">
+                <div class="comp-stat-val" id="compPace">0:00</div>
+                <div class="comp-stat-label">pace /km</div>
+            </div>
+            <div class="comp-stat">
+                <div class="comp-stat-val" id="compSpeed">0.0</div>
+                <div class="comp-stat-label">avg speed</div>
+            </div>
+            <div class="comp-stat" style="grid-column: span 2;">
+                <div class="comp-stat-val" id="compBadgesCount">0</div>
+                <div class="comp-stat-label">badges earned</div>
+            </div>
         </div>
+        
+        <!-- LAKBAY Branding -->
+        <div style="margin: 12px 0; padding: 8px; border-top: 1px solid rgba(255,255,255,0.08); border-bottom: 1px solid rgba(255,255,255,0.08);">
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <span style="font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; background: linear-gradient(135deg, #00e5b4, #06d6a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">LAKBAY</span>
+                <span style="color: rgba(255,255,255,0.3);">|</span>
+                <span style="font-size: 11px; color: var(--text-muted-dark);">Trail recorded with Lakbay</span>
+            </div>
+        </div>
+        
         <div class="completion-actions">
             <button class="btn-secondary" onclick="window.location.href='hikerProfile.php'">Profile</button>
-            <a href="bookings.php" class="btn-primary" style="text-decoration:none;text-align:center;">Back to Bookings</a>
+            <button class="btn-secondary" onclick="shareActivity()" id="shareBtn">Share</button>
+            <a href="bookings.php" class="btn-primary" style="text-decoration:none;text-align:center;">Done</a>
         </div>
     </div>
+
 </div>
 
 <!-- ── TOAST ──────────────────────────────────────────── -->
@@ -2032,15 +2073,31 @@ function drawTrail() {
     }
     if (!lls.length) return;
 
-    trailLayer = L.polyline(lls, {
-        color: 'rgba(255,255,255,0.25)',
-        weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round'
-    }).addTo(map);
+// Outline layer (behind) - gives contrast on any background
+L.polyline(lls, {
+    color: '#375837ff',      // Dark forest green
+    weight: 9, 
+    opacity: 0.8,
+    lineCap: 'round', 
+    lineJoin: 'round'
+}).addTo(map);
 
-    traveledLayer = L.polyline([], {
-        color: '#00e5b4', weight: 6, opacity: 1,
-        lineCap: 'round', lineJoin: 'round'
-    }).addTo(map);
+// Main trail layer (on top)
+trailLayer = L.polyline(lls, {
+    color: '#dbffdcff',      // Soft mint green
+    weight: 5, 
+    opacity: 0.85,
+    lineCap: 'round', 
+    lineJoin: 'round'
+}).addTo(map);
+
+traveledLayer = L.polyline([], {
+    color: '#00e5b4',        // Bright mint (your brand color)
+    weight: 6, 
+    opacity: 1,
+    lineCap: 'round', 
+    lineJoin: 'round'
+}).addTo(map);
 
     trailCoords = lls;
     addArrows(lls);
@@ -2601,38 +2658,84 @@ async function finishHike() {
     }
     locationEnabled = false;
 
-    const durationSec = Math.floor((Date.now() - startTime) / 1000);
+    let durationSec = Math.floor((Date.now() - startTime) / 1000);
+    let finalDistance = totalDistance;
+    
+    // 🎯 DEMO MODE: If no distance was tracked, use full trail length
+    if (finalDistance === 0 && trailLength > 0) {
+        finalDistance = trailLength;
+        // Calculate estimated duration based on trail length (approx 2.5 km/h average hiking speed)
+        const estimatedDurationSec = finalDistance * 1440; // 2.5 km/h = 1440 sec per km
+        durationSec = Math.max(60, estimatedDurationSec);
+        showToast('🎭 Demo mode: Using full trail stats for presentation');
+        
+        // Also mark all waypoints as reached for demo
+        waypoints.forEach((wp, idx) => {
+            const key = `${wp.type}-${idx}`;
+            if (!reachedCheckpoints.has(key)) {
+                reachedCheckpoints.add(key);
+                const badge = activeBadges[wp.type] || activeBadges.viewpoint;
+                storeBadgeLocal(key);
+            }
+        });
+        updateBadgeCounter();
+        
+        // Visually fill the entire traveled path
+        if (trailCoords.length > 0 && traveledLayer) {
+            traveledLayer.setLatLngs(trailCoords);
+        }
+        
+        // Update progress UI to 100%
+        document.getElementById('progressFill').style.width = '100%';
+        document.getElementById('progressPct').textContent = '100%';
+        document.getElementById('distanceCovered').textContent = finalDistance.toFixed(2);
+        document.getElementById('distRemaining').innerHTML = '0.00 km remaining';
+    }
 
     try {
-        const res = await fetch('../api/finish_hike.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                booking_id: bookingId,
-                session_token: sessionToken,
-                distance: totalDistance,
-                duration: durationSec,
-                badges: Array.from(reachedCheckpoints)
-            })
-        });
-        const data = await res.json();
+    const res = await fetch('../api/finish_hike.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            booking_id: bookingId,
+            session_token: sessionToken,
+            distance: finalDistance,
+            duration: durationSec,
+            badges: Array.from(reachedCheckpoints)
+        })
+    });
+    
+    // Get the response text first to see what's actually returned
+    const responseText = await res.text();
+    console.log('Raw response:', responseText);
+    
+    // Try to parse as JSON
+    let data;
+    try {
+        data = JSON.parse(responseText);
+    } catch (e) {
+        console.error('Failed to parse JSON. Response was:', responseText);
+        showToast('Server error: Invalid response from server');
+        btn.disabled = false;
+        btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg> Finish Hike';
+        return;
+    }
 
-        if (data.success) {
-            hikeFinished = true;
-            showCompletionSummary(data.summary);
-        } else {
-            showToast('Error: ' + (data.message || 'Could not finish hike'));
-            btn.disabled = false;
-            btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg> Finish Hike';
-        }
-    } catch (err) {
-        console.error('Finish hike error:', err);
-        showToast('Network error — please try again');
+    if (data.success) {
+        hikeFinished = true;
+        showCompletionSummary(data.summary);
+    } else {
+        showToast('Error: ' + (data.message || 'Could not finish hike'));
         btn.disabled = false;
         btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg> Finish Hike';
     }
+} catch (err) {
+    console.error('Finish hike error:', err);
+    showToast('Network error — please try again');
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg> Finish Hike';
 }
-
+}
 function showCompletionSummary(summary) {
     document.getElementById('statusText').textContent = 'COMPLETED';
     const pill = document.getElementById('statusPill');
@@ -2641,16 +2744,165 @@ function showCompletionSummary(summary) {
     pill.style.color = 'var(--success)';
     pill.querySelector('.status-dot').style.animation = 'none';
 
+    // Update all stats
     document.getElementById('compTitle').textContent = `${summary.mountain} — Complete!`;
-    document.getElementById('compDist').textContent = summary.distance_km.toFixed(1);
-    document.getElementById('compTime').textContent = summary.duration;
+    document.getElementById('compDist').innerHTML = `${summary.distance_km} <span style="font-size:12px;">km</span>`;
+    document.getElementById('compTime').innerHTML = `${summary.duration} <span style="font-size:12px;"></span>`;
+    document.getElementById('compPace').innerHTML = `${summary.pace} <span style="font-size:12px;">/km</span>`;
+    document.getElementById('compSpeed').innerHTML = `${summary.avg_speed_kmh} <span style="font-size:12px;">km/h</span>`;
+    document.getElementById('compBadgesCount').textContent = `${summary.badges_count} badges earned`;
 
     document.getElementById('completionOverlay').classList.add('open');
-
+    
     const btn = document.getElementById('finishHikeBtn');
     btn.style.display = 'none';
+    
+    // Wait for the modal to fully render and get proper dimensions
+    setTimeout(() => {
+        drawCompletionMap();
+    }, 200);
 }
 
+function drawCompletionMap() {
+    console.log('drawCompletionMap called');
+    
+    let coords = null;
+    
+    if (trailCoords && trailCoords.length > 0) {
+        coords = trailCoords;
+        console.log('Using trailCoords:', coords.length, 'points');
+    } else if (trailData && trailData.type === 'LineString' && trailData.coordinates) {
+        coords = trailData.coordinates.map(c => [c[1], c[0]]);
+        console.log('Using trailData:', coords.length, 'points');
+    }
+    
+    if (!coords || coords.length === 0) {
+        console.log('No trail coordinates available');
+        const mapContainer = document.getElementById('completionMap');
+        if (mapContainer) {
+            mapContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: rgba(255,255,255,0.5); font-size: 12px;">🗺️ Loading trail map...</div>';
+        }
+        return;
+    }
+    
+    const mapContainer = document.getElementById('completionMap');
+    if (!mapContainer) {
+        console.log('completionMap element not found');
+        return;
+    }
+    
+    // Force a height on the container if needed
+    if (mapContainer.clientHeight === 0) {
+        console.log('Container has 0 height, forcing style');
+        mapContainer.style.height = '160px';
+        mapContainer.style.minHeight = '160px';
+    }
+    
+    console.log('Container dimensions after fix:', mapContainer.clientWidth, 'x', mapContainer.clientHeight);
+    
+    // Clear and create canvas (reliable fallback)
+    mapContainer.innerHTML = '';
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = mapContainer.clientWidth || 400;
+    canvas.height = mapContainer.clientHeight || 160;
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.background = '#1a2e1a';
+    canvas.style.borderRadius = '16px';
+    canvas.style.display = 'block';
+    mapContainer.appendChild(canvas);
+    
+    const ctx = canvas.getContext('2d');
+    
+    // Calculate bounds
+    let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+    coords.forEach(c => {
+        minLat = Math.min(minLat, c[0]);
+        maxLat = Math.max(maxLat, c[0]);
+        minLng = Math.min(minLng, c[1]);
+        maxLng = Math.max(maxLng, c[1]);
+    });
+    
+    const latRange = maxLat - minLat;
+    const lngRange = maxLng - minLng;
+    const padding = 20;
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    if (width > 0 && height > 0) {
+        // Draw background
+        ctx.fillStyle = '#1a2e1a';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Draw trail
+        ctx.beginPath();
+        ctx.strokeStyle = '#00e5b4';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        
+        for (let i = 0; i < coords.length; i++) {
+            const x = padding + ((coords[i][1] - minLng) / lngRange) * (width - padding * 2);
+            const y = height - (padding + ((coords[i][0] - minLat) / latRange) * (height - padding * 2));
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+        
+        // Draw start marker
+        const startX = padding + ((coords[0][1] - minLng) / lngRange) * (width - padding * 2);
+        const startY = height - (padding + ((coords[0][0] - minLat) / latRange) * (height - padding * 2));
+        ctx.fillStyle = '#00e5b4';
+        ctx.beginPath();
+        ctx.arc(startX, startY, 6, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(startX, startY, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Draw end marker
+        const endX = padding + ((coords[coords.length-1][1] - minLng) / lngRange) * (width - padding * 2);
+        const endY = height - (padding + ((coords[coords.length-1][0] - minLat) / latRange) * (height - padding * 2));
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(endX, endY, 7, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(endX, endY, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        console.log('Canvas trail drawn!', width, 'x', height);
+    } else {
+        console.log('Canvas dimensions invalid:', width, 'x', height);
+        mapContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: rgba(255,255,255,0.5); font-size: 12px;">🗺️ Trail map</div>';
+    }
+}
+// Share activity function (placeholder - can be extended later)
+function shareActivity() {
+    // Create a shareable message
+    const distance = document.getElementById('compDist').innerText;
+    const duration = document.getElementById('compTime').innerText;
+    const mountain = document.getElementById('compTitle').innerText;
+    
+    const shareText = `${mountain}\n📏 ${distance} hiked\n⏱️ ${duration}\n\nTracked with Lakbay 🏔️`;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: 'My Lakbay Hike',
+            text: shareText,
+            url: window.location.href
+        }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(shareText);
+        showToast('Stats copied to clipboard!');
+    }
+}
 // ── END-TIME NUDGE ────────────────────────────────────────
 function checkEndTimeNudge() {
     if (hikeFinished || nudgeDismissed || nudgeShown) return;

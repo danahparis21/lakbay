@@ -159,6 +159,8 @@ try {
   <?php if (!$isEmbed): ?>
   <link rel="stylesheet" href="guide-shared.css">
   <?php endif; ?>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
+
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     <?php if ($isEmbed): ?>

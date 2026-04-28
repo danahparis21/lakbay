@@ -1655,23 +1655,29 @@ $currentPage = 'hikerProfile'; // Change per page: 'explore', 'bookings', 'quiz'
             <?php else: ?>
               <?php foreach ($historyItems as $item): ?>
                 <div class="history-item" onclick="showHikeDetails(<?php echo htmlspecialchars(json_encode($item)); ?>)">
-                  <div class="history-info">
-                    <h4><?php echo htmlspecialchars($item['mountain_name']); ?></h4>
-                    <p><?php echo date('F j, Y', strtotime($item['date'])); ?> · <?php echo htmlspecialchars($item['type']); ?></p>
-                    <p><small><?php echo htmlspecialchars($item['location']); ?></small></p>
-                  </div>
-                  <div>
-                    <span class="history-status status-<?php echo $item['status']; ?>"><?php echo ucfirst($item['status']); ?></span>
-                  </div>
-                  <?php if ($item['status'] === 'active' || $item['status'] === 'pending'): ?>
-                  <form id="cancelForm-<?php echo $item['id']; ?>" method="POST" style="margin:0;">
-                    <input type="hidden" name="action" value="cancel_booking">
-                    <input type="hidden" name="booking_id" value="<?php echo $item['id']; ?>">
-                    <input type="hidden" name="booking_type" value="<?php echo $item['booking_type']; ?>">
-                    <button type="button" class="btn-outline-danger" style="padding: 4px 12px; font-size: 11px;" onclick="confirmCancelHike('cancelForm-<?php echo $item['id']; ?>')">Cancel</button>
-                  </form>
-                  <?php endif; ?>
-                </div>
+    <div class="history-info">
+        <h4><?php echo htmlspecialchars($item['mountain_name']); ?></h4>
+        <p><?php echo date('F j, Y', strtotime($item['date'])); ?> · <?php echo htmlspecialchars($item['type']); ?></p>
+        <p><small><?php echo htmlspecialchars($item['location']); ?></small></p>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <span class="history-status status-<?php echo $item['status']; ?>"><?php echo ucfirst($item['status']); ?></span>
+        
+        <?php if ($item['status'] === 'finished'): ?>
+        <button class="btn-outline-small" style="padding: 4px 12px; font-size: 11px;" onclick="event.stopPropagation(); viewActivity(<?php echo $item['id']; ?>)">
+            📊 View Summary
+        </button>
+        <?php endif; ?>
+    </div>
+    <?php if ($item['status'] === 'active' || $item['status'] === 'pending'): ?>
+    <form id="cancelForm-<?php echo $item['id']; ?>" method="POST" style="margin:0;">
+        <input type="hidden" name="action" value="cancel_booking">
+        <input type="hidden" name="booking_id" value="<?php echo $item['id']; ?>">
+        <input type="hidden" name="booking_type" value="<?php echo $item['booking_type']; ?>">
+        <button type="button" class="btn-outline-danger" style="padding: 4px 12px; font-size: 11px;" onclick="event.stopPropagation(); confirmCancelHike('cancelForm-<?php echo $item['id']; ?>')">Cancel</button>
+    </form>
+    <?php endif; ?>
+</div>
               <?php endforeach; ?>
             <?php endif; ?>
           </div>
@@ -2323,6 +2329,10 @@ document.querySelector('[data-section="system_review"]').addEventListener('click
         initSystemStars();
     }, 100);
 });
+
+function viewActivity(bookingId) {
+    window.location.href = `view_activity.php?booking_id=${bookingId}`;
+}
 
 </script>
 </body>
