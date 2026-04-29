@@ -1,5 +1,28 @@
-<!-- shared_sidebar.php — include in every manager page -->
-<!-- Usage: set $activePage before including: e.g. $activePage = 'payments'; -->
+<?php
+// shared_sidebar.php — include in every manager page
+// Usage: set $activePage before including: e.g. $activePage = 'payments';
+
+// Make sure we have mountain data (in case parent didn't define it)
+if (!isset($assigned_mountains) && isset($manager_id)) {
+    if (!isset($pdo)) {
+        require_once __DIR__ . '/../config/db.php';
+    }
+    $stmt = $pdo->prepare("
+        SELECT m.* 
+        FROM mountains m
+        INNER JOIN manager_mountains mm ON m.id = mm.mountain_id
+        WHERE mm.manager_id = ?
+        ORDER BY m.name
+    ");
+    $stmt->execute([$manager_id]);
+    $assigned_mountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$mtn_names = array_column($assigned_mountains ?? [], 'name');
+$mtn_display = !empty($mtn_names) ? implode(' & ', $mtn_names) : 'No Mountain';
+$mtn_count = count($assigned_mountains ?? []);
+?>
+
 <aside class="sidebar" id="sidebar">
   <a href="dashboard.php" class="sidebar-brand">
     <div class="sidebar-logo">
@@ -21,8 +44,8 @@
       </svg>
     </div>
     <div class="mountain-badge-text">
-      <div class="mountain-badge-name" id="sideMtnName">Loading…</div>
-      <div class="mountain-badge-role" id="sideMtnSub">Your Mountain</div>
+      <div class="mountain-badge-name" id="sideMtnName"><?= htmlspecialchars($mtn_display) ?></div>
+      <div class="mountain-badge-role" id="sideMtnSub">Managing <?= $mtn_count ?> mountain<?= $mtn_count !== 1 ? 's' : '' ?></div>
     </div>
   </div>
 
@@ -76,7 +99,7 @@
 
     <div class="nav-divider"></div>
 
-    <a href="#" class="nav-item logout" onclick="confirmLogout()">
+    <a href="#" class="nav-item logout" onclick="event.preventDefault(); confirmLogout()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
         <polyline points="16 17 21 12 16 7"/>
@@ -87,29 +110,29 @@
   </nav>
 
   <div class="sidebar-footer">
-    <div class="sidebar-footer-avatar" id="sfAvatar">JR</div>
+    <div class="sidebar-footer-avatar" id="sfAvatar"><?= $manager_initials ?? 'JR' ?></div>
     <div class="sidebar-footer-text">
-      <div class="sidebar-footer-name" id="sfName">John Rivera</div>
+      <div class="sidebar-footer-name" id="sfName"><?= htmlspecialchars($manager_name ?? 'Mountain Manager') ?></div>
       <div class="sidebar-footer-role">Mountain Manager</div>
     </div>
   </div>
 </aside>
 
-<!-- Logout confirm modal -->
-<div class="modal-bg" id="logoutModal">
-  <div class="modal anim-scale-in" style="max-width:380px;">
-    <div class="modal-hdr" style="border-bottom:none;padding-bottom:8px;">
-      <div class="modal-title">Log out?</div>
-      <button class="modal-close" onclick="document.getElementById('logoutModal').classList.remove('open')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+<!-- Logout confirm modal - FIXED CSS -->
+<div id="logoutModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 10000; align-items: center; justify-content: center;">
+  <div style="background: white; border-radius: 24px; max-width: 400px; width: 90%; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+    <div style="padding: 20px 24px 0; display: flex; justify-content: space-between; align-items: center;">
+      <h3 style="font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: #100600;">Log out?</h3>
+      <button onclick="closeLogoutModal()" style="width: 32px; height: 32px; border-radius: 50%; background: #f4f1ec; border: none; cursor: pointer;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div class="modal-body" style="padding-top:4px;">
-      <p style="font-size:14px;color:var(--ink3);line-height:1.6;">You will be signed out of the LAKBAY Manager Portal. Any unsaved changes will be lost.</p>
-      <div style="display:flex;gap:10px;margin-top:20px;">
-        <button class="btn btn-ghost btn-full" onclick="document.getElementById('logoutModal').classList.remove('open')">Cancel</button>
-        <button class="btn btn-danger btn-full" onclick="doLogout()" style="background:var(--red);color:white;border:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    <div style="padding: 8px 24px 24px;">
+      <p style="font-size: 14px; color: #7a6a5a; line-height: 1.6;">You will be signed out of the LAKBAY Manager Portal. Any unsaved changes will be lost.</p>
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button onclick="closeLogoutModal()" style="flex: 1; padding: 10px; border-radius: 10px; font-weight: 600; border: 1.5px solid rgba(16,6,0,0.15); background: transparent; cursor: pointer;">Cancel</button>
+        <button onclick="doLogout()" style="flex: 1; padding: 10px; border-radius: 10px; font-weight: 600; border: none; background: #c62828; color: white; cursor: pointer;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14" style="display: inline; margin-right: 6px;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Log out
         </button>
       </div>
@@ -118,17 +141,22 @@
 </div>
 
 <script>
-function confirmLogout() { document.getElementById('logoutModal').classList.add('open'); }
+function confirmLogout() {
+  document.getElementById('logoutModal').style.display = 'flex';
+}
+
+function closeLogoutModal() {
+  document.getElementById('logoutModal').style.display = 'none';
+}
+
 function doLogout() {
-  document.body.style.opacity='0';
-  document.body.style.transition='opacity .4s';
-  setTimeout(()=>{ window.location.href='dashboard.php'; },400);
+  window.location.href = '../login-and-signup/login.php';
 }
-function initSidebar() {
-  const myMtns = getMyMountains();
-  document.getElementById('sideMtnName').textContent = myMtns.map(m=>m.name).join(' & ');
-  document.getElementById('sideMtnSub').textContent = `Managing ${myMtns.length} mountain${myMtns.length>1?'s':''}`;
-  document.getElementById('sfAvatar').textContent = MANAGER.initials;
-  document.getElementById('sfName').textContent = MANAGER.name;
-}
+
+// Close modal when clicking outside
+document.getElementById('logoutModal')?.addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeLogoutModal();
+  }
+});
 </script>

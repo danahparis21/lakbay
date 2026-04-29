@@ -2755,3 +2755,87 @@
 2026-04-28 16:24:38 - === GET MESSAGES CALLED ===
 2026-04-28 16:24:38 - otherUserId param: 7
 2026-04-28 16:24:38 - hikerId: 4
+2026-04-29 13:38:48 - === GET MESSAGES CALLED ===
+2026-04-29 13:38:48 - otherUserId param: 5
+2026-04-29 13:38:48 - hikerId: 4
+2026-04-29 13:38:48 - === GET MESSAGES CALLED ===
+2026-04-29 13:38:48 - otherUserId param: 5
+2026-04-29 13:38:48 - hikerId: 4
+2026-04-29 13:38:50 - === GET MESSAGES CALLED ===
+2026-04-29 13:38:50 - otherUserId param: 8
+2026-04-29 13:38:50 - hikerId: 4
+2026-04-29 13:38:50 - === GET MESSAGES CALLED ===
+2026-04-29 13:38:50 - otherUserId param: 5
+2026-04-29 13:38:51 - hikerId: 4
+2026-04-29 13:38:54 - === GET MESSAGES CALLED ===
+2026-04-29 13:38:54 - otherUserId param: 8
+2026-04-29 13:38:54 - hikerId: 4
+2026-04-29 13:38:57 - === GET MESSAGES CALLED ===
+2026-04-29 13:38:57 - otherUserId param: 8
+2026-04-29 13:38:57 - hikerId: 4
+2026-04-29 13:40:48 - === GET MESSAGES CALLED ===
+2026-04-29 13:40:48 - otherUserId param: 4
+2026-04-29 13:40:48 - hikerId: 11
+2026-04-29 13:41:07 - === GET MESSAGES CALLED ===
+2026-04-29 13:41:07 - otherUserId param: 11
+2026-04-29 13:41:07 - hikerId: 4
+2026-04-29 13:41:16 - === GET MESSAGES CALLED ===
+2026-04-29 13:41:16 - otherUserId param: 11
+2026-04-29 13:41:16 - hikerId: 4
+2026-04-29 13:41:26 - === GET MESSAGES CALLED ===
+2026-04-29 13:41:26 - otherUserId param: 11
+2026-04-29 13:41:26 - hikerId: 4
+2026-04-29 13:41:36 - === GET MESSAGES CALLED ===
+2026-04-29 13:41:36 - otherUserId param: 11
+2026-04-29 13:41:36 - hikerId: 4
+2026-04-29 13:41:46 - === GET MESSAGES CALLED ===
+2026-04-29 13:41:46 - otherUserId param: 11
+2026-04-29 13:41:46 - hikerId: 4
+2026-04-29 13:41:56 - === GET MESSAGES CALLED ===
+2026-04-29 13:41:56 - otherUserId param: 11
+2026-04-29 13:41:56 - hikerId: 4
+2026-04-29 13:42:06 - === GET MESSAGES CALLED ===
+2026-04-29 13:42:06 - otherUserId param: 11
+2026-04-29 13:42:06 - hikerId: 4
+2026-04-29 13:42:35 - === GET MESSAGES CALLED ===
+2026-04-29 13:42:35 - otherUserId param: 11
+2026-04-29 13:42:35 - hikerId: 4
+2026-04-29 13:43:35 - === GET MESSAGES CALLED ===
+2026-04-29 13:43:35 - otherUserId param: 11
+2026-04-29 13:43:35 - hikerId: 4
+2026-04-29 13:44:35 - === GET MESSAGES CALLED ===
+2026-04-29 13:44:35 - otherUserId param: 11
+2026-04-29 13:44:35 - hikerId: 4
+2026-04-29 13:45:35 - === GET MESSAGES CALLED ===
+2026-04-29 13:45:35 - otherUserId param: 11
+2026-04-29 13:45:35 - hikerId: 4
+2026-04-29 13:46:35 - === GET MESSAGES CALLED ===
+2026-04-29 13:46:35 - otherUserId param: 11
+2026-04-29 13:46:35 - hikerId: 4
+2026-04-29 13:46:56 - === GET MESSAGES CALLED ===
+2026-04-29 13:46:56 - otherUserId param: 11
+2026-04-29 13:46:56 - hikerId: 4
+2026-04-29 13:46:57 - === GET MESSAGES CALLED ===
+2026-04-29 13:46:57 - otherUserId param: 11
+2026-04-29 13:46:57 - hikerId: 4
+2026-04-29 13:47:11 - === GET MESSAGES CALLED ===
+2026-04-29 13:47:11 - otherUserId param: 11
+2026-04-29 13:47:11 - hikerId: 4
+2026-04-29 13:47:12 - === GET MESSAGES CALLED ===
+2026-04-29 13:47:12 - otherUserId param: 11
+2026-04-29 13:47:12 - hikerId: 4
+2026-04-29 13:47:17 - === GET MESSAGES CALLED ===
+2026-04-29 13:47:17 - otherUserId param: 11
+2026-04-29 13:47:17 - hikerId: 4
+2026-04-29 13:47:26 - === GET MESSAGES CALLED ===
+2026-04-29 13:47:26 - otherUserId param: 11
+2026-04-29 13:47:26 - hikerId: 4
+2026-04-29 13:47:37 - === GET MESSAGES CALLED ===
+2026-04-29 13:47:37 - otherUserId param: 11
+2026-04-29 13:47:37 - hikerId: 4
+2026-04-29 14:17:14 - === GET MESSAGES CALLED ===
+2026-04-29 14:17:14 - otherUserId param: 11
+2026-04-29 14:17:14 - hikerId: 4
+2026-04-29 14:17:17 - === GET MESSAGES CALLED ===
+2026-04-29 14:17:17 - otherUserId param: 11
+2026-04-29 14:17:17 - hikerId: 4

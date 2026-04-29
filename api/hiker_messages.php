@@ -466,7 +466,7 @@ function getAnnouncements($pdo, $hikerId) {
 ────────────────────────────────────────────── */
 function approveJoinRequest($pdo, $hikerId) {
     $requestId       = (int)($_POST['request_id']       ?? 0);
-    $bookingId       = (int)($_POST['booking_id']       ?? 0);  // This is the booking DB ID
+    $bookingId       = (int)($_POST['booking_id']       ?? 0);
     $requesterName   =       $_POST['requester_name']   ?? '';
     $requesterUserId = (int)($_POST['requester_user_id'] ?? 0);
 
@@ -484,23 +484,46 @@ function approveJoinRequest($pdo, $hikerId) {
     $stmt = $pdo->prepare("UPDATE join_requests SET status = 'approved', updated_at = NOW() WHERE booking_id = ? AND requester_user_id = ?");
     $stmt->execute([$bookingId, $requesterUserId]);
     
-    // If no rows updated, try with request_id
     if ($stmt->rowCount() === 0) {
         $stmt = $pdo->prepare("UPDATE join_requests SET status = 'approved', updated_at = NOW() WHERE id = ?");
         $stmt->execute([$requestId]);
     }
 
     // Add to booking_hikers if not already there
-    $stmt = $pdo->prepare("SELECT id FROM booking_hikers WHERE booking_id = ? AND hiker_name = ?");
+$stmt = $pdo->prepare("SELECT id FROM booking_hikers WHERE booking_id = ? AND hiker_name = ?");
+$stmt->execute([$bookingId, $requesterName]);
+if (!$stmt->fetch()) {
+    $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
     $stmt->execute([$bookingId, $requesterName]);
-    if (!$stmt->fetch()) {
-        $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
-        $stmt->execute([$bookingId, $requesterName]);
-        
-        // Update number of hikers
-        $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers + 1 WHERE id = ?");
-        $stmt->execute([$bookingId]);
-    }
+    $newHikerId = $pdo->lastInsertId();
+    
+    // Get mountain fees for this booking
+    $feeStmt = $pdo->prepare("
+        SELECT m.registration_fee, m.environmental_fee 
+        FROM mountains m
+        JOIN bookings b ON b.mountain_id = m.id
+        WHERE b.id = ?
+    ");
+    $feeStmt->execute([$bookingId]);
+    $mountain = $feeStmt->fetch(PDO::FETCH_ASSOC);
+    
+    $regFee = $mountain['registration_fee'] ?? 150;
+    $envFee = $mountain['environmental_fee'] ?? 120;
+    
+    // ✅ NEW STRUCTURE: ONE row per hiker with both fees
+    $payStmt = $pdo->prepare("
+        INSERT INTO booking_payments (
+            booking_id, source_type, source_id, 
+            registration_amount, registration_paid,
+            environmental_amount, environmental_paid
+        ) VALUES (?, 'booking_hiker', ?, ?, 'unpaid', ?, 'unpaid')
+    ");
+    $payStmt->execute([$bookingId, $newHikerId, $regFee, $envFee]);
+    
+    // Update number of hikers
+    $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers + 1 WHERE id = ?");
+    $stmt->execute([$bookingId]);
+}
 
     // Update action_data in the message
     $msgStmt = $pdo->prepare("SELECT action_data FROM messages WHERE id = ?");

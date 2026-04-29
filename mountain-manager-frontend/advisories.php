@@ -1,122 +1,225 @@
 <?php
-// advisories.php - Lakbay Manager Advisories Page
+// advisories.php - Complete Lakbay Manager Advisories System
 session_start();
+require_once '../config/db.php';
 
-$MANAGER = (object)['name' => 'John Rivera', 'initials' => 'JR', 'mountainId' => 'mt1', 'mountainName' => 'Mt. Pulag'];
-
-function getManagerMountain() {
-    return [
-        'id' => 'mt1',
-        'name' => 'Mt. Pulag',
-        'location' => 'Benguet',
-        'elevation' => '2,922m',
-        'difficulty' => 'Intermediate',
-        'description' => 'Highest peak in Luzon, famous for sea of clouds'
-    ];
+// Check if user is logged in and is a manager
+if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'manager') {
+    header('Location: ../login.php');
+    exit();
 }
 
-// Sample advisories data
-function getAdvisories() {
-    return [
-        [
-            'id' => 'ADV001',
-            'type' => 'weather',
-            'severity' => 'critical',
-            'title' => 'Typhoon Signal No. 2 Advisory',
-            'message' => 'PAGASA has raised Typhoon Signal No. 2 over Benguet province. All hiking activities on Mt. Pulag are SUSPENDED until further notice. Hikers currently on the trail must descend immediately.',
-            'affectedDates' => ['2026-05-14', '2026-05-15', '2026-05-16'],
-            'issuedBy' => 'PAGASA / DENR',
-            'issuedAt' => '2026-05-12 08:00:00',
-            'expiresAt' => '2026-05-17 00:00:00',
-            'status' => 'active',
-            'affectedBookings' => ['BK001'],
-            'notifyHikers' => true,
-        ],
-        [
-            'id' => 'ADV002',
-            'type' => 'trail',
-            'severity' => 'warning',
-            'title' => 'Trail 3 Rockslide — Partial Closure',
-            'message' => 'A minor rockslide has blocked Trail 3 (Ambangeg Route) near the 4km mark. Trail 1 and Trail 2 remain open. Hikers must take the alternate Akiki Trail. Expect an additional 1.5 hours of travel time.',
-            'affectedDates' => ['2026-06-18', '2026-06-19', '2026-06-20'],
-            'issuedBy' => 'PNPNNP Ranger Station',
-            'issuedAt' => '2026-06-17 14:30:00',
-            'expiresAt' => '2026-06-25 00:00:00',
-            'status' => 'active',
-            'affectedBookings' => ['BK002'],
-            'notifyHikers' => false,
-        ],
-        [
-            'id' => 'ADV003',
-            'type' => 'capacity',
-            'severity' => 'info',
-            'title' => 'Trail Capacity Limit Reached — June 28',
-            'message' => 'The daily visitor cap of 150 persons has been reached for June 28, 2026. No additional walk-in registrations will be accepted. All pre-booked groups are confirmed.',
-            'affectedDates' => ['2026-06-28'],
-            'issuedBy' => 'Mt. Pulag Management Office',
-            'issuedAt' => '2026-06-24 09:00:00',
-            'expiresAt' => '2026-06-29 00:00:00',
-            'status' => 'active',
-            'affectedBookings' => [],
-            'notifyHikers' => false,
-        ],
-        [
-            'id' => 'ADV004',
-            'type' => 'health',
-            'severity' => 'warning',
-            'title' => 'Altitude Sickness Cases Reported',
-            'message' => 'Three (3) cases of acute altitude sickness (AMS) have been reported at Camp 2 last weekend. Guides are reminded to monitor hikers closely, enforce acclimatization protocols, and carry emergency medication. Hikers with existing respiratory conditions are advised to consult a physician before ascending.',
-            'affectedDates' => [],
-            'issuedBy' => 'DOH — Cordillera Region',
-            'issuedAt' => '2026-05-10 11:00:00',
-            'expiresAt' => '2026-06-10 00:00:00',
-            'status' => 'active',
-            'affectedBookings' => [],
-            'notifyHikers' => true,
-        ],
-        [
-            'id' => 'ADV005',
-            'type' => 'maintenance',
-            'severity' => 'info',
-            'title' => 'Campsite Maintenance — Kit床 Area Closed',
-            'message' => 'The communal cooking area at Camps 2 and 3 will undergo scheduled maintenance from July 5–7. Groups on overnight treks must bring portable cooking stoves. The ranger station at Camp 2 remains operational.',
-            'affectedDates' => ['2026-07-05', '2026-07-06', '2026-07-07'],
-            'issuedBy' => 'Mt. Pulag Management Office',
-            'issuedAt' => '2026-07-01 08:00:00',
-            'expiresAt' => '2026-07-08 00:00:00',
-            'status' => 'active',
-            'affectedBookings' => ['BK003'],
-            'notifyHikers' => false,
-        ],
-        [
-            'id' => 'ADV006',
-            'type' => 'wildlife',
-            'severity' => 'info',
-            'title' => 'Wildlife Protection Reminder — Nesting Season',
-            'message' => 'The critically endangered Philippine Eagle has been sighted nesting near Summit Trail. All hikers must stay on designated paths and maintain a minimum distance of 50 meters from marked wildlife zones. Feeding or disturbing wildlife is strictly prohibited.',
-            'affectedDates' => [],
-            'issuedBy' => 'DENR — Biodiversity Division',
-            'issuedAt' => '2026-04-01 00:00:00',
-            'expiresAt' => '2026-08-31 00:00:00',
-            'status' => 'active',
-            'affectedBookings' => [],
-            'notifyHikers' => false,
-        ],
-        [
-            'id' => 'ADV007',
-            'type' => 'weather',
-            'severity' => 'info',
-            'title' => 'LPA Weather System — Monitor Only',
-            'message' => 'A Low Pressure Area (LPA) is being monitored east of Visayas. No immediate threat to Cordillera region but conditions may change. Guides should monitor PAGASA bulletins and be prepared to adjust itineraries on short notice.',
-            'affectedDates' => ['2026-05-18', '2026-05-19'],
-            'issuedBy' => 'PAGASA',
-            'issuedAt' => '2026-05-16 16:00:00',
-            'expiresAt' => '2026-05-20 00:00:00',
-            'status' => 'resolved',
-            'affectedBookings' => [],
-            'notifyHikers' => false,
-        ],
-    ];
+$manager_id = $_SESSION['user_id'];
+
+// Get manager info
+$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->execute([$manager_id]);
+$manager = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$manager_name = $manager['name'];
+$manager_initials = implode('', array_map(function($word) {
+    return strtoupper($word[0]);
+}, explode(' ', $manager_name)));
+$manager_role = $manager['role'];
+
+// Get manager's assigned mountains
+$stmt = $pdo->prepare("
+    SELECT m.*, 
+           mm.is_primary,
+           (SELECT AVG(rating) FROM reviews WHERE mountain_id = m.id AND status = 'approved') as avg_rating
+    FROM mountains m
+    INNER JOIN manager_mountains mm ON m.id = mm.mountain_id
+    WHERE mm.manager_id = ?
+    ORDER BY mm.is_primary DESC, m.name
+");
+$stmt->execute([$manager_id]);
+$assigned_mountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$mountain_ids = array_column($assigned_mountains, 'id');
+$mountain_ids_placeholder = !empty($mountain_ids) ? implode(',', array_fill(0, count($mountain_ids), '?')) : '';
+
+// Get active alerts for manager's mountains
+$active_alerts = [];
+if (!empty($mountain_ids)) {
+    $stmt = $pdo->prepare("
+        SELECT a.*, u.name as reporter_name, u.role as reporter_role,
+               m.name as mountain_name
+        FROM alerts a
+        INNER JOIN mountains m ON a.mountain_id = m.id
+        LEFT JOIN users u ON a.reported_by = u.id
+        WHERE a.mountain_id IN ($mountain_ids_placeholder) 
+          AND a.status = 'active'
+        ORDER BY a.severity = 'critical' DESC, a.created_at DESC
+    ");
+    $stmt->execute($mountain_ids);
+    $active_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get recent crowd reports
+$crowd_reports = [];
+if (!empty($mountain_ids)) {
+    $stmt = $pdo->prepare("
+        SELECT cr.*, m.name as mountain_name,
+               u.name as reporter_name,
+               TIMESTAMPDIFF(MINUTE, cr.created_at, NOW()) as minutes_ago
+        FROM crowd_reports cr
+        INNER JOIN mountains m ON cr.mountain_id = m.id
+        LEFT JOIN users u ON cr.reported_by = u.id
+        WHERE cr.mountain_id IN ($mountain_ids_placeholder) 
+          AND cr.expires_at > NOW()
+        ORDER BY cr.created_at DESC
+        LIMIT 20
+    ");
+    $stmt->execute($mountain_ids);
+    $crowd_reports = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get active safety alerts (from guides during hikes)
+$safety_alerts = [];
+if (!empty($mountain_ids)) {
+    $stmt = $pdo->prepare("
+        SELECT sa.*, b.booking_number, m.name as mountain_name,
+               u.name as reporter_name
+        FROM safety_alerts sa
+        INNER JOIN bookings b ON sa.booking_id = b.id
+        INNER JOIN mountains m ON b.mountain_id = m.id
+        LEFT JOIN users u ON sa.reported_by = u.id
+        WHERE b.mountain_id IN ($mountain_ids_placeholder) 
+          AND sa.status = 'active'
+        ORDER BY sa.severity = 'critical' DESC, sa.created_at DESC
+    ");
+    $stmt->execute($mountain_ids);
+    $safety_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get broadcasts (advisories from admin/managers)
+$broadcasts = [];
+$stmt = $pdo->prepare("
+    SELECT b.*, u.name as sender_name,
+           (SELECT COUNT(*) FROM broadcast_read_status 
+            WHERE broadcast_id = b.id AND user_id = ? AND user_role = 'manager') as is_read
+    FROM broadcasts b
+    INNER JOIN users u ON b.sender_id = u.id
+    WHERE b.recipient_role IN ('all_guides', 'all_hikers', 'specific_guide', 'all')
+       OR b.recipient_role IS NULL
+    ORDER BY b.created_at DESC
+    LIMIT 50
+");
+$stmt->execute([$manager_id]);
+$broadcasts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Open-Meteo API - Free, no API key required!
+function getWeatherForecast($lat, $lng, $mountain_name) {
+    // Cache for 1 hour
+    $cache_file = sys_get_temp_dir() . "/weather_{$mountain_name}_" . date('Y-m-d-H') . '.json';
+    
+    if (file_exists($cache_file) && (time() - filemtime($cache_file)) < 3600) {
+        return json_decode(file_get_contents($cache_file), true);
+    }
+    
+    $url = "https://api.open-meteo.com/v1/forecast?latitude={$lat}&longitude={$lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,weather_code&wind_speed_unit=kmh&timezone=Asia/Manila&forecast_days=5";
+    
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($http_code === 200 && $response) {
+        $data = json_decode($response, true);
+        
+        // Process data for display
+        $forecast = [];
+        if (isset($data['daily'])) {
+            for ($i = 0; $i < count($data['daily']['time']); $i++) {
+                $code = $data['daily']['weather_code'][$i] ?? 0;
+                $forecast[$data['daily']['time'][$i]] = [
+                    'temp_max' => $data['daily']['temperature_2m_max'][$i] ?? 0,
+                    'temp_min' => $data['daily']['temperature_2m_min'][$i] ?? 0,
+                    'precip_prob' => $data['daily']['precipitation_probability_max'][$i] ?? 0,
+                    'weather_code' => $code,
+                    'icon' => getWeatherIcon($code),
+                    'condition' => getWeatherDescription($code)
+                ];
+            }
+        }
+        
+        // Add current conditions
+        if (isset($data['current'])) {
+            $forecast['current'] = [
+                'temp' => $data['current']['temperature_2m'] ?? 0,
+                'humidity' => $data['current']['relative_humidity_2m'] ?? 0,
+                'wind' => $data['current']['wind_speed_10m'] ?? 0,
+                'precip' => $data['current']['precipitation'] ?? 0,
+                'weather_code' => $data['current']['weather_code'] ?? 0,
+                'icon' => getWeatherIcon($data['current']['weather_code'] ?? 0),
+                'condition' => getWeatherDescription($data['current']['weather_code'] ?? 0)
+            ];
+        }
+        
+        file_put_contents($cache_file, json_encode($forecast));
+        return $forecast;
+    }
+    return null;
+}
+
+function getWeatherIcon($code) {
+    if ($code === 0) return '☀️';
+    if ($code <= 2) return '⛅';
+    if ($code <= 3) return '☁️';
+    if ($code <= 49) return '🌫';
+    if ($code <= 67) return '🌧';
+    if ($code <= 77) return '❄️';
+    if ($code <= 82) return '🌦';
+    if ($code <= 99) return '⛈';
+    return '🌤';
+}
+
+function getWeatherDescription($code) {
+    if ($code === 0) return 'Clear skies';
+    if ($code <= 2) return 'Partly cloudy';
+    if ($code <= 3) return 'Overcast';
+    if ($code <= 49) return 'Foggy';
+    if ($code <= 67) return 'Rainy';
+    if ($code <= 77) return 'Snowy';
+    if ($code <= 82) return 'Rain showers';
+    if ($code <= 99) return 'Thunderstorm';
+    return 'Partly cloudy';
+}
+
+// Get weather for each mountain (in the main code after fetching mountains)
+$weather_data = [];
+foreach ($assigned_mountains as $mountain) {
+    if ($mountain['start_point_lat'] && $mountain['start_point_lng']) {
+        $weather_data[$mountain['id']] = getWeatherForecast(
+            $mountain['start_point_lat'], 
+            $mountain['start_point_lng'], 
+            $mountain['name']
+        );
+    }
+}
+// Calculate stats
+$critical_count = count(array_filter($active_alerts, fn($a) => $a['severity'] === 'critical'));
+$warning_count = count(array_filter($active_alerts, fn($a) => $a['severity'] === 'high' || $a['severity'] === 'medium'));
+$crowd_report_count = count($crowd_reports);
+$safety_alert_count = count($safety_alerts);
+$unread_broadcast_count = count(array_filter($broadcasts, fn($b) => $b['is_read'] == 0));
+
+// Helper function to format money
+function fmtMoney($amount) {
+    return '₱' . number_format($amount, 0);
+}
+
+// Helper for crowd level badge
+function getCrowdBadge($level) {
+    switch($level) {
+        case 'Low': return ['color' => '#2e7d32', 'bg' => '#e8f5e9', 'icon' => '😌'];
+        case 'Medium': return ['color' => '#c2410c', 'bg' => '#fff7ed', 'icon' => '👥'];
+        case 'High': return ['color' => '#b91c1c', 'bg' => '#fef2f2', 'icon' => '⚠️'];
+        default: return ['color' => '#666', 'bg' => '#f5f5f5', 'icon' => '📍'];
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -124,1178 +227,1278 @@ function getAdvisories() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>LAKBAY Manager — Advisories</title>
+<title>LAKBAY Manager — Advisories & Alerts</title>
+<link rel="stylesheet" href="manager.css">
+<!-- Leaflet for maps -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+  /* Import fonts and base styles */
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
-  --ink: #100600;
-  --ink2: #3a2a1a;
-  --ink3: #7a6a5a;
-  --ink4: #b0a090;
-  --white: #ffffff;
-  --off: #faf9f7;
-  --surface: #f4f1ec;
-  --border: rgba(16,6,0,0.09);
-  --border2: rgba(16,6,0,0.15);
-  --gold: #c9a84c;
-  --gold2: #e8c96a;
+  :root {
+    --ink: #100600;
+    --ink2: #3a2a1a;
+    --ink3: #7a6a5a;
+    --ink4: #b0a090;
+    --white: #ffffff;
+    --off: #faf9f7;
+    --surface: #f4f1ec;
+    --border: rgba(16,6,0,0.09);
+    --border2: rgba(16,6,0,0.15);
+    --gold: #c9a84c;
+    --gold2: #e8c96a;
+    --critical: #b91c1c;
+    --critical-bg: #fef2f2;
+    --warning: #c2410c;
+    --warning-bg: #fff7ed;
+    --info: #1e40af;
+    --info-bg: #eff6ff;
+    --resolved: #166534;
+    --resolved-bg: #f0fdf4;
+    --green: #2e7d32;
+    --green-bg: #e8f5e9;
+    --blue: #1565c0;
+    --blue-bg: #e3f2fd;
+    --sidebar-w: 260px;
+    --sidebar-w-sm: 72px;
+    --topbar-h: 64px;
+    --mobile-nav-h: 60px;
+    --r: 18px;
+    --r-sm: 10px;
+    --shadow: 0 4px 24px rgba(16,6,0,0.08);
+    --shadow-lg: 0 16px 48px rgba(16,6,0,0.14);
+  }
 
-  /* Severity colors */
-  --critical: #b91c1c;
-  --critical-bg: #fef2f2;
-  --critical-border: rgba(185,28,28,0.2);
-  --critical-glow: rgba(185,28,28,0.08);
+  body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--surface); color: var(--ink); min-height: 100vh; }
+  
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgba(16,6,0,0.15); border-radius: 2px; }
 
-  --warning: #c2410c;
-  --warning-bg: #fff7ed;
-  --warning-border: rgba(194,65,12,0.2);
-  --warning-glow: rgba(194,65,12,0.06);
+  /* Layout */
+  .app-shell { display: flex; min-height: 100vh; }
+  
+  /* Sidebar */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: #F8F6F0;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 200;
+    transition: width .25s ease;
+    overflow: hidden;
+  }
+  .sidebar.collapsed { width: var(--sidebar-w-sm); }
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .nav-text,
+  .sidebar.collapsed .sidebar-brand-text,
+  .sidebar.collapsed .sidebar-footer-text,
+  .sidebar.collapsed .mountain-badge-text { display: none; }
+  .sidebar.collapsed .sidebar-brand { justify-content: center; }
+  .sidebar.collapsed .nav-item { justify-content: center; padding: 14px 0; }
+  .sidebar.collapsed .nav-item svg { margin: 0; }
 
-  --info: #1e40af;
-  --info-bg: #eff6ff;
-  --info-border: rgba(30,64,175,0.2);
-  --info-glow: rgba(30,64,175,0.06);
+  .sidebar-brand {
+    display: flex; align-items: center; gap: 12px;
+    padding: 22px 24px 18px;
+    border-bottom: 1px solid rgba(16,6,0,0.08);
+    text-decoration: none;
+  }
+  .sidebar-logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--gold);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sidebar-app-name { font-family: 'Playfair Display', serif; font-size: 15px; font-weight: 700; color: var(--ink); }
+  .sidebar-app-sub { font-size: 9px; color: rgba(16,6,0,0.35); text-transform: uppercase; margin-top: 1px; }
 
-  --resolved: #166534;
-  --resolved-bg: #f0fdf4;
-  --resolved-border: rgba(22,101,52,0.2);
+  .mountain-badge {
+    display: flex; align-items: center; gap: 10px;
+    margin: 14px 16px;
+    background: linear-gradient(135deg, rgba(201,168,76,0.1), rgba(201,168,76,0.05));
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .mountain-badge-icon {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: var(--gold);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mountain-badge-name { font-size: 12px; font-weight: 700; color: var(--ink); }
+  .mountain-badge-role { font-size: 10px; color: rgba(16,6,0,0.5); }
 
-  --green: #2e7d32;
-  --green-bg: #e8f5e9;
-  --amber: #e65100;
-  --amber-bg: #fff3e0;
-  --blue: #1565c0;
-  --blue-bg: #e3f2fd;
-  --red: #c62828;
-  --red-bg: #fce4ec;
+  .nav-section { padding: 0 0 8px; flex: 1; overflow-y: auto; }
+  .nav-label { font-size: 9px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: rgba(16,6,0,0.35); padding: 16px 24px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 24px; font-size: 13px; font-weight: 500;
+    color: rgba(16,6,0,0.6); text-decoration: none;
+    transition: all .15s; border-left: 3px solid transparent;
+  }
+  .nav-item:hover { color: var(--ink); background: rgba(16,6,0,0.04); }
+  .nav-item.active { color: var(--ink); background: rgba(201,168,76,0.1); border-left-color: var(--gold); }
+  .nav-item svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.8; flex-shrink: 0; }
+  .nav-item.logout-red { margin-top: 12px; color: #b91c1c; }
+  .nav-item.logout-red:hover { background: rgba(185,28,28,0.08); }
 
-  --r: 18px;
-  --r-sm: 10px;
-  --shadow: 0 4px 24px rgba(16,6,0,0.08);
-  --shadow-lg: 0 16px 48px rgba(16,6,0,0.14);
-  --shadow-xl: 0 24px 64px rgba(16,6,0,0.18);
-  --glass: rgba(255,255,255,0.72);
-  --sidebar-w: 260px;
-  --sidebar-w-sm: 72px;
-  --topbar-h: 64px;
-  --mobile-nav-h: 60px;
+  .sidebar-footer {
+    padding: 16px 20px; border-top: 1px solid rgba(16,6,0,0.08);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sidebar-footer-avatar {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+
+  /* Main Area */
+  .main-area {
+    flex: 1;
+    margin-left: var(--sidebar-w);
+    display: flex; flex-direction: column;
+    min-height: 100vh;
+    transition: margin-left .25s ease;
+  }
+  .main-area.expanded { margin-left: var(--sidebar-w-sm); }
+
+  /* Topbar */
+  .topbar {
+    height: var(--topbar-h);
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .sidebar-toggle {
+    width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--border2);
+    background: var(--white); cursor: pointer;
+  }
+  .topbar-page-title { font-size: 15px; font-weight: 700; }
+  .topbar-page-sub { font-size: 11px; color: var(--ink3); }
+  .topbar-date { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink4); padding: 6px 12px; background: var(--off); border-radius: 20px; }
+  .topbar-avatar {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+
+  /* Mobile Bottom Nav */
+  .mobile-bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: var(--mobile-nav-h);
+    background: var(--white);
+    border-top: 1px solid var(--border);
+    z-index: 150;
+    justify-content: space-around;
+    align-items: center;
+    padding: 8px 16px;
+  }
+  .mobile-nav-item {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 6px 12px; border-radius: 12px;
+    color: var(--ink3); text-decoration: none;
+  }
+  .mobile-nav-item svg { width: 22px; height: 22px; stroke: currentColor; }
+  .mobile-nav-item span { font-size: 10px; font-weight: 500; }
+  .mobile-nav-item.active { color: var(--gold); background: rgba(201,168,76,0.1); }
+
+  /* Content */
+  .content { flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 24px; }
+
+  /* Stats Grid */
+  .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+  .stat-card {
+    background: var(--white); border-radius: var(--r); border: 1px solid var(--border);
+    padding: 20px; text-align: center; cursor: pointer;
+    transition: all 0.3s;
+  }
+  .stat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+  .stat-card-icon { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+  .stat-value { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; line-height: 1; }
+  .stat-label { font-size: 11px; font-weight: 600; color: var(--ink3); margin-top: 8px; text-transform: uppercase; }
+  .stat-card.critical .stat-card-icon { background: var(--critical-bg); }
+  .stat-card.critical .stat-value { color: var(--critical); }
+  .stat-card.warning .stat-card-icon { background: var(--warning-bg); }
+  .stat-card.warning .stat-value { color: var(--warning); }
+  .stat-card.info .stat-card-icon { background: var(--info-bg); }
+  .stat-card.info .stat-value { color: var(--info); }
+  .stat-card.blue .stat-card-icon { background: var(--blue-bg); }
+  .stat-card.blue .stat-value { color: var(--blue); }
+
+  /* Panels */
+  .panel { background: var(--white); border-radius: var(--r); border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; }
+  .panel-hdr { padding: 16px 22px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .panel-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  .panel-title svg { width: 18px; height: 18px; stroke: var(--gold); }
+  .panel-body { padding: 20px 22px; }
+
+  /* Alert Bar */
+  .alert-bar {
+    display: flex; align-items: center; gap: 14px;
+    background: linear-gradient(135deg, var(--critical) 0%, #991b1b 100%);
+    border-radius: var(--r); padding: 16px 20px;
+    animation: pulseBar 3s ease-in-out infinite;
+  }
+  @keyframes pulseBar { 0%,100% { box-shadow: 0 8px 32px rgba(185,28,28,0.25); } 50% { box-shadow: 0 12px 40px rgba(185,28,28,0.4); } }
+  .alert-bar-icon { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; }
+  .alert-bar-content { flex: 1; }
+  .alert-bar-title { font-size: 13px; font-weight: 700; color: white; }
+  .alert-bar-sub { font-size: 11px; color: rgba(255,255,255,0.75); }
+  .alert-bar-action { background: white; color: var(--critical); border: none; border-radius: 8px; padding: 8px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
+/* Enhanced Weather Cards */
+
+  /* Weather Cards */
+  .weather-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .weather-card { background: linear-gradient(135deg, var(--ink) 0%, #2a1a0a 100%); border-radius: 16px; padding: 16px; color: white; }
+  .weather-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .weather-mountain { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; }
+  .weather-temp { font-size: 28px; font-weight: 700; font-family: 'DM Mono', monospace; }
+  .weather-condition { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+  .weather-detail { display: flex; gap: 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; }
+  .forecast-list { display: flex; gap: 12px; margin-top: 12px; overflow-x: auto; }
+  .forecast-day { text-align: center; min-width: 60px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 10px; }
+  .forecast-temp { font-size: 14px; font-weight: 700; }
+
+  
+.weather-card {
+    border-radius: 20px;
+    padding: 20px;
+    color: white;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
 }
 
-html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--surface); color: var(--ink); min-height: 100vh; }
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-thumb { background: rgba(16,6,0,0.15); border-radius: 2px; }
-
-.app-shell { display: flex; min-height: 100vh; }
-
-/* ── SIDEBAR ── */
-.sidebar {
-  width: var(--sidebar-w);
-  background: #F8F6F0;
-  display: flex; flex-direction: column;
-  position: fixed; top: 0; left: 0; bottom: 0;
-  z-index: 200; transition: width .25s ease; overflow: hidden;
+/* Weather type backgrounds */
+.weather-card.sunny {
+    background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+    box-shadow: 0 8px 32px rgba(245, 158, 11, 0.3);
 }
-.sidebar.collapsed { width: var(--sidebar-w-sm); }
-.sidebar.collapsed .nav-label,
-.sidebar.collapsed .nav-text,
-.sidebar.collapsed .sidebar-brand-text,
-.sidebar.collapsed .sidebar-footer-text,
-.sidebar.collapsed .mountain-badge-text { display: none; }
-.sidebar.collapsed .sidebar-brand { justify-content: center; }
-.sidebar.collapsed .nav-item { justify-content: center; padding: 14px 0; }
-.sidebar.collapsed .mountain-badge { justify-content: center; padding: 12px; }
-
-.sidebar-brand {
-  display: flex; align-items: center; gap: 12px;
-  padding: 22px 24px 18px; border-bottom: 1px solid var(--border); text-decoration: none;
-}
-.sidebar-logo { width: 36px; height: 36px; border-radius: 10px; background: var(--gold); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.sidebar-logo svg { width: 20px; height: 20px; }
-.sidebar-app-name { font-family: 'Playfair Display', serif; font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: .3px; }
-.sidebar-app-sub { font-size: 9px; color: rgba(16,6,0,0.35); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 1px; }
-
-.mountain-badge {
-  display: flex; align-items: center; gap: 10px;
-  margin: 14px 16px;
-  background: linear-gradient(135deg, rgba(201,168,76,0.1), rgba(201,168,76,0.05));
-  border: 1px solid rgba(201,168,76,0.3); border-radius: 12px; padding: 12px 14px;
-}
-.mountain-badge-icon { width: 34px; height: 34px; border-radius: 9px; background: var(--gold); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.mountain-badge-icon svg { width: 16px; height: 16px; stroke: var(--ink); }
-.mountain-badge-name { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mountain-badge-role { font-size: 10px; color: rgba(16,6,0,0.5); margin-top: 1px; }
-
-.nav-section { padding: 0 0 8px; flex: 1; overflow-y: auto; }
-.nav-label { font-size: 9px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: rgba(16,6,0,0.35); padding: 16px 24px 6px; }
-.nav-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 11px 24px; font-size: 13px; font-weight: 500;
-  color: rgba(16,6,0,0.6); cursor: pointer; text-decoration: none;
-  transition: all .15s; border-left: 3px solid transparent; white-space: nowrap;
-}
-.nav-item:hover { color: var(--ink); background: rgba(16,6,0,0.04); transform: translateX(2px); }
-.nav-item.active { color: var(--ink); background: rgba(201,168,76,0.1); border-left-color: var(--gold); }
-.nav-item svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.8; flex-shrink: 0; }
-.nav-divider { height: 1px; background: rgba(16,6,0,0.08); margin: 8px 20px; }
-.nav-item.logout-red { margin-top: 12px; border-top: 1px solid var(--border); color: #b91c1c; }
-.nav-item.logout-red:hover { background: rgba(185,28,28,0.08); color: #b91c1c; }
-.nav-item.logout-red svg { stroke: #b91c1c; }
-.sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(16,6,0,0.08); display: flex; align-items: center; gap: 10px; }
-.sidebar-footer-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--ink); flex-shrink: 0; }
-.sidebar-footer-name { font-size: 12px; font-weight: 700; color: var(--ink); }
-.sidebar-footer-role { font-size: 10px; color: rgba(16,6,0,0.5); }
-
-/* ── MAIN ── */
-.main-area { flex: 1; margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-height: 100vh; transition: margin-left .25s ease; }
-.main-area.expanded { margin-left: var(--sidebar-w-sm); }
-
-.topbar {
-  height: var(--topbar-h); background: var(--glass); backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border); display: flex; align-items: center;
-  justify-content: space-between; padding: 0 28px; position: sticky; top: 0; z-index: 100;
-}
-.topbar-left { display: flex; align-items: center; gap: 14px; }
-.sidebar-toggle { width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--border2); background: var(--white); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--ink); transition: all .15s; }
-.sidebar-toggle:hover { background: var(--ink); color: var(--white); transform: rotate(90deg); }
-.sidebar-toggle svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; }
-.topbar-page-title { font-size: 15px; font-weight: 700; color: var(--ink); }
-.topbar-page-sub { font-size: 11px; color: var(--ink3); margin-top: 1px; }
-.topbar-right { display: flex; align-items: center; gap: 12px; }
-.topbar-date { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink4); padding: 6px 12px; background: var(--off); border-radius: 20px; }
-.topbar-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; cursor: pointer; transition: transform .2s; }
-.topbar-avatar:hover { transform: scale(1.05); }
-
-/* ── MOBILE NAV ── */
-.mobile-bottom-nav {
-  display: none; position: fixed; bottom: 0; left: 0; right: 0; height: var(--mobile-nav-h);
-  background: var(--white); border-top: 1px solid var(--border); z-index: 150;
-  justify-content: space-around; align-items: center; padding: 8px 16px;
-}
-.mobile-nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; cursor: pointer; padding: 6px 12px; border-radius: 12px; transition: all 0.2s; color: var(--ink3); text-decoration: none; font-family: 'Plus Jakarta Sans', sans-serif; }
-.mobile-nav-item svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 1.8; }
-.mobile-nav-item span { font-size: 10px; font-weight: 500; }
-.mobile-nav-item.active { color: var(--gold); background: rgba(201,168,76,0.1); }
-
-/* ── CONTENT ── */
-.content { flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 24px; }
-
-/* Alert Bar */
-.alert-bar {
-  display: flex; align-items: center; gap: 14px;
-  background: linear-gradient(135deg, var(--critical) 0%, #991b1b 100%);
-  border-radius: var(--r); padding: 16px 20px;
-  animation: pulseBar 3s ease-in-out infinite;
-  box-shadow: 0 8px 32px rgba(185,28,28,0.25);
-}
-@keyframes pulseBar { 0%,100% { box-shadow: 0 8px 32px rgba(185,28,28,0.25); } 50% { box-shadow: 0 12px 40px rgba(185,28,28,0.4); } }
-.alert-bar-icon { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0; animation: iconPulse 1.5s ease-in-out infinite; }
-@keyframes iconPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
-.alert-bar-icon svg { width: 20px; height: 20px; stroke: white; stroke-width: 2; }
-.alert-bar-content { flex: 1; }
-.alert-bar-title { font-size: 13px; font-weight: 700; color: white; margin-bottom: 2px; }
-.alert-bar-sub { font-size: 11px; color: rgba(255,255,255,0.75); }
-.alert-bar-action { background: white; color: var(--critical); border: none; border-radius: 8px; padding: 8px 16px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; font-family: 'Plus Jakarta Sans', sans-serif; }
-.alert-bar-action:hover { background: rgba(255,255,255,0.9); transform: scale(1.02); }
-
-/* Stats */
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.stat-card {
-  background: var(--white); border-radius: var(--r); border: 1px solid var(--border);
-  padding: 20px; box-shadow: var(--shadow); text-align: center;
-  transition: all 0.3s cubic-bezier(0.4,0,0.2,1); cursor: pointer; position: relative; overflow: hidden;
-}
-.stat-card:hover { transform: translateY(-4px) scale(1.02); box-shadow: var(--shadow-lg); }
-.stat-card-icon { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
-.stat-card-icon svg { width: 22px; height: 22px; stroke-width: 1.8; }
-.stat-value { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; color: var(--ink); line-height: 1; }
-.stat-label { font-size: 11px; font-weight: 600; color: var(--ink3); margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-.stat-card.critical .stat-card-icon { background: var(--critical-bg); }
-.stat-card.critical .stat-card-icon svg { stroke: var(--critical); }
-.stat-card.critical .stat-value { color: var(--critical); }
-.stat-card.warning .stat-card-icon { background: var(--warning-bg); }
-.stat-card.warning .stat-card-icon svg { stroke: var(--warning); }
-.stat-card.warning .stat-value { color: var(--warning); }
-.stat-card.info-card .stat-card-icon { background: var(--info-bg); }
-.stat-card.info-card .stat-card-icon svg { stroke: var(--info); }
-.stat-card.info-card .stat-value { color: var(--info); }
-.stat-card.resolved-card .stat-card-icon { background: var(--resolved-bg); }
-.stat-card.resolved-card .stat-card-icon svg { stroke: var(--resolved); }
-.stat-card.resolved-card .stat-value { color: var(--resolved); }
-
-/* Toolbar Panel */
-.panel { background: var(--white); border-radius: var(--r); border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; }
-.panel-body { padding: 20px 22px; }
-.toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-.search-box { display: flex; align-items: center; gap: 10px; background: var(--off); border: 1.5px solid var(--border2); border-radius: 50px; padding: 8px 16px; flex: 1; min-width: 200px; transition: all 0.3s; }
-.search-box:focus-within { border-color: var(--gold); background: var(--white); box-shadow: 0 0 0 3px rgba(201,168,76,0.1); }
-.search-box svg { width: 14px; height: 14px; stroke: var(--ink4); stroke-width: 2; flex-shrink: 0; }
-.search-box input { flex: 1; border: none; background: transparent; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; color: var(--ink); outline: none; }
-.search-box input::placeholder { color: var(--ink4); }
-.select { appearance: none; padding: 8px 32px 8px 12px; border-radius: var(--r-sm); border: 1.5px solid var(--border2); background: var(--white); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; color: var(--ink); outline: none; cursor: pointer; transition: all 0.2s; }
-.select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,168,76,0.1); }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 16px; border-radius: 8px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
-.btn-primary { background: var(--ink); color: var(--white); }
-.btn-primary:hover { background: var(--ink2); transform: translateY(-2px); box-shadow: var(--shadow); }
-.btn-outline { background: transparent; border: 1.5px solid var(--border2); color: var(--ink); }
-.btn-outline:hover { background: var(--ink); color: var(--white); border-color: var(--ink); transform: translateY(-2px); }
-.btn-danger { background: var(--critical); color: white; }
-.btn-danger:hover { background: #991b1b; transform: translateY(-2px); }
-.btn-sm { padding: 6px 12px; font-size: 11px; }
-.btn-xs { padding: 4px 10px; font-size: 10px; border-radius: 6px; }
-
-.filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
-.chip { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1.5px solid var(--border2); background: var(--white); color: var(--ink3); cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
-.chip svg { width: 12px; height: 12px; stroke: currentColor; }
-.chip:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
-.chip.active { background: var(--gold); color: var(--ink); border-color: var(--gold); box-shadow: var(--shadow); }
-
-/* Advisory Cards Grid */
-.advisories-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 20px;
+.weather-card.sunny::before {
+    content: '☀️';
+    position: absolute;    font-size: 80px;
+    opacity: 0.1;
+    right: -20px;
+    bottom: -20px;
+    animation: sunShine 4s ease-in-out infinite;
 }
 
-/* Advisory Card */
-.advisory-card {
-  background: var(--white);
-  border-radius: 20px;
-  border: 1.5px solid var(--border);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
-  cursor: pointer;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  animation: cardIn 0.4s ease both;
+.weather-card.rainy {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%);
+    box-shadow: 0 8px 32px rgba(30, 64, 175, 0.3);
 }
-@keyframes cardIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-.advisory-card:hover { transform: translateY(-6px); box-shadow: var(--shadow-lg); border-color: rgba(16,6,0,0.15); }
-.advisory-card.critical { border-color: var(--critical-border); }
-.advisory-card.warning { border-color: var(--warning-border); }
-.advisory-card.info { border-color: var(--info-border); }
-.advisory-card.resolved { opacity: 0.75; }
-.advisory-card.resolved:hover { opacity: 1; }
-
-/* Severity Banner */
-.card-banner {
-  height: 6px;
-  background: var(--border);
+.weather-card.rainy::before {
+    content: '🌧️';
+    position: absolute;
+    font-size: 80px;
+    opacity: 0.1;
+    right: -20px;
+    bottom: -20px;
+    animation: rainDrop 1s linear infinite;
 }
-.advisory-card.critical .card-banner { background: linear-gradient(90deg, var(--critical), #ef4444); }
-.advisory-card.warning .card-banner { background: linear-gradient(90deg, var(--warning), #f97316); }
-.advisory-card.info .card-banner { background: linear-gradient(90deg, var(--info), #3b82f6); }
-.advisory-card.resolved .card-banner { background: linear-gradient(90deg, var(--resolved), #22c55e); }
 
-.card-body { padding: 20px; flex: 1; }
-.card-top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
-
-.card-type-icon {
-  width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: transform 0.3s;
+.weather-card.storm {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    animation: stormPulse 2s ease-in-out infinite;
 }
-.advisory-card:hover .card-type-icon { transform: scale(1.08) rotate(-3deg); }
-.advisory-card.critical .card-type-icon { background: var(--critical-bg); }
-.advisory-card.critical .card-type-icon svg { stroke: var(--critical); }
-.advisory-card.warning .card-type-icon { background: var(--warning-bg); }
-.advisory-card.warning .card-type-icon svg { stroke: var(--warning); }
-.advisory-card.info .card-type-icon { background: var(--info-bg); }
-.advisory-card.info .card-type-icon svg { stroke: var(--info); }
-.advisory-card.resolved .card-type-icon { background: var(--resolved-bg); }
-.advisory-card.resolved .card-type-icon svg { stroke: var(--resolved); }
-.card-type-icon svg { width: 20px; height: 20px; stroke-width: 1.8; }
-
-.card-meta { flex: 1; min-width: 0; }
-.card-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
-.severity-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
-.severity-badge.critical { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
-.severity-badge.warning { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
-.severity-badge.info { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
-.severity-badge.resolved { background: var(--resolved-bg); color: var(--resolved); border: 1px solid var(--resolved-border); }
-.severity-badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.advisory-card.critical .severity-badge-dot { animation: blinkDot 1.2s ease-in-out infinite; }
-@keyframes blinkDot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-.type-badge { display: inline-flex; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 600; background: var(--off); color: var(--ink3); border: 1px solid var(--border); text-transform: capitalize; }
-
-.card-title { font-family: 'Playfair Display', serif; font-size: 15px; font-weight: 600; color: var(--ink); line-height: 1.3; margin-bottom: 2px; }
-.card-issued { font-size: 10px; color: var(--ink4); font-family: 'DM Mono', monospace; }
-
-.card-message { font-size: 12.5px; color: var(--ink3); line-height: 1.65; margin-bottom: 16px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-
-.card-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-.card-footer-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.card-issuer { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--ink4); }
-.card-issuer svg { width: 11px; height: 11px; stroke: currentColor; }
-
-.affected-bookings { display: flex; gap: 4px; }
-.bk-chip { background: rgba(201,168,76,0.12); color: #7a5a10; border: 1px solid rgba(201,168,76,0.3); border-radius: 6px; padding: 2px 8px; font-size: 10px; font-weight: 600; font-family: 'DM Mono', monospace; }
-
-.expiry-pill { display: flex; align-items: center; gap: 4px; background: var(--off); border-radius: 20px; padding: 4px 10px; font-size: 10px; color: var(--ink3); font-family: 'DM Mono', monospace; }
-.expiry-pill svg { width: 10px; height: 10px; stroke: currentColor; }
-.expiry-pill.urgent { background: var(--critical-bg); color: var(--critical); }
-
-.notify-indicator { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--green); font-weight: 600; }
-.notify-indicator svg { width: 11px; height: 11px; stroke: currentColor; }
-
-/* Empty */
-.empty-state { text-align: center; padding: 80px 20px; }
-.empty-state-icon { width: 80px; height: 80px; border-radius: 40px; background: var(--off); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; animation: bounce 2s infinite; }
-@keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-.empty-state-icon svg { width: 40px; height: 40px; stroke: var(--ink4); }
-.empty-state h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-.empty-state p { font-size: 13px; color: var(--ink3); }
-
-/* ── MODAL ── */
-.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
-.modal-overlay.open { display: flex; }
-.modal-container { background: var(--white); border-radius: 24px; width: 100%; max-width: 680px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-xl); animation: modalIn 0.4s cubic-bezier(0.34,1.2,0.64,1); }
-@keyframes modalIn { from { transform: scale(0.88) translateY(-30px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
-
-.modal-banner { height: 8px; }
-.modal-container.critical .modal-banner { background: linear-gradient(90deg, var(--critical), #ef4444); }
-.modal-container.warning .modal-banner { background: linear-gradient(90deg, var(--warning), #f97316); }
-.modal-container.info .modal-banner { background: linear-gradient(90deg, var(--info), #3b82f6); }
-.modal-container.resolved .modal-banner { background: linear-gradient(90deg, var(--resolved), #22c55e); }
-
-.modal-header { padding: 20px 24px 18px; display: flex; justify-content: space-between; align-items: flex-start; flex-shrink: 0; border-bottom: 1px solid var(--border); }
-.modal-header-left { display: flex; align-items: flex-start; gap: 14px; }
-.modal-header-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.modal-container.critical .modal-header-icon { background: var(--critical-bg); }
-.modal-container.critical .modal-header-icon svg { stroke: var(--critical); }
-.modal-container.warning .modal-header-icon { background: var(--warning-bg); }
-.modal-container.warning .modal-header-icon svg { stroke: var(--warning); }
-.modal-container.info .modal-header-icon { background: var(--info-bg); }
-.modal-container.info .modal-header-icon svg { stroke: var(--info); }
-.modal-container.resolved .modal-header-icon { background: var(--resolved-bg); }
-.modal-container.resolved .modal-header-icon svg { stroke: var(--resolved); }
-.modal-header-icon svg { width: 24px; height: 24px; stroke-width: 1.8; }
-.modal-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 600; color: var(--ink); line-height: 1.25; margin-bottom: 4px; }
-.modal-sub { font-size: 11px; color: var(--ink4); font-family: 'DM Mono', monospace; }
-.modal-close { width: 36px; height: 36px; border-radius: 50%; background: var(--off); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--ink3); transition: all 0.2s; flex-shrink: 0; }
-.modal-close:hover { background: var(--ink); color: white; transform: rotate(90deg); }
-.modal-close svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; }
-
-.modal-body { flex: 1; overflow-y: auto; padding: 24px; background: var(--surface); display: flex; flex-direction: column; gap: 20px; }
-
-.detail-block { background: var(--white); border-radius: 16px; padding: 20px; border: 1px solid var(--border); }
-.detail-block-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ink3); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
-.detail-block-title svg { width: 14px; height: 14px; stroke: currentColor; }
-.detail-row { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
-.detail-row:last-child { border-bottom: none; padding-bottom: 0; }
-.detail-icon { width: 32px; height: 32px; border-radius: 9px; background: var(--off); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.detail-icon svg { width: 15px; height: 15px; stroke: var(--gold); stroke-width: 1.8; }
-.detail-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--ink4); margin-bottom: 3px; }
-.detail-value { font-size: 13px; font-weight: 600; color: var(--ink); }
-.detail-value.message-text { font-weight: 400; line-height: 1.7; font-size: 13.5px; color: var(--ink2); }
-
-.dates-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-.date-chip { background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.3); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; color: #7a5a10; font-family: 'DM Mono', monospace; }
-
-.bookings-affected { display: flex; flex-wrap: wrap; gap: 8px; }
-.bk-detail-chip { background: var(--off); border: 1.5px solid var(--border2); border-radius: 10px; padding: 8px 14px; font-size: 12px; font-weight: 700; color: var(--ink); font-family: 'DM Mono', monospace; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
-.bk-detail-chip:hover { border-color: var(--gold); background: rgba(201,168,76,0.06); transform: scale(1.02); }
-.bk-detail-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
-
-.notify-row { display: flex; align-items: center; justify-content: space-between; padding: 14px; background: var(--green-bg); border-radius: 12px; border: 1px solid rgba(46,125,50,0.2); }
-.notify-row-left { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: var(--green); }
-.notify-row-left svg { width: 18px; height: 18px; stroke: currentColor; }
-
-.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; background: var(--white); flex-shrink: 0; }
-
-/* New Advisory Form */
-.form-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
-.form-overlay.open { display: flex; }
-.form-container { background: var(--white); border-radius: 24px; width: 100%; max-width: 600px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-xl); animation: modalIn 0.4s cubic-bezier(0.34,1.2,0.64,1); }
-.form-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, var(--ink) 0%, var(--ink2) 100%); color: white; }
-.form-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 600; }
-.form-body { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
-.form-group { display: flex; flex-direction: column; gap: 7px; }
-.form-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--ink3); }
-.form-input, .form-select, .form-textarea {
-  border: 1.5px solid var(--border2); border-radius: 12px; padding: 11px 14px;
-  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; color: var(--ink);
-  background: var(--off); outline: none; transition: all 0.2s; width: 100%;
+.weather-card.storm::before {
+    content: '⛈️';
+    position: absolute;
+    font-size: 80px;
+    opacity: 0.15;
+    right: -20px;
+    bottom: -20px;
 }
-.form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,168,76,0.1); background: var(--white); }
-.form-textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.form-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; background: var(--white); }
 
-/* Toggle */
-.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--off); border-radius: 12px; border: 1.5px solid var(--border); }
-.toggle-info h4 { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
-.toggle-info p { font-size: 11px; color: var(--ink3); }
-.toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-.toggle-switch input { display: none; }
-.toggle-slider { position: absolute; inset: 0; background: #ddd; border-radius: 24px; cursor: pointer; transition: 0.25s; }
-.toggle-slider:before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.25s; }
-input:checked + .toggle-slider { background: var(--gold); }
-input:checked + .toggle-slider:before { transform: translateX(20px); }
-
-/* Toast */
-.toast { position: fixed; bottom: 30px; right: 30px; background: linear-gradient(135deg, var(--ink) 0%, var(--ink2) 100%); color: white; padding: 14px 24px; border-radius: 50px; font-size: 13px; font-weight: 500; opacity: 0; transition: all 0.3s; z-index: 1100; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-lg); transform: translateX(100%); }
-.toast.show { opacity: 1; transform: translateX(0); }
-.toast.success { background: linear-gradient(135deg, var(--green) 0%, #1b5e20 100%); }
-.toast.danger { background: linear-gradient(135deg, var(--red) 0%, #b71c1c 100%); }
-
-/* Action buttons in cards */
-.card-actions { display: flex; gap: 6px; padding: 14px 20px; border-top: 1px solid var(--border); background: var(--off); }
-.card-action-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; border-radius: 10px; font-size: 11px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; font-family: 'Plus Jakarta Sans', sans-serif; }
-.card-action-btn svg { width: 13px; height: 13px; stroke: currentColor; }
-.card-action-btn.view { background: var(--white); color: var(--ink); border: 1.5px solid var(--border2); }
-.card-action-btn.view:hover { background: var(--ink); color: white; border-color: var(--ink); }
-.card-action-btn.notify { background: var(--green-bg); color: var(--green); border: 1.5px solid rgba(46,125,50,0.2); }
-.card-action-btn.notify:hover { background: var(--green); color: white; }
-.card-action-btn.resolve { background: var(--blue-bg); color: var(--blue); border: 1.5px solid rgba(21,101,192,0.2); }
-.card-action-btn.resolve:hover { background: var(--blue); color: white; }
-.card-action-btn.dismiss { background: var(--red-bg); color: var(--red); border: 1.5px solid rgba(198,40,40,0.2); }
-.card-action-btn.dismiss:hover { background: var(--red); color: white; }
-
-/* Responsive */
-@media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); transition: transform 0.3s ease; }
-  .sidebar.mobile-open { transform: translateX(0); }
-  .main-area { margin-left: 0 !important; }
-  .mobile-bottom-nav { display: flex; }
-  .content { padding: 14px; padding-bottom: calc(var(--mobile-nav-h) + 14px); }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .advisories-grid { grid-template-columns: 1fr; }
-  .topbar { padding: 0 16px; }
-  .alert-bar { flex-wrap: wrap; }
-  .form-row { grid-template-columns: 1fr; }
-  .toast { left: 20px; right: 20px; bottom: 80px; justify-content: center; }
+.weather-card.cloudy {
+    background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+    box-shadow: 0 8px 32px rgba(74, 85, 104, 0.3);
 }
-@media (max-width: 1024px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 480px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+.weather-card.cloudy::before {
+    content: '☁️';
+    position: absolute;
+    font-size: 80px;
+    opacity: 0.1;
+    right: -20px;
+    bottom: -20px;
+    animation: cloudFloat 6s ease-in-out infinite;
+}
+
+.weather-card.foggy {
+    background: linear-gradient(135deg, #718096 0%, #4a5568 100%);
+}
+.weather-card.foggy::before {
+    content: '🌫️';
+    position: absolute;
+    font-size: 80px;
+    opacity: 0.15;
+    right: -20px;
+    bottom: -20px;
+    filter: blur(2px);
+}
+
+/* Animations */
+@keyframes sunShine {
+    0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.1; }
+    50% { transform: rotate(10deg) scale(1.1); opacity: 0.15; }
+}
+
+@keyframes rainDrop {
+    0% { transform: translateY(-10px); opacity: 0.1; }
+    100% { transform: translateY(10px); opacity: 0.15; }
+}
+
+@keyframes stormPulse {
+    0%, 100% { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4); }
+    50% { box-shadow: 0 8px 48px rgba(255, 255, 255, 0.2); }
+}
+
+@keyframes cloudFloat {
+    0%, 100% { transform: translateX(0px); }
+    50% { transform: translateX(10px); }
+}
+
+@keyframes gentleRain {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 100% 100%; }
+}
+
+.rain-animation {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 10px,
+        rgba(255, 255, 255, 0.1) 10px,
+        rgba(255, 255, 255, 0.1) 15px
+    );
+    animation: gentleRain 0.5s linear infinite;
+}
+
+/* Weather advisory banner */
+.weather-advisory {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    backdrop-filter: blur(10px);
+    animation: slideIn 0.5s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.weather-advisory.critical {
+    background: rgba(185, 28, 28, 0.9);
+    border-left: 4px solid #ff6b6b;
+}
+
+.weather-advisory.warning {
+    background: rgba(245, 158, 11, 0.9);
+    border-left: 4px solid #fbbf24;
+}
+
+.weather-advisory.info {
+    background: rgba(30, 64, 175, 0.9);
+    border-left: 4px solid #60a5fa;
+}
+
+.weather-advisory.success {
+    background: rgba(46, 125, 50, 0.9);
+    border-left: 4px solid #86efac;
+}
+
+/* Rain meter */
+.rain-meter {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.rain-fill {
+    height: 100%;
+    background: #60a5fa;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+    animation: rainFillPulse 2s ease-in-out infinite;
+}
+
+@keyframes rainFillPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Weather icon animations */
+.weather-icon-large {
+    font-size: 48px;
+    display: inline-block;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+}
+
+.weather-icon-large.sunny {
+    animation: spin 20s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+
+  /* Alert Cards */
+  .alerts-grid, .safety-grid, .crowd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .alert-card {
+    background: var(--white); border-radius: 16px; border: 1px solid var(--border);
+    overflow: hidden; transition: all 0.3s;
+  }
+  .alert-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+  .alert-card.critical { border-left: 4px solid var(--critical); }
+  .alert-card.warning { border-left: 4px solid var(--warning); }
+  .alert-card-header { padding: 16px; display: flex; gap: 12px; align-items: flex-start; }
+  .alert-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .alert-icon.critical { background: var(--critical-bg); }
+  .alert-icon.warning { background: var(--warning-bg); }
+  .alert-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .alert-meta { font-size: 11px; color: var(--ink3); display: flex; gap: 12px; margin-top: 6px; }
+  .alert-body { padding: 0 16px 16px; font-size: 12px; color: var(--ink3); line-height: 1.5; }
+  .alert-footer { padding: 12px 16px; background: var(--off); border-top: 1px solid var(--border); display: flex; gap: 8px; }
+  .btn-sm { padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 600; border: none; cursor: pointer; }
+  .btn-primary-sm { background: var(--ink); color: white; }
+  .btn-outline-sm { background: transparent; border: 1px solid var(--border2); }
+
+  /* Crowd Level Badge */
+  .crowd-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+
+  /* Broadcast Item */
+  .broadcast-item { padding: 16px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; }
+  .broadcast-item.unread { background: var(--info-bg); }
+  .broadcast-icon { width: 36px; height: 36px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .broadcast-content { flex: 1; }
+  .broadcast-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .broadcast-message { font-size: 12px; color: var(--ink3); line-height: 1.5; }
+  .broadcast-meta { font-size: 10px; color: var(--ink4); margin-top: 6px; display: flex; gap: 12px; }
+
+  /* Form Elements */
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ink3); display: block; margin-bottom: 6px; }
+  .form-input, .form-select, .form-textarea {
+    width: 100%; padding: 10px 14px; border: 1.5px solid var(--border2); border-radius: 10px;
+    font-family: inherit; font-size: 13px; background: var(--off);
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--gold); }
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(6px);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-container {
+    background: var(--white); border-radius: 24px; width: 100%; max-width: 500px;
+    max-height: 90vh; overflow: auto;
+  }
+  .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .modal-body { padding: 24px; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 12px; justify-content: flex-end; }
+  .btn { padding: 10px 20px; border-radius: 10px; font-weight: 600; border: none; cursor: pointer; }
+  .btn-primary { background: var(--ink); color: white; }
+  .btn-outline { background: transparent; border: 1px solid var(--border2); }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 30px; right: 30px;
+    background: var(--ink); color: white; padding: 12px 20px;
+    border-radius: 40px; font-size: 13px; opacity: 0;
+    transition: all 0.3s; z-index: 1100;
+  }
+  .toast.show { opacity: 1; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); transition: transform 0.3s; }
+    .sidebar.mobile-open { transform: translateX(0); }
+    .main-area { margin-left: 0 !important; }
+    .mobile-bottom-nav { display: flex; }
+    .content { padding: 14px; padding-bottom: calc(var(--mobile-nav-h) + 14px); }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .weather-grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
-
-<?php
-$mountain = getManagerMountain();
-$advisories = getAdvisories();
-$criticalCount = count(array_filter($advisories, fn($a) => $a['severity'] === 'critical' && $a['status'] === 'active'));
-$warningCount = count(array_filter($advisories, fn($a) => $a['severity'] === 'warning' && $a['status'] === 'active'));
-$infoCount = count(array_filter($advisories, fn($a) => $a['severity'] === 'info' && $a['status'] === 'active'));
-$resolvedCount = count(array_filter($advisories, fn($a) => $a['status'] === 'resolved'));
-?>
-
 <div class="app-shell">
-
 <!-- SIDEBAR -->
-<aside class="sidebar" id="sidebar">
-  <a href="#" class="sidebar-brand">
-    <div class="sidebar-logo">
-      <svg viewBox="0 0 28 28" fill="none"><path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#100600" opacity=".9"/><path d="M14 16L18 8L24 22H14V16Z" fill="#100600" opacity=".35"/></svg>
-    </div>
-    <div class="sidebar-brand-text">
-      <div class="sidebar-app-name">LAKBAY</div>
-      <div class="sidebar-app-sub">Manager Portal</div>
-    </div>
-  </a>
-  <div class="mountain-badge">
-    <div class="mountain-badge-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 3l4 8 5-5 5 15H2L8 3z"/></svg></div>
-    <div class="mountain-badge-text">
-      <div class="mountain-badge-name"><?= htmlspecialchars($mountain['name']) ?></div>
-      <div class="mountain-badge-role"><?= htmlspecialchars($mountain['location']) ?></div>
-    </div>
-  </div>
-  <nav class="nav-section">
-    <div class="nav-label">Main</div>
-    <a href="dashboard.php" class="nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      <span class="nav-text">Dashboard</span>
-    </a>
-    <a href="bookings_manager.php" class="nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      <span class="nav-text">Bookings</span>
-    </a>
-    <a href="payments.php" class="nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      <span class="nav-text">Payments</span>
-    </a>
-    <div class="nav-divider"></div>
-    <div class="nav-label">Reports</div>
-    <a href="analytics.php" class="nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      <span class="nav-text">Analytics</span>
-    </a>
-    <a href="advisories.php" class="nav-item active">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      <span class="nav-text">Advisories</span>
-      <?php if($criticalCount > 0): ?>
-      <span style="margin-left:auto;background:var(--critical);color:white;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;"><?= $criticalCount ?></span>
-      <?php endif; ?>
-    </a>
-    <a href="logout.php" class="nav-item logout-red">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-      <span class="nav-text">Log out</span>
-    </a>
-  </nav>
-  <div class="sidebar-footer">
-    <div class="sidebar-footer-avatar"><?= htmlspecialchars($MANAGER->initials) ?></div>
-    <div class="sidebar-footer-text">
-      <div class="sidebar-footer-name"><?= htmlspecialchars($MANAGER->name) ?></div>
-      <div class="sidebar-footer-role">Mountain Manager</div>
-    </div>
-  </div>
-</aside>
+<?php $activePage = 'advisories'; ?>
+<?php include 'shared_sidebar.php'; ?>
 
-<!-- MAIN -->
+<!-- Main Area -->
 <div class="main-area" id="mainArea">
-
-  <!-- Topbar -->
   <div class="topbar">
     <div class="topbar-left">
       <button class="sidebar-toggle" onclick="toggleSidebar()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>
-        <div class="topbar-page-title">Advisories</div>
-        <div class="topbar-page-sub" id="advisoryCount"><?= count($advisories) ?> advisories for <?= htmlspecialchars($mountain['name']) ?></div>
+        <div class="topbar-page-title">Advisories & Alerts</div>
+        <div class="topbar-page-sub">Real-time monitoring for your mountains</div>
       </div>
     </div>
     <div class="topbar-right">
       <div class="topbar-date" id="topbarDate"></div>
-      <div class="topbar-avatar"><?= htmlspecialchars($MANAGER->initials) ?></div>
+      <div class="topbar-avatar"><?= htmlspecialchars($manager_initials) ?></div>
     </div>
   </div>
 
   <div class="content">
-
-    <!-- Critical Alert Bar -->
-    <?php if($criticalCount > 0): $critAdv = array_values(array_filter($advisories, fn($a) => $a['severity'] === 'critical' && $a['status'] === 'active'))[0]; ?>
-    <div class="alert-bar" id="alertBar">
-      <div class="alert-bar-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <!-- Critical Alert Banner -->
+    <?php if($critical_count > 0): $critical_alert = current(array_filter($active_alerts, fn($a) => $a['severity'] === 'critical')); ?>
+      <?php if($critical_alert): ?>
+      <div class="alert-bar">
+        <div class="alert-bar-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" width="20"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+        </div>
+        <div class="alert-bar-content">
+          <div class="alert-bar-title">⚠ CRITICAL ALERT — <?= htmlspecialchars($critical_alert['title']) ?></div>
+          <div class="alert-bar-sub"><?= htmlspecialchars($critical_alert['mountain_name']) ?> · <?= date('M d, g:i A', strtotime($critical_alert['created_at'])) ?></div>
+        </div>
+        <button class="alert-bar-action" onclick="showAlertDetails(<?= htmlspecialchars(json_encode($critical_alert)) ?>)">View Details</button>
       </div>
-      <div class="alert-bar-content">
-        <div class="alert-bar-title">⚠ ACTIVE CRITICAL ADVISORY — <?= htmlspecialchars($critAdv['title']) ?></div>
-        <div class="alert-bar-sub">Issued by <?= htmlspecialchars($critAdv['issuedBy']) ?> · <?= date('M d, Y g:i A', strtotime($critAdv['issuedAt'])) ?> · <?= count($critAdv['affectedBookings']) ?> booking(s) affected</div>
-      </div>
-      <button class="alert-bar-action" onclick="openAdvisory('<?= $critAdv['id'] ?>')">View Details</button>
-    </div>
+      <?php endif; ?>
     <?php endif; ?>
 
-    <!-- Stats -->
+    <!-- Stats Overview -->
     <div class="stats-grid">
-      <div class="stat-card critical" onclick="filterSeverity('critical')">
-        <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        </div>
-        <div class="stat-value"><?= $criticalCount ?></div>
-        <div class="stat-label">Critical</div>
+      <div class="stat-card critical" onclick="scrollToSection('alerts')">
+        <div class="stat-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="22"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+        <div class="stat-value"><?= $critical_count + $warning_count ?></div>
+        <div class="stat-label">Active Alerts</div>
       </div>
-      <div class="stat-card warning" onclick="filterSeverity('warning')">
-        <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        </div>
-        <div class="stat-value"><?= $warningCount ?></div>
-        <div class="stat-label">Warnings</div>
+      <div class="stat-card warning" onclick="scrollToSection('safety')">
+        <div class="stat-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="22"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <div class="stat-value"><?= $safety_alert_count ?></div>
+        <div class="stat-label">Safety Alerts</div>
       </div>
-      <div class="stat-card info-card" onclick="filterSeverity('info')">
-        <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        </div>
-        <div class="stat-value"><?= $infoCount ?></div>
-        <div class="stat-label">Informational</div>
+      <div class="stat-card info" onclick="scrollToSection('crowd')">
+        <div class="stat-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div class="stat-value"><?= $crowd_report_count ?></div>
+        <div class="stat-label">Crowd Reports</div>
       </div>
-      <div class="stat-card resolved-card" onclick="filterSeverity('resolved')">
-        <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </div>
-        <div class="stat-value"><?= $resolvedCount ?></div>
-        <div class="stat-label">Resolved</div>
+      <div class="stat-card blue" onclick="scrollToSection('weather')">
+        <div class="stat-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="22"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></div>
+        <div class="stat-value"><?= count($assigned_mountains) ?></div>
+        <div class="stat-label">Weather Tracked</div>
+      </div>
+      <div class="stat-card" onclick="scrollToSection('broadcasts')">
+        <div class="stat-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="22"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg></div>
+        <div class="stat-value"><?= $unread_broadcast_count ?></div>
+        <div class="stat-label">Unread Updates</div>
       </div>
     </div>
 
-    <!-- Toolbar -->
-    <div class="panel">
+   <!-- Weather Section - Enhanced -->
+<div class="panel" id="weather">
+    <div class="panel-hdr">
+        <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="18"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            Weather Forecast & Advisories
+        </div>
+        <button class="btn-sm btn-outline-sm" onclick="refreshWeather()">⟳ Refresh</button>
+    </div>
+    <div class="panel-body">
+        <div class="weather-grid">
+            <?php foreach($assigned_mountains as $mountain): ?>
+                <?php 
+                $weather = $weather_data[$mountain['id']] ?? null;
+                $current = $weather['current'] ?? null;
+                
+                // Determine weather type for styling
+                $weather_type = 'sunny';
+                $advisory_level = 'success';
+                $advisory_message = '';
+                $action_needed = '';
+                $rain_percent = 0;
+                
+                if ($current) {
+                    $code = $current['weather_code'];
+                    $precip = $current['precip'] ?? 0;
+                    
+                    // Forecast rain probability for today
+                    $today_forecast = $weather[date('Y-m-d')] ?? null;
+                    $rain_prob = $today_forecast['precip_prob'] ?? 0;
+                    
+                    if ($code >= 95) { // Thunderstorm
+                        $weather_type = 'storm';
+                        $advisory_level = 'critical';
+                        $advisory_message = '⛈️ SEVERE THUNDERSTORM WARNING';
+                        $action_needed = '🚨 ALL HIKING ACTIVITIES SUSPENDED. Evacuate immediately if on trail.';
+                        $rain_percent = 100;
+                    } elseif ($code >= 61 && $code <= 67) { // Rain
+                        $weather_type = 'rainy';
+                        $advisory_level = 'warning';
+                        $advisory_message = '🌧️ HEAVY RAIN ADVISORY';
+                        $action_needed = '⚠️ Trails may be slippery. Guides must carry rain gear. Consider postponing if rain persists.';
+                        $rain_percent = max($precip * 10, $rain_prob);
+                    } elseif ($code >= 80 && $code <= 82) { // Rain showers
+                        $weather_type = 'rainy';
+                        $advisory_level = 'warning';
+                        $advisory_message = '🌦️ RAIN SHOWERS EXPECTED';
+                        $action_needed = '⚠️ Intermittent rain expected. Bring waterproof gear and extra clothing.';
+                        $rain_percent = max($precip * 8, $rain_prob);
+                    } elseif ($code >= 45 && $code <= 49) { // Fog
+                        $weather_type = 'foggy';
+                        $advisory_level = 'warning';
+                        $advisory_message = '🌫️ LOW VISIBILITY ADVISORY';
+                        $action_needed = '⚠️ Dense fog reduces visibility. Stay on marked trails and use headlamps.';
+                        $rain_percent = $rain_prob;
+                    } elseif ($code >= 3) { // Overcast/Cloudy
+                        $weather_type = 'cloudy';
+                        $advisory_level = 'info';
+                        $advisory_message = '☁️ OVERCAST CONDITIONS';
+                        $action_needed = '📋 Cool weather expected. Dress in layers for changing conditions.';
+                        $rain_percent = $rain_prob;
+                    } elseif ($code >= 0 && $code <= 2) { // Clear/Sunny
+                        $weather_type = 'sunny';
+                        $advisory_level = 'success';
+                        $advisory_message = '☀️ PERFECT HIKING WEATHER';
+                        $action_needed = '✅ Warm bright day! Great for hiking. Don\'t forget sun protection and hydration.';
+                        $rain_percent = $rain_prob;
+                    }
+                    
+                    // Check for high wind
+                    if (($current['wind'] ?? 0) > 40) {
+                        $advisory_message .= ' 💨 Strong Winds';
+                        $action_needed .= ' Strong winds expected at summit. Extra caution needed.';
+                        if ($advisory_level !== 'critical') $advisory_level = 'warning';
+                    }
+                    
+                    // Check for extreme heat
+                    if (($current['temp'] ?? 0) > 30) {
+                        $advisory_message .= ' 🔥 Heat Warning';
+                        $action_needed .= ' High temperatures - ensure adequate water supply (min 3L per person).';
+                    }
+                }
+                ?>
+                <div class="weather-card <?= $weather_type ?>">
+                    <?php if($weather_type === 'rainy'): ?>
+                        <div class="rain-animation"></div>
+                    <?php endif; ?>
+                    
+                    <div class="weather-header">
+                        <div>
+                            <span class="weather-mountain"><?= htmlspecialchars($mountain['name']) ?></span>
+                            <div class="weather-condition">
+                                <?php if($current): ?>
+                                    <span class="weather-icon-large <?= $weather_type ?>"><?= $current['icon'] ?? '🌤' ?></span>
+                                    <span style="margin-left: 8px;"><?= $current['condition'] ?? 'Unknown' ?></span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="weather-temp">
+                                <?php if($current): ?>
+                                    <?= round($current['temp']) ?>°C
+                                <?php else: ?>
+                                    —
+                                <?php endif; ?>
+                            </div>
+                            <div style="font-size: 11px; opacity: 0.8;">
+                                Feels like <?= round(($current['temp'] ?? 0) - (($current['wind'] ?? 0) * 0.2)) ?>°
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 16px; margin: 12px 0; font-size: 12px; flex-wrap: wrap;">
+                        <?php if($current): ?>
+                            <span>💨 Wind: <?= round($current['wind']) ?> km/h</span>
+                            <span>💧 Humidity: <?= round($current['humidity']) ?>%</span>
+                            <span>📍 Elev: <?= $mountain['elevation'] ?? 'N/A' ?>m</span>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <?php if($rain_percent > 0): ?>
+                        <div class="rain-meter">
+                            <div class="rain-fill" style="width: <?= min($rain_percent, 100) ?>%"></div>
+                        </div>
+                        <div style="font-size: 10px; margin-top: 4px; opacity: 0.8;">
+                            💧 Rain probability: <?= round($rain_percent) ?>%
+                        </div>
+                    <?php endif; ?>
+                    
+                    <?php if($weather && count($weather) > 1): ?>
+                        <div class="forecast-list" style="margin-top: 16px;">
+                            <?php 
+                            $days = array_slice(array_filter(array_keys($weather), fn($k) => $k !== 'current'), 0, 4);
+                            foreach($days as $day):
+                                $forecast = $weather[$day];
+                                $is_rainy = ($forecast['precip_prob'] ?? 0) > 30;
+                            ?>
+                                <div class="forecast-day" style="<?= $is_rainy ? 'background: rgba(96, 165, 250, 0.3);' : '' ?>">
+                                    <div><?= date('D', strtotime($day)) ?></div>
+                                    <div class="forecast-temp"><?= round($forecast['temp_max'] ?? 0) ?>°</div>
+                                    <div style="font-size: 16px; margin: 4px 0;"><?= $forecast['icon'] ?? '🌤' ?></div>
+                                    <?php if($is_rainy): ?>
+                                        <div style="font-size: 9px; color: #93c5fd;">🌧️ <?= round($forecast['precip_prob']) ?>%</div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <!-- Weather Advisory Banner -->
+                    <?php if($advisory_message): ?>
+                        <div class="weather-advisory <?= $advisory_level ?>">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                <span style="font-size: 20px;">
+                                    <?= $advisory_level === 'critical' ? '🚨' : ($advisory_level === 'warning' ? '⚠️' : ($advisory_level === 'success' ? '✅' : 'ℹ️')) ?>
+                                </span>
+                                <strong><?= $advisory_message ?></strong>
+                            </div>
+                            <div style="font-size: 11px; line-height: 1.4;">
+                                <?= $action_needed ?>
+                            </div>
+                            <?php if($advisory_level === 'critical'): ?>
+                                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; font-weight: bold;">
+                                    🔴 ALL BOOKINGS AFFECTED: Contact all scheduled hikers immediately to reschedule or cancel.
+                                </div>
+                            <?php elseif($advisory_level === 'warning' && $rain_percent > 50): ?>
+                                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px;">
+                                    📢 Recommended: Postpone long hikes. Short trails only with proper rain gear.
+                                </div>
+                            <?php elseif($advisory_level === 'success'): ?>
+                                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px;">
+                                    ✨ Perfect day for hiking! Sunrise views are expected to be spectacular.
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</div>
+
+    <!-- Active Alerts Section -->
+    <div class="panel" id="alerts">
+      <div class="panel-hdr">
+        <div class="panel-title"><svg viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Active Alerts from Guides</div>
+        <button class="btn-sm btn-primary-sm" onclick="openPostAlert()">+ Post Alert</button>
+      </div>
       <div class="panel-body">
-        <div class="toolbar">
-          <div class="search-box">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <input type="text" id="searchInp" placeholder="Search advisories, issuers, keywords..." oninput="applyFilters()">
+        <?php if(empty($active_alerts)): ?>
+          <div style="text-align:center;padding:40px;color:var(--ink3);">✅ No active alerts. All trails are currently safe.</div>
+        <?php else: ?>
+          <div class="alerts-grid">
+            <?php foreach($active_alerts as $alert): ?>
+              <div class="alert-card <?= $alert['severity'] === 'critical' ? 'critical' : 'warning' ?>">
+                <div class="alert-card-header">
+                  <div class="alert-icon <?= $alert['severity'] === 'critical' ? 'critical' : 'warning' ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                  </div>
+                  <div>
+                    <div class="alert-title"><?= htmlspecialchars($alert['title']) ?></div>
+                    <div class="alert-meta">
+                      <span>📍 <?= htmlspecialchars($alert['mountain_name']) ?></span>
+                      <span>🕐 <?= date('M d, g:i A', strtotime($alert['created_at'])) ?></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="alert-body">
+                  <?= nl2br(htmlspecialchars(substr($alert['description'], 0, 150))) ?>
+                </div>
+                <div class="alert-footer">
+                  <button class="btn-sm btn-outline-sm" onclick="acknowledgeAlert(<?= $alert['id'] ?>)">✓ Acknowledge</button>
+                  <button class="btn-sm btn-outline-sm" onclick="viewOnMap(<?= $alert['latitude'] ?: 'null' ?>, <?= $alert['longitude'] ?: 'null' ?>)">🗺 View on Map</button>
+                </div>
+              </div>
+            <?php endforeach; ?>
           </div>
-          <select class="select" id="filterType" onchange="applyFilters()">
-            <option value="">All Types</option>
-            <option value="weather">Weather</option>
-            <option value="trail">Trail</option>
-            <option value="health">Health</option>
-            <option value="capacity">Capacity</option>
-            <option value="maintenance">Maintenance</option>
-            <option value="wildlife">Wildlife</option>
-          </select>
-          <button class="btn btn-outline btn-sm" onclick="clearFilters()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            Clear
-          </button>
-          <button class="btn btn-primary btn-sm" onclick="openNewForm()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            New Advisory
-          </button>
-        </div>
-        <div class="filter-row" id="severityChips">
-          <div class="chip active" data-sev="">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>All
-          </div>
-          <div class="chip" data-sev="critical">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Critical
-          </div>
-          <div class="chip" data-sev="warning">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg>Warning
-          </div>
-          <div class="chip" data-sev="info">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/></svg>Info
-          </div>
-          <div class="chip" data-sev="resolved">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>Resolved
-          </div>
-        </div>
+        <?php endif; ?>
       </div>
     </div>
 
-    <!-- Advisories Grid -->
-    <div class="advisories-grid" id="advisoriesGrid"></div>
-    <div id="emptyState" class="empty-state" style="display:none;">
-      <div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
-      <h3>No advisories found</h3>
-      <p>Adjust your filters or add a new advisory.</p>
+    <!-- Safety Alerts (from active hikes) -->
+    <div class="panel" id="safety">
+      <div class="panel-hdr">
+        <div class="panel-title"><svg viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Safety Alerts from Active Hikes</div>
+      </div>
+      <div class="panel-body">
+        <?php if(empty($safety_alerts)): ?>
+          <div style="text-align:center;padding:40px;color:var(--ink3);">✅ No active safety alerts. All hikes are proceeding normally.</div>
+        <?php else: ?>
+          <div class="safety-grid">
+            <?php foreach($safety_alerts as $alert): ?>
+              <div class="alert-card <?= $alert['severity'] === 'critical' ? 'critical' : ($alert['severity'] === 'high' ? 'warning' : 'info') ?>">
+                <div class="alert-card-header">
+                  <div class="alert-icon <?= $alert['severity'] === 'critical' ? 'critical' : 'warning' ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20"><path d="M12 8v4l3 3M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  </div>
+                  <div>
+                    <div class="alert-title"><?= htmlspecialchars($alert['title']) ?></div>
+                    <div class="alert-meta">
+                      <span>🏔 <?= htmlspecialchars($alert['mountain_name']) ?></span>
+                      <span>🎫 <?= htmlspecialchars($alert['booking_number']) ?></span>
+                      <span>🕐 <?= date('M d, g:i A', strtotime($alert['created_at'])) ?></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="alert-body">
+                  <?= nl2br(htmlspecialchars(substr($alert['description'], 0, 150))) ?>
+                  <?php if($alert['hiker_involved']): ?>
+                    <div style="margin-top:8px;padding:6px;background:var(--off);border-radius:8px;">
+                      👤 Affected Hiker: <?= htmlspecialchars($alert['hiker_involved']) ?>
+                    </div>
+                  <?php endif; ?>
+                </div>
+                <div class="alert-footer">
+                  <button class="btn-sm btn-primary-sm" onclick="resolveSafetyAlert(<?= $alert['id'] ?>)">✓ Mark Resolved</button>
+                  <button class="btn-sm btn-outline-sm" onclick="contactGuide(<?= $alert['booking_id'] ?>)">📞 Contact Guide</button>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </div>
     </div>
 
+    <!-- Crowd Reports -->
+    <div class="panel" id="crowd">
+      <div class="panel-hdr">
+        <div class="panel-title"><svg viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Live Crowd Reports</div>
+      </div>
+      <div class="panel-body">
+        <?php if(empty($crowd_reports)): ?>
+          <div style="text-align:center;padding:40px;color:var(--ink3);">📊 No recent crowd reports. Trails are likely quiet.</div>
+        <?php else: ?>
+          <div class="crowd-grid">
+            <?php foreach($crowd_reports as $report): 
+              $badge = getCrowdBadge($report['crowd_level']);
+            ?>
+              <div class="alert-card">
+                <div class="alert-card-header">
+                  <div class="alert-icon" style="background:<?= $badge['bg'] ?>">
+                    <span style="font-size:20px"><?= $badge['icon'] ?></span>
+                  </div>
+                  <div>
+                    <div class="alert-title"><?= htmlspecialchars($report['mountain_name']) ?></div>
+                    <div class="alert-meta">
+                      <span class="crowd-badge" style="background:<?= $badge['bg'] ?>;color:<?= $badge['color'] ?>">
+                        <?= $badge['icon'] ?> <?= $report['crowd_level'] ?> Crowd
+                      </span>
+                      <span>🕐 <?= $report['minutes_ago'] ?> min ago</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="alert-body">
+                  <?= htmlspecialchars($report['notes'] ?? 'No additional notes') ?>
+                  <?php if($report['latitude'] && $report['longitude']): ?>
+                    <div style="margin-top:8px;font-size:11px;color:var(--ink4);">
+                      📍 <?= number_format($report['latitude'], 6) ?>, <?= number_format($report['longitude'], 6) ?>
+                    </div>
+                  <?php endif; ?>
+                </div>
+                <div class="alert-footer">
+                  <button class="btn-sm btn-outline-sm" onclick="reportCrowd(<?= $report['mountain_id'] ?>)">➕ Add Report</button>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- Broadcasts / Advisories -->
+    <div class="panel" id="broadcasts">
+      <div class="panel-hdr">
+        <div class="panel-title"><svg viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Official Advisories & Broadcasts</div>
+        <button class="btn-sm btn-primary-sm" onclick="openBroadcastModal()">📢 Send Broadcast</button>
+      </div>
+      <div class="panel-body">
+        <?php if(empty($broadcasts)): ?>
+          <div style="text-align:center;padding:40px;color:var(--ink3);">📭 No broadcast messages yet.</div>
+        <?php else: ?>
+          <?php foreach($broadcasts as $broadcast): ?>
+            <div class="broadcast-item <?= $broadcast['is_read'] == 0 ? 'unread' : '' ?>" onclick="markBroadcastRead(<?= $broadcast['id'] ?>, this)">
+              <div class="broadcast-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div class="broadcast-content">
+                <div class="broadcast-title">From: <?= htmlspecialchars($broadcast['sender_name']) ?></div>
+                <div class="broadcast-message"><?= nl2br(htmlspecialchars(substr($broadcast['message'], 0, 200))) ?></div>
+                <div class="broadcast-meta">
+                  <span>📅 <?= date('M d, Y g:i A', strtotime($broadcast['created_at'])) ?></span>
+                  <span>👥 Target: <?= ucfirst(str_replace('_', ' ', $broadcast['recipient_role'] ?? 'All')) ?></span>
+                </div>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- Mobile Bottom Nav -->
 <div class="mobile-bottom-nav">
   <a href="dashboard.php" class="mobile-nav-item">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     <span>Home</span>
   </a>
   <a href="bookings.php" class="mobile-nav-item">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/></svg>
     <span>Bookings</span>
   </a>
-  <button class="mobile-nav-item active">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
-    <span>Advisories</span>
+  <button class="mobile-nav-item active" onclick="location.reload()">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+    <span>Alerts</span>
   </button>
   <button class="mobile-nav-item" onclick="toggleMobileSidebar()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <svg viewBox="0 0 24 24" fill="none"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     <span>Menu</span>
   </button>
 </div>
 
-<!-- DETAIL MODAL -->
-<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
-  <div class="modal-container" id="modalContainer" onclick="event.stopPropagation()">
-    <div class="modal-banner"></div>
+<!-- Post Alert Modal -->
+<div class="modal-overlay" id="alertModal" onclick="closeModal(event, 'alertModal')">
+  <div class="modal-container" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <div class="modal-header-left">
-        <div class="modal-header-icon" id="modalHeaderIcon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+      <h3>Post Alert to Guides & Hikers</h3>
+      <button class="modal-close" onclick="closeModal(null, 'alertModal')">×</button>
+    </div>
+    <form id="alertForm" onsubmit="submitAlert(event)">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Mountain</label>
+          <select class="form-select" id="alertMountainId" required>
+            <option value="">Select Mountain</option>
+            <?php foreach($assigned_mountains as $mountain): ?>
+              <option value="<?= $mountain['id'] ?>"><?= htmlspecialchars($mountain['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
         </div>
-        <div>
-          <div class="modal-title" id="modalTitle">Advisory Details</div>
-          <div class="modal-sub" id="modalSub"></div>
+        <div class="form-group">
+          <label class="form-label">Alert Title</label>
+          <input type="text" class="form-input" id="alertTitle" required placeholder="e.g., Trail Closure due to Rockslide">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Severity</label>
+          <select class="form-select" id="alertSeverity" required>
+            <option value="info">ℹ Info - Informational only</option>
+            <option value="medium">⚠ Medium - Caution advised</option>
+            <option value="high">🚨 High - Be prepared</option>
+            <option value="critical">🔴 Critical - Urgent action needed</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-textarea" id="alertDescription" rows="4" required placeholder="Provide detailed information about the alert..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Location (Optional)</label>
+          <input type="text" class="form-input" id="alertLocation" placeholder="e.g., Near Summit, Trail Section 3">
         </div>
       </div>
-      <button class="modal-close" onclick="document.getElementById('modalOverlay').classList.remove('open')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body" id="modalBody"></div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="document.getElementById('modalOverlay').classList.remove('open')">Close</button>
-      <button class="btn btn-primary" id="modalNotifyBtn" onclick="notifyFromModal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="13" height="13"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
-        Notify Hikers
-      </button>
-      <button class="btn btn-outline" id="modalResolveBtn" onclick="resolveFromModal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>
-        Mark Resolved
-      </button>
-    </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal(null, 'alertModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Post Alert</button>
+      </div>
+    </form>
   </div>
 </div>
 
-<!-- NEW ADVISORY FORM -->
-<div class="form-overlay" id="formOverlay" onclick="closeForm(event)">
-  <div class="form-container" onclick="event.stopPropagation()">
-    <div class="form-header">
-      <div class="form-title">Post New Advisory</div>
-      <button class="modal-close" onclick="document.getElementById('formOverlay').classList.remove('open')" style="background:rgba(255,255,255,0.15);">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+<!-- Broadcast Modal -->
+<div class="modal-overlay" id="broadcastModal" onclick="closeModal(event, 'broadcastModal')">
+  <div class="modal-container" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Send Broadcast Message</h3>
+      <button class="modal-close" onclick="closeModal(null, 'broadcastModal')">×</button>
     </div>
-    <div class="form-body">
-      <div class="form-row">
+    <form id="broadcastForm" onsubmit="submitBroadcast(event)">
+      <div class="modal-body">
         <div class="form-group">
-          <label class="form-label">Advisory Type</label>
-          <select class="form-select" id="newType">
-            <option value="weather">🌧 Weather</option>
-            <option value="trail">🏔 Trail</option>
-            <option value="health">💊 Health</option>
-            <option value="capacity">👥 Capacity</option>
-            <option value="maintenance">🔧 Maintenance</option>
-            <option value="wildlife">🦅 Wildlife</option>
+          <label class="form-label">Recipient</label>
+          <select class="form-select" id="broadcastRecipient" required>
+            <option value="all">All Users (Hikers & Guides)</option>
+            <option value="all_guides">All Guides Only</option>
+            <option value="all_hikers">All Hikers Only</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Severity Level</label>
-          <select class="form-select" id="newSeverity">
-            <option value="info">ℹ Info</option>
-            <option value="warning">⚠ Warning</option>
-            <option value="critical">🚨 Critical</option>
-          </select>
+          <label class="form-label">Message</label>
+          <textarea class="form-textarea" id="broadcastMessage" rows="5" required placeholder="Type your advisory message here... This will be sent to all affected users."></textarea>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Advisory Title</label>
-        <input type="text" class="form-input" id="newTitle" placeholder="e.g. Typhoon Warning — Trail Suspension">
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal(null, 'broadcastModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Send Broadcast</button>
       </div>
-      <div class="form-group">
-        <label class="form-label">Full Advisory Message</label>
-        <textarea class="form-textarea" id="newMessage" placeholder="Describe the advisory in full detail. Include affected areas, instructions for guides and hikers, and any safety precautions..."></textarea>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Issued By</label>
-          <input type="text" class="form-input" id="newIssuedBy" placeholder="e.g. PAGASA / DENR">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Expires On</label>
-          <input type="date" class="form-input" id="newExpires">
-        </div>
-      </div>
-      <div class="toggle-row">
-        <div class="toggle-info">
-          <h4>Notify affected hikers</h4>
-          <p>Send an SMS/app notification to hikers with upcoming bookings.</p>
-        </div>
-        <label class="toggle-switch">
-          <input type="checkbox" id="newNotify" checked>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-    </div>
-    <div class="form-footer">
-      <button class="btn btn-outline" onclick="document.getElementById('formOverlay').classList.remove('open')">Cancel</button>
-      <button class="btn btn-primary" onclick="submitNewAdvisory()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Post Advisory
-      </button>
-    </div>
+    </form>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-const ALL_ADVISORIES = <?= json_encode($advisories) ?>;
-let currentAdvisories = [...ALL_ADVISORIES];
-let currentAdvisoryId = null;
-
-const TYPE_ICONS = {
-  weather: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>`,
-  trail: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20"><path d="M8 3l4 8 5-5 5 15H2L8 3z"/></svg>`,
-  health: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
-  capacity: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
-  maintenance: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
-  wildlife: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20"><circle cx="11" cy="11" r="3"/><path d="M11 14V20M11 8V2M8 11H2M20 11h-6M17.66 6.34l-1.42 1.42M7.76 16.24l-1.42 1.42M17.66 17.66l-1.42-1.42M7.76 7.76L6.34 6.34"/></svg>`
-};
-
-const SEV_ICON = {
-  critical: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20" stroke-width="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-  warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
-  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
-  resolved: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
-};
-
-function getDaysUntilExpiry(dateStr) {
-  if (!dateStr) return null;
-  const diff = new Date(dateStr) - new Date();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
-function fmtDate(d) {
-  return new Date(d).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function fmtDateTime(d) {
-  return new Date(d).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-}
-
-function renderAdvisories() {
-  const grid = document.getElementById('advisoriesGrid');
-  const empty = document.getElementById('emptyState');
-
-  if (currentAdvisories.length === 0) {
-    grid.innerHTML = '';
-    empty.style.display = 'block';
-    return;
-  }
-  empty.style.display = 'none';
-
-  const sev = (a) => a.status === 'resolved' ? 'resolved' : a.severity;
-
-  grid.innerHTML = currentAdvisories.map((adv, i) => {
-    const severity = sev(adv);
-    const days = getDaysUntilExpiry(adv.expiresAt);
-    const isUrgent = days !== null && days <= 3;
-
-    return `
-      <div class="advisory-card ${severity}" style="animation-delay:${i * 0.06}s" onclick="openAdvisory('${adv.id}')">
-        <div class="card-banner"></div>
-        <div class="card-body">
-          <div class="card-top">
-            <div class="card-type-icon">${TYPE_ICONS[adv.type] || TYPE_ICONS.trail}</div>
-            <div class="card-meta">
-              <div class="card-badges">
-                <span class="severity-badge ${severity}">
-                  <span class="severity-badge-dot"></span>
-                  ${severity.toUpperCase()}
-                </span>
-                <span class="type-badge">${adv.type}</span>
-              </div>
-              <div class="card-title">${escapeHtml(adv.title)}</div>
-              <div class="card-issued">${fmtDateTime(adv.issuedAt)}</div>
-            </div>
-          </div>
-          <div class="card-message">${escapeHtml(adv.message)}</div>
-          <div class="card-footer">
-            <div class="card-footer-left">
-              <div class="card-issuer">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                ${escapeHtml(adv.issuedBy)}
-              </div>
-              ${adv.affectedBookings.length > 0 ? `
-                <div class="affected-bookings">
-                  ${adv.affectedBookings.map(b => `<span class="bk-chip">${b}</span>`).join('')}
-                </div>
-              ` : ''}
-              ${adv.notifyHikers ? `
-                <div class="notify-indicator">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
-                  Notified
-                </div>
-              ` : ''}
-            </div>
-            ${adv.expiresAt ? `
-              <div class="expiry-pill ${isUrgent ? 'urgent' : ''}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                ${days !== null ? (days <= 0 ? 'Expired' : `${days}d left`) : 'No expiry'}
-              </div>
-            ` : ''}
-          </div>
-        </div>
-        <div class="card-actions">
-          <button class="card-action-btn view" onclick="event.stopPropagation();openAdvisory('${adv.id}')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            View
-          </button>
-          ${adv.status !== 'resolved' ? `
-            <button class="card-action-btn notify" onclick="event.stopPropagation();notifyHikers('${adv.id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-              Notify
-            </button>
-            <button class="card-action-btn resolve" onclick="event.stopPropagation();resolveAdvisory('${adv.id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>
-              Resolve
-            </button>
-          ` : ''}
-          <button class="card-action-btn dismiss" onclick="event.stopPropagation();dismissAdvisory('${adv.id}')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-            Remove
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function openAdvisory(id) {
-  const adv = ALL_ADVISORIES.find(a => a.id === id) || currentAdvisories.find(a => a.id === id);
-  if (!adv) return;
-  currentAdvisoryId = id;
-
-  const severity = adv.status === 'resolved' ? 'resolved' : adv.severity;
-  const days = getDaysUntilExpiry(adv.expiresAt);
-
-  const modal = document.getElementById('modalContainer');
-  modal.className = `modal-container ${severity}`;
-  document.getElementById('modalHeaderIcon').innerHTML = SEV_ICON[severity] || SEV_ICON.info;
-  document.getElementById('modalTitle').textContent = adv.title;
-  document.getElementById('modalSub').textContent = `${adv.id} · ${adv.type.charAt(0).toUpperCase() + adv.type.slice(1)} Advisory · Issued by ${adv.issuedBy}`;
-
-  const notifyBtn = document.getElementById('modalNotifyBtn');
-  const resolveBtn = document.getElementById('modalResolveBtn');
-  notifyBtn.style.display = adv.status === 'resolved' ? 'none' : '';
-  resolveBtn.style.display = adv.status === 'resolved' ? 'none' : '';
-
-  document.getElementById('modalBody').innerHTML = `
-    <div class="detail-block">
-      <div class="detail-block-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-        Advisory Information
-      </div>
-      <div class="detail-row">
-        <div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-        <div>
-          <div class="detail-label">Severity</div>
-          <div class="detail-value"><span class="severity-badge ${severity}"><span class="severity-badge-dot"></span>${severity.toUpperCase()}</span></div>
-        </div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-        <div>
-          <div class="detail-label">Date Issued</div>
-          <div class="detail-value">${fmtDateTime(adv.issuedAt)}</div>
-        </div>
-      </div>
-      ${adv.expiresAt ? `
-      <div class="detail-row">
-        <div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-        <div>
-          <div class="detail-label">Expires</div>
-          <div class="detail-value" style="color:${days !== null && days <= 3 ? 'var(--critical)' : 'inherit'}">
-            ${fmtDate(adv.expiresAt)}${days !== null ? ` (${days <= 0 ? 'Expired' : `${days} day${days !== 1 ? 's' : ''} remaining`})` : ''}
-          </div>
-        </div>
-      </div>` : ''}
-      <div class="detail-row">
-        <div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
-        <div>
-          <div class="detail-label">Issued By</div>
-          <div class="detail-value">${escapeHtml(adv.issuedBy)}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="detail-block">
-      <div class="detail-block-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        Full Advisory Message
-      </div>
-      <div class="detail-value message-text">${escapeHtml(adv.message)}</div>
-    </div>
-
-    ${adv.affectedDates && adv.affectedDates.length > 0 ? `
-    <div class="detail-block">
-      <div class="detail-block-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/></svg>
-        Affected Dates
-      </div>
-      <div class="dates-grid">
-        ${adv.affectedDates.map(d => `<div class="date-chip">${fmtDate(d)}</div>`).join('')}
-      </div>
-    </div>` : ''}
-
-    ${adv.affectedBookings && adv.affectedBookings.length > 0 ? `
-    <div class="detail-block">
-      <div class="detail-block-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        Affected Bookings (${adv.affectedBookings.length})
-      </div>
-      <div class="bookings-affected">
-        ${adv.affectedBookings.map(b => `
-          <div class="bk-detail-chip" onclick="window.location.href='bookings.php?id=${b}'">
-            <span class="bk-detail-chip-dot"></span>${b}
-          </div>
-        `).join('')}
-      </div>
-    </div>` : ''}
-
-    <div class="detail-block">
-      <div class="detail-block-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
-        Hiker Notifications
-      </div>
-      <div class="notify-row">
-        <div class="notify-row-left">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">${adv.notifyHikers ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>' : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>'}</svg>
-          ${adv.notifyHikers ? 'Hikers have been notified about this advisory.' : 'Hikers have not been notified yet.'}
-        </div>
-        ${!adv.notifyHikers && adv.status !== 'resolved' ? `<button class="btn btn-sm" style="background:var(--green);color:white;border:none;" onclick="notifyHikers('${adv.id}')">Send Now</button>` : ''}
-      </div>
-    </div>
-  `;
-
-  document.getElementById('modalOverlay').classList.add('open');
-}
-
-function closeModal(event) {
-  if (event && event.target !== document.getElementById('modalOverlay')) return;
-  document.getElementById('modalOverlay').classList.remove('open');
-}
-
-function notifyHikers(id) {
-  const adv = ALL_ADVISORIES.find(a => a.id === id);
-  if (!adv) return;
-  adv.notifyHikers = true;
-  showToast(`📢 Hikers notified for: ${adv.title}`, 'success');
-  renderAdvisories();
-  if (document.getElementById('modalOverlay').classList.contains('open')) {
-    openAdvisory(id);
-  }
-}
-function notifyFromModal() { if (currentAdvisoryId) notifyHikers(currentAdvisoryId); }
-
-function resolveAdvisory(id) {
-  const adv = ALL_ADVISORIES.find(a => a.id === id);
-  if (!adv) return;
-  adv.status = 'resolved';
-  showToast(`✅ Advisory marked as resolved.`, 'success');
-  currentAdvisories = [...ALL_ADVISORIES];
-  applyFilters();
-  document.getElementById('modalOverlay').classList.remove('open');
-}
-function resolveFromModal() { if (currentAdvisoryId) resolveAdvisory(currentAdvisoryId); }
-
-function dismissAdvisory(id) {
-  if (!confirm('Remove this advisory permanently?')) return;
-  const idx = ALL_ADVISORIES.findIndex(a => a.id === id);
-  if (idx > -1) ALL_ADVISORIES.splice(idx, 1);
-  currentAdvisories = [...ALL_ADVISORIES];
-  applyFilters();
-  showToast('Advisory removed.', 'danger');
-}
-
-function applyFilters() {
-  const search = document.getElementById('searchInp').value.toLowerCase();
-  const type = document.getElementById('filterType').value;
-  const activeSevChip = document.querySelector('#severityChips .chip.active');
-  const sev = activeSevChip ? activeSevChip.dataset.sev : '';
-
-  currentAdvisories = ALL_ADVISORIES.filter(adv => {
-    const advSev = adv.status === 'resolved' ? 'resolved' : adv.severity;
-    if (sev && advSev !== sev) return false;
-    if (type && adv.type !== type) return false;
-    if (search) {
-      const text = `${adv.title} ${adv.message} ${adv.issuedBy} ${adv.type} ${adv.id}`.toLowerCase();
-      if (!text.includes(search)) return false;
-    }
-    return true;
-  });
-
-  document.getElementById('advisoryCount').textContent = `${currentAdvisories.length} advisor${currentAdvisories.length !== 1 ? 'ies' : 'y'} shown`;
-  renderAdvisories();
-}
-
-function filterSeverity(sev) {
-  document.querySelectorAll('#severityChips .chip').forEach(c => {
-    c.classList.toggle('active', c.dataset.sev === sev);
-  });
-  applyFilters();
-  showToast(`Showing ${sev || 'all'} advisories`);
-}
-
-function clearFilters() {
-  document.getElementById('searchInp').value = '';
-  document.getElementById('filterType').value = '';
-  document.querySelectorAll('#severityChips .chip').forEach((c, i) => c.classList.toggle('active', i === 0));
-  currentAdvisories = [...ALL_ADVISORIES];
-  document.getElementById('advisoryCount').textContent = `${currentAdvisories.length} advisories`;
-  renderAdvisories();
-  showToast('Filters cleared');
-}
-
-document.querySelectorAll('#severityChips .chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    document.querySelectorAll('#severityChips .chip').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    applyFilters();
-  });
-});
-
-function openNewForm() {
-  document.getElementById('formOverlay').classList.add('open');
-  document.getElementById('newExpires').min = new Date().toISOString().split('T')[0];
-}
-
-function closeForm(event) {
-  if (event && event.target !== document.getElementById('formOverlay')) return;
-  document.getElementById('formOverlay').classList.remove('open');
-}
-
-function submitNewAdvisory() {
-  const title = document.getElementById('newTitle').value.trim();
-  const message = document.getElementById('newMessage').value.trim();
-  const issuedBy = document.getElementById('newIssuedBy').value.trim();
-  if (!title || !message || !issuedBy) {
-    showToast('Please fill in all required fields.', 'danger');
-    return;
-  }
-
-  const newAdv = {
-    id: 'ADV' + String(Date.now()).slice(-4),
-    type: document.getElementById('newType').value,
-    severity: document.getElementById('newSeverity').value,
-    title,
-    message,
-    affectedDates: [],
-    issuedBy,
-    issuedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
-    expiresAt: document.getElementById('newExpires').value ? document.getElementById('newExpires').value + ' 00:00:00' : null,
-    status: 'active',
-    affectedBookings: [],
-    notifyHikers: document.getElementById('newNotify').checked,
-  };
-
-  ALL_ADVISORIES.unshift(newAdv);
-  currentAdvisories = [...ALL_ADVISORIES];
-  applyFilters();
-  document.getElementById('formOverlay').classList.remove('open');
-  document.getElementById('newTitle').value = '';
-  document.getElementById('newMessage').value = '';
-  document.getElementById('newIssuedBy').value = '';
-  showToast(`📋 Advisory "${title}" posted!`, 'success');
-}
+// Global variables
+const managerId = <?= json_encode($manager_id) ?>;
+const mountains = <?= json_encode($assigned_mountains) ?>;
 
 function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const main = document.getElementById('mainArea');
-  sidebar.classList.toggle('collapsed');
-  main.classList.toggle('expanded');
+  document.getElementById('sidebar').classList.toggle('collapsed');
+  document.getElementById('mainArea').classList.toggle('expanded');
 }
 
 function toggleMobileSidebar() {
   document.getElementById('sidebar').classList.toggle('mobile-open');
 }
 
+function scrollToSection(id) {
+  const element = document.getElementById(id);
+  if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function showToast(msg, type = '') {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
   toast.className = `toast ${type} show`;
-  setTimeout(() => toast.classList.remove('show'), 3500);
+  setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
+function showAlertDetails(alert) {
+  showToast(`Alert: ${alert.title} - ${alert.description}`, 'info');
+}
+
+function acknowledgeAlert(alertId) {
+  fetch('../api/acknowledge_alert.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alert_id: alertId, user_id: managerId, role: 'manager' })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      showToast('Alert acknowledged successfully', 'success');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast('Failed to acknowledge alert', 'danger');
+    }
+  })
+  .catch(err => showToast('Error acknowledging alert', 'danger'));
+}
+
+function resolveSafetyAlert(alertId) {
+  if (confirm('Mark this safety alert as resolved?')) {
+    fetch('../api/resolve_safety_alert.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alert_id: alertId, resolved_by: managerId })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast('Safety alert resolved', 'success');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        showToast('Failed to resolve alert', 'danger');
+      }
+    });
+  }
+}
+
+function contactGuide(bookingId) {
+  showToast('Contacting guide... This feature will open messaging.', 'info');
+}
+
+function reportCrowd(mountainId) {
+  const level = prompt('Enter crowd level (Low, Medium, High):', 'Medium');
+  if (level && ['Low', 'Medium', 'High'].includes(level)) {
+    const notes = prompt('Additional notes (optional):', '');
+    fetch('../api/report_crowd.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mountain_id: mountainId,
+        crowd_level: level,
+        notes: notes,
+        reported_by: managerId
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast('Crowd report submitted!', 'success');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        showToast('Failed to submit report', 'danger');
+      }
+    });
+  }
+}
+
+function viewOnMap(lat, lng) {
+  if (lat && lng) {
+    window.open(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}&zoom=15`, '_blank');
+  } else {
+    showToast('No location coordinates available', 'info');
+  }
+}
+
+function openPostAlert() {
+  document.getElementById('alertModal').classList.add('open');
+}
+
+function openBroadcastModal() {
+  document.getElementById('broadcastModal').classList.add('open');
+}
+
+function closeModal(event, modalId) {
+  if (event && event.target !== document.getElementById(modalId)) return;
+  document.getElementById(modalId).classList.remove('open');
+}
+
+function submitAlert(event) {
+  event.preventDefault();
+  const data = {
+    mountain_id: document.getElementById('alertMountainId').value,
+    title: document.getElementById('alertTitle').value,
+    severity: document.getElementById('alertSeverity').value,
+    description: document.getElementById('alertDescription').value,
+    location: document.getElementById('alertLocation').value,
+    reported_by: managerId,
+    reporter_role: 'manager'
+  };
+  
+  fetch('../api/post_alert.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(response => {
+    if (response.success) {
+      showToast('Alert posted successfully!', 'success');
+      document.getElementById('alertModal').classList.remove('open');
+      document.getElementById('alertForm').reset();
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showToast(response.error || 'Failed to post alert', 'danger');
+    }
+  })
+  .catch(err => showToast('Error posting alert', 'danger'));
+}
+
+function submitBroadcast(event) {
+  event.preventDefault();
+  const data = {
+    message: document.getElementById('broadcastMessage').value,
+    recipient_role: document.getElementById('broadcastRecipient').value,
+    sender_id: managerId
+  };
+  
+  fetch('../api/send_broadcast.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(response => {
+    if (response.success) {
+      showToast('Broadcast sent successfully!', 'success');
+      document.getElementById('broadcastModal').classList.remove('open');
+      document.getElementById('broadcastForm').reset();
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showToast(response.error || 'Failed to send broadcast', 'danger');
+    }
+  })
+  .catch(err => showToast('Error sending broadcast', 'danger'));
+}
+
+function markBroadcastRead(broadcastId, element) {
+  fetch('../api/mark_broadcast_read.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ broadcast_id: broadcastId, user_id: managerId, user_role: 'manager' })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      element.classList.remove('unread');
+    }
+  });
+}
+
+function refreshWeather() {
+  showToast('Refreshing weather data...', 'info');
+  setTimeout(() => location.reload(), 500);
+}
+
+// Add this helper function near your other helper functions
+function getWeatherRecommendation($weather_code, $precip, $wind, $temp) {
+    $recommendations = [];
+    
+    if ($weather_code >= 95) {
+        $recommendations[] = ['level' => 'critical', 'message' => 'THUNDERSTORM - SUSPEND ALL ACTIVITIES'];
+        $recommendations[] = ['level' => 'critical', 'message' => 'Evacuate trails immediately. Seek shelter.'];
+    } elseif ($weather_code >= 61 && $weather_code <= 67) {
+        $recommendations[] = ['level' => 'warning', 'message' => 'Heavy rain expected - trails may be dangerous'];
+        $recommendations[] = ['level' => 'warning', 'message' => 'Guides must carry emergency shelter'];
+    } elseif ($precip > 5) {
+        $recommendations[] = ['level' => 'warning', 'message' => 'Rain expected - bring waterproof gear'];
+    }
+    
+    if ($wind > 40) {
+        $recommendations[] = ['level' => 'warning', 'message' => 'Strong winds - extra caution at summit'];
+    }
+    
+    if ($temp > 30) {
+        $recommendations[] = ['level' => 'info', 'message' => 'Heat warning - bring extra water (3L+)'];
+    }
+    
+    if ($temp < 10) {
+        $recommendations[] = ['level' => 'warning', 'message' => 'Cold temps - severe weather gear required'];
+    }
+    
+    if (empty($recommendations)) {
+        $recommendations[] = ['level' => 'success', 'message' => 'Perfect hiking conditions!'];
+    }
+    
+    return $recommendations;
+}
+
+// Update time
 setInterval(() => {
   const el = document.getElementById('topbarDate');
-  if (el) el.textContent = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (el) el.textContent = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
 }, 1000);
-
-document.addEventListener('click', function(e) {
-  const sidebar = document.getElementById('sidebar');
-  const menuBtn = e.target.closest('.mobile-nav-item');
-  const isMenuBtn = menuBtn && menuBtn.querySelector('span')?.textContent === 'Menu';
-  if (!sidebar.contains(e.target) && !isMenuBtn && sidebar.classList.contains('mobile-open')) {
-    sidebar.classList.remove('mobile-open');
-  }
-});
-
-// Init
-renderAdvisories();
+document.getElementById('topbarDate').textContent = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
 </script>
-
 </body>
 </html>

@@ -57,12 +57,26 @@ function getMountainsFromDB($pdo) {
     $mountains = [];
     try {
         $stmt = $pdo->query("
-            SELECT id, name, location, difficulty, image, fee, 
+            SELECT id, name, location, difficulty, image, 
                    registration_fee, environmental_fee, elevation 
             FROM mountains WHERE status = 'Open' ORDER BY name
         ");
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            // Map database fields to match the JavaScript expected format
+            // Get actual guide fees from guide_mountain_rates
+            $guideDay = 801;
+            $guideON = 1500;
+            $stmt2 = $pdo->prepare("
+                SELECT guide_fee_day, guide_fee_overnight 
+                FROM guide_mountain_rates 
+                WHERE mountain_id = ? LIMIT 1
+            ");
+            $stmt2->execute([$row['id']]);
+            $rates = $stmt2->fetch();
+            if ($rates) {
+                $guideDay = floatval($rates['guide_fee_day']);
+                $guideON = floatval($rates['guide_fee_overnight']);
+            }
+            
             $mountains[] = [
                 'id' => $row['id'],
                 'name' => $row['name'],
@@ -70,10 +84,10 @@ function getMountainsFromDB($pdo) {
                 'difficulty' => strtolower($row['difficulty']),
                 'image' => $row['image'] ?? 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60',
                 'fees' => [
-                    'regFee' => intval($row['registration_fee'] ?? 150),
-                    'envFee' => intval($row['environmental_fee'] ?? 120),
-                    'guideDay' => 900,
-                    'guideON' => 1600,
+                    'regFee' => intval($row['registration_fee'] ?? 0),
+                    'envFee' => intval($row['environmental_fee'] ?? 0),
+                    'guideDay' => $guideDay,
+                    'guideON' => $guideON,
                     'campFee' => 50,
                     'parkDay' => 100,
                     'parkON' => 150
@@ -81,18 +95,7 @@ function getMountainsFromDB($pdo) {
             ];
         }
     } catch (PDOException $e) {
-        // Fallback to default mountains if query fails
-    }
-    
-    // If no mountains in DB, return default ones
-    if (empty($mountains)) {
-        return [
-            ['id'=>1,'name'=>'Mt. Batulao','location'=>'Nasugbu, Batangas','difficulty'=>'moderate','image'=>'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60','fees'=>['regFee'=>150,'envFee'=>120,'guideDay'=>900,'guideON'=>1600,'campFee'=>50,'parkDay'=>100,'parkON'=>150]],
-            ['id'=>2,'name'=>'Mt. Talamitam','location'=>'Nasugbu, Batangas','difficulty'=>'easy','image'=>'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=200&q=60','fees'=>['regFee'=>100,'envFee'=>0,'guideDay'=>700,'guideON'=>1100,'campFee'=>0,'parkDay'=>80,'parkON'=>80]],
-            ['id'=>3,'name'=>'Mt. Apayang','location'=>'Batangas','difficulty'=>'hard','image'=>'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200&q=60','fees'=>['regFee'=>200,'envFee'=>0,'guideDay'=>1200,'guideON'=>2000,'campFee'=>100,'parkDay'=>0,'parkON'=>0]],
-            ['id'=>4,'name'=>'Mt. Lantik','location'=>'Alfonso, Cavite','difficulty'=>'moderate','image'=>'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=200&q=60','fees'=>['regFee'=>130,'envFee'=>100,'guideDay'=>900,'guideON'=>1500,'campFee'=>0,'parkDay'=>100,'parkON'=>100]],
-            ['id'=>5,'name'=>'Mountain Trilogy','location'=>'Nasugbu, Batangas','difficulty'=>'hard','image'=>'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60','fees'=>['regFee'=>350,'envFee'=>300,'guideDay'=>2500,'guideON'=>4000,'campFee'=>150,'parkDay'=>200,'parkON'=>250]]
-        ];
+        error_log('Mountains fetch error: ' . $e->getMessage());
     }
     return $mountains;
 }
@@ -437,21 +440,61 @@ $stmt->execute([
 
                 $dbBookingId = $pdo->lastInsertId();
 
-                foreach ($bookingData['hikers'] as $hikerName) {
-                    if (!empty($hikerName)) {
-                        $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
-                        $stmt->execute([$dbBookingId, $hikerName]);
-                    }
-                }
+// Store mapping of booking_hiker IDs for payment tracking
+$bookingHikerIds = [];
 
-                if (ob_get_length()) ob_clean();
-                echo json_encode([
-                    'success' => true,
-                    'message' => 'Booking saved!',
-                    'booking_id' => $bookingNumber,
-                    'db_id' => $dbBookingId
-                ]);
-                exit;
+// Insert main booker as first hiker (always a registered user)
+$stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
+$stmt->execute([$dbBookingId, $bookingData['hikers'][0]]);
+$bookingHikerIds[0] = $pdo->lastInsertId();
+
+// Insert additional hikers
+for ($i = 1; $i < count($bookingData['hikers']); $i++) {
+    $hikerName = $bookingData['hikers'][$i];
+    if (!empty($hikerName)) {
+        $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
+        $stmt->execute([$dbBookingId, $hikerName]);
+        $bookingHikerIds[$i] = $pdo->lastInsertId();
+    }
+}
+
+// Get mountain fees
+$stmt = $pdo->prepare("SELECT registration_fee, environmental_fee FROM mountains WHERE id = ?");
+$stmt->execute([$bookingData['mountainId']]);
+$mountain = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$regFee = $mountain['registration_fee'] ?? 150;
+$envFee = $mountain['environmental_fee'] ?? 120;
+
+// Insert ONE payment record per hiker (both fees in one row)
+foreach ($bookingData['hikers'] as $index => $hikerName) {
+    $sourceType = ($index === 0) ? 'user' : 'booking_hiker';
+    $sourceId = ($index === 0) ? $currentUserId : $bookingHikerIds[$index];
+    
+    $stmt = $pdo->prepare("
+        INSERT INTO booking_payments (
+            booking_id, source_type, source_id, 
+            registration_amount, registration_paid,
+            environmental_amount, environmental_paid
+        ) VALUES (?, ?, ?, ?, 'unpaid', ?, 'unpaid')
+    ");
+    $stmt->execute([
+        $dbBookingId, 
+        $sourceType, 
+        $sourceId,
+        $regFee,
+        $envFee
+    ]);
+}
+
+if (ob_get_length()) ob_clean();
+echo json_encode([
+    'success' => true,
+    'message' => 'Booking saved!',
+    'booking_id' => $bookingNumber,
+    'db_id' => $dbBookingId
+]);
+exit;
             }
             throw new Exception('Invalid booking data or session');
         } catch (Exception $e) {
@@ -739,6 +782,38 @@ if ($action === 'approve_join_request') {
     // Add to booking_hikers
     $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
     $stmt->execute([$bookingId, $requesterName]);
+    $newHikerId = $pdo->lastInsertId();  // ← ADD THIS
+    
+    // Get mountain fees for this booking
+    $stmt = $pdo->prepare("
+        SELECT m.registration_fee, m.environmental_fee 
+        FROM mountains m
+        JOIN bookings b ON b.mountain_id = m.id
+        WHERE b.id = ?
+    ");
+    $stmt->execute([$bookingId]);
+    $mountain = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    $regFee = $mountain['registration_fee'] ?? 150;
+    $envFee = $mountain['environmental_fee'] ?? 120;
+    
+    // Insert payment record for the approved hiker (ONE row)
+$stmt = $pdo->prepare("
+    INSERT INTO booking_payments (
+        booking_id, source_type, source_id, 
+        registration_amount, registration_paid,
+        environmental_amount, environmental_paid
+    ) VALUES (?, 'booking_hiker', ?, ?, 'unpaid', ?, 'unpaid')
+");
+$stmt->execute([$bookingId, $newHikerId, $regFee, $envFee]);
+    
+    if ($envFee > 0) {
+        $stmt = $pdo->prepare("
+            INSERT INTO booking_payments (booking_id, source_type, source_id, fee_type, amount, status) 
+            VALUES (?, 'booking_hiker', ?, 'environmental', ?, 'unpaid')
+        ");
+        $stmt->execute([$bookingId, $newHikerId, $envFee]);
+    }
     
     // Update number of hikers
     $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers + 1 WHERE id = ?");
@@ -754,28 +829,6 @@ if ($action === 'approve_join_request') {
     $stmt->execute([$currentUserId, $requesterUserId, $approvalMessage, 'hiker', 'hiker']);
     
     echo json_encode(['success' => true, 'message' => 'Join request approved']);
-    exit;
-}
-
-if ($action === 'deny_join_request') {
-    $requestId = $_POST['request_id'] ?? 0;
-    $bookingId = $_POST['booking_id'] ?? 0;
-    $requesterName = $_POST['requester_name'] ?? '';
-    $requesterUserId = $_POST['requester_user_id'] ?? 0;
-    
-    // Update request status
-    $stmt = $pdo->prepare("UPDATE join_requests SET status = 'denied', updated_at = NOW() WHERE id = ?");
-    $stmt->execute([$requestId]);
-    
-    // Send denial message to requester
-    $denialMessage = "❌ **Join Request Denied**\n\n";
-    $denialMessage .= "Sorry, your request to join the hike has been denied by the organizer.\n\n";
-    $denialMessage .= "You can try joining other hikes instead. 🏔️";
-    
-    $stmt = $pdo->prepare("INSERT INTO messages (sender_id, receiver_id, body, is_read, created_at, sender_role, receiver_role, is_system_announcement) VALUES (?, ?, ?, 0, NOW(), ?, ?, 1)");
-    $stmt->execute([$currentUserId, $requesterUserId, $denialMessage, 'hiker', 'hiker']);
-    
-    echo json_encode(['success' => true, 'message' => 'Join request denied']);
     exit;
 }
 
@@ -3195,29 +3248,84 @@ function renderStep(n) {
 
 else if(n===3) {
     document.getElementById('flowTitle').textContent = 'Choose a Guide';
-    document.getElementById('flowSubtitle').textContent = 'A tour guide is required';
-    const avail = guides.filter(g=>g.mountains.includes(flowState.mtn.id));
+    document.getElementById('flowSubtitle').textContent = 'Select a guide for your hike';
+    
+    // Filter guides by mountain AND by max_pax capacity
+    const avail = guides.filter(g => {
+        // Check if guide can serve this mountain
+        if (!g.mountains.includes(flowState.mtn.id)) return false;
+        
+        // Check if guide has max_pax for this mountain and if it meets requirement
+        const maxPax = g.max_pax_per_mountain?.[flowState.mtn.id]?.max_pax;
+        if (maxPax && flowState.pax > maxPax) return false;
+        
+        return true;
+    });
+    
+    // Show warning if no guides available
+    let warningHtml = '';
+    if (avail.length === 0) {
+        warningHtml = `
+            <div class="warning-card" style="margin-bottom:14px; background:#fee2e2; border-color:#dc2626;">
+                <h4 style="color:#dc2626;">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    No guides available
+                </h4>
+                <p>No guides can accommodate ${flowState.pax} hikers for ${flowState.mtn.name}. Please go back and reduce the number of hikers.</p>
+            </div>
+        `;
+    }
+    
     body.innerHTML = `
       <div class="warning-card" style="margin-bottom:14px;">
         <h4><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Tour Guide Required</h4>
         <p>For safety, all hikes require a licensed local tour guide.</p>
       </div>
-      ${avail.map(g=>`
-        <div class="guide-select-card" id="gs${g.id}" onclick="selectGuide(${g.id})">
-          <div class="guide-av-sm">${g.initials}</div>
-          <div class="guide-select-info">
-            <div class="guide-select-name">${g.name}</div>
-            <div class="guide-select-meta">★ ${g.rating} · ${g.mountains.map(mid=>mountains.find(m=>m.id===mid)?.name).join(', ')}</div>
-            <div class="guide-avail"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Available ${g.available}</div>
-          </div>
-        </div>`).join('')}`;
+      ${warningHtml}
+      ${avail.map(g => {
+          const rates = g.max_pax_per_mountain?.[flowState.mtn.id];
+          const maxPax = rates?.max_pax || 'Unlimited';
+          const capacityText = maxPax !== 'Unlimited' ? `👥 Max ${maxPax} hikers` : '👥 No limit';
+          
+          // Get the guide fee based on hike type
+          let guideFee = 0;
+          if (rates) {
+              guideFee = flowState.type === 'overnight' ? rates.guide_fee_overnight : rates.guide_fee_day;
+          } else {
+              // Fallback to guideFeeMap if rates not available
+              const feeKey = `${g.id}_${flowState.mtn.id}`;
+              guideFee = guideFeeMap?.[feeKey] 
+                  ? (flowState.type === 'overnight' ? guideFeeMap[feeKey].overnight : guideFeeMap[feeKey].day)
+                  : (flowState.type === 'overnight' ? 1500 : 801);
+          }
+          
+          return `
+            <div class="guide-select-card" id="gs${g.id}" onclick="selectGuide(${g.id})">
+              <div class="guide-av-sm">${g.initials}</div>
+              <div class="guide-select-info">
+                <div class="guide-select-name">${g.name}</div>
+                <div class="guide-select-meta">⭐ ${g.rating} ★ · ${g.mountains.map(mid=>mountains.find(m=>m.id===mid)?.name).join(', ')}</div>
+                <div class="guide-details" style="display:flex; gap:12px; margin-top:6px;">
+                  <span class="guide-avail" style="color:#2e7d32;">
+                    <svg viewBox="0 0 24 24" style="width:10px;height:10px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> ${g.available}
+                  </span>
+                  <span class="guide-capacity" style="color:var(--stone);">
+                    <svg viewBox="0 0 24 24" style="width:10px;height:10px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> ${capacityText}
+                  </span>
+                  <span class="guide-fee" style="font-weight:700; color:var(--gold);">
+                    <svg viewBox="0 0 24 24" style="width:10px;height:10px;"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> ₱${guideFee.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>`;
+      }).join('')}`;
+      
     footer.innerHTML = `<button class="btn btn-outline" onclick="renderStep(2)">
       <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back
-    </button><button class="btn btn-primary btn-full" onclick="nextStep()" id="nextGuideBtn" disabled>Continue
+    </button><button class="btn btn-primary btn-full" onclick="nextStep()" id="nextGuideBtn" ${avail.length === 0 ? 'disabled' : ''}>Continue
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>`;
-
-  } else if(n===4) {
+} else if(n===4) {
     document.getElementById('flowTitle').textContent = 'Review & Confirm';
     document.getElementById('flowSubtitle').textContent = 'Booking summary';
     const m=flowState.mtn,f=m.fees,pax=flowState.hikers.length;
@@ -3511,10 +3619,26 @@ function saveHikerEdit(i) {
   updateHikersUI();
 }
 function selectGuide(id) {
-  flowState.guide = guides.find(g=>g.id===id);
-  document.querySelectorAll('.guide-select-card').forEach(c=>c.classList.remove('selected'));
-  document.getElementById('gs'+id)?.classList.add('selected');
-  document.getElementById('nextGuideBtn').disabled = false;
+    flowState.guide = guides.find(g => g.id === id);
+    const rates = flowState.guide.max_pax_per_mountain?.[flowState.mtn.id];
+    const maxPax = rates?.max_pax;
+    const guideFee = rates 
+        ? (flowState.type === 'overnight' ? rates.guide_fee_overnight : rates.guide_fee_day)
+        : (guideFeeMap?.[`${id}_${flowState.mtn.id}`] 
+            ? (flowState.type === 'overnight' ? guideFeeMap[`${id}_${flowState.mtn.id}`].overnight : guideFeeMap[`${id}_${flowState.mtn.id}`].day)
+            : (flowState.type === 'overnight' ? 1500 : 801));
+    
+    document.querySelectorAll('.guide-select-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('gs' + id)?.classList.add('selected');
+    document.getElementById('nextGuideBtn').disabled = false;
+    
+    // Show capacity warning if approaching limit
+    if (maxPax && flowState.pax > maxPax - 2) {
+        showToast(`⚠️ This guide can only handle ${maxPax} hikers maximum.`);
+    }
+    
+    // Show fee in console for debugging (optional)
+    console.log(`Selected guide: ${flowState.guide.name}, Fee: ₱${guideFee}`);
 }
 function nextStep() {
     if(currentStep===1 && !flowState.mtn) { 
