@@ -99,6 +99,8 @@ usort($historyItems, function($a, $b) {
     return strtotime($b['date']) - strtotime($a['date']);
 });
 
+// \$finishedHikes is now built directly from active_hike_sessions below (see stats block)
+
 // Fetch saved mountains
 $stmt = $pdo->prepare("
     SELECT s.*, m.name, m.location, m.elevation, m.duration, m.rating, m.image, m.difficulty
@@ -114,21 +116,34 @@ $savedMountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $stmtAllMountains = $pdo->query("SELECT * FROM mountains WHERE status = 'Open' ORDER BY name");
 $allMountains = $stmtAllMountains->fetchAll(PDO::FETCH_ASSOC);
 
-// Calculate total hikes count (completed + active + cancelled)
-$totalHikes = 0;
-foreach ($historyItems as $item) {
-    if ($item['status'] === 'completed' || $item['status'] === 'active') {
-        $totalHikes++;
-    }
-}
+// ── Finished hike count: read from active_hike_sessions (status='finished')
+// The bookings table status ('active','confirmed') does NOT reflect hike completion.
+// active_hike_sessions.status = 'finished' is the authoritative finished state.
+$stmt = $pdo->prepare("
+    SELECT COUNT(*) as cnt
+    FROM active_hike_sessions ahs
+    JOIN bookings b ON ahs.booking_id = b.id
+    WHERE ahs.user_id = ? AND ahs.status = 'finished'
+");
+$stmt->execute([$currentUserId]);
+$totalHikes    = (int)$stmt->fetchColumn();
+$completedHikes = $totalHikes;
 
-// Calculate completed hikes count
-$completedHikes = 0;
-foreach ($historyItems as $item) {
-    if ($item['status'] === 'completed' || $item['status'] === 'active') {
-        $completedHikes++;
-    }
-}
+// Also rebuild $finishedHikes from active_hike_sessions for the adventures list
+$stmt = $pdo->prepare("
+    SELECT ahs.id, ahs.booking_id, ahs.end_time as date,
+           m.name as mountain_name, m.location, m.image,
+           m.start_point_lat as lat, m.start_point_lng as lng,
+           b.booking_number, 'Day Hike' as type,
+           'finished' as status, 'day_hike' as booking_type
+    FROM active_hike_sessions ahs
+    JOIN bookings b ON ahs.booking_id = b.id
+    JOIN mountains m ON b.mountain_id = m.id
+    WHERE ahs.user_id = ? AND ahs.status = 'finished'
+    ORDER BY ahs.end_time DESC
+");
+$stmt->execute([$currentUserId]);
+$finishedHikes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->prepare("
     SELECT ub.times_earned, b.name 
@@ -1488,6 +1503,161 @@ if (empty($mostHikedMountainImage)) {
         margin-top: 1px;
     }
 
+
+    /* ── RECENT ADVENTURES: finished hikes only ── */
+    .adventures-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 4px;
+    }
+    .adventure-card {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background: var(--white);
+        border: 1px solid rgba(16,6,0,0.07);
+        border-radius: 18px;
+        padding: 18px 20px;
+        box-shadow: 0 2px 12px rgba(16,6,0,0.04);
+        transition: box-shadow 0.2s, transform 0.2s;
+        cursor: default;
+    }
+    .adventure-card:hover {
+        box-shadow: 0 6px 24px rgba(16,6,0,0.10);
+        transform: translateY(-2px);
+    }
+    .adventure-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        background: var(--forest);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 22px;
+    }
+    .adventure-body {
+        flex: 1;
+        min-width: 0;
+    }
+    .adventure-name {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--forest);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 3px;
+    }
+    .adventure-meta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .adventure-date {
+        font-size: 12px;
+        color: var(--stone);
+        font-weight: 500;
+    }
+    .adventure-sep {
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: var(--mist);
+        flex-shrink: 0;
+    }
+    .adventure-type {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--sage);
+        background: rgba(16,6,0,0.05);
+        border-radius: 100px;
+        padding: 2px 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .adventure-badge-count {
+        font-size: 11px;
+        color: var(--gold);
+        font-weight: 600;
+        background: rgba(201,168,76,0.1);
+        border: 1px solid rgba(201,168,76,0.2);
+        border-radius: 100px;
+        padding: 2px 9px;
+    }
+    .adventure-cta {
+        flex-shrink: 0;
+    }
+    .btn-view-summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--forest);
+        color: var(--white);
+        font-size: 12px;
+        font-weight: 600;
+        font-family: 'DM Sans', 'Segoe UI', sans-serif;
+        padding: 9px 16px;
+        border-radius: 100px;
+        border: none;
+        cursor: pointer;
+        white-space: nowrap;
+        box-shadow: 0 4px 14px rgba(16,6,0,0.18);
+        transition: opacity 0.15s, transform 0.15s;
+    }
+    .btn-view-summary:hover {
+        opacity: 0.85;
+        transform: translateY(-1px);
+    }
+    .btn-view-summary svg {
+        width: 13px;
+        height: 13px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2.2;
+    }
+    .adventures-empty {
+        text-align: center;
+        padding: 48px 24px;
+        color: var(--sage);
+    }
+    .adventures-empty-icon {
+        font-size: 44px;
+        margin-bottom: 12px;
+        opacity: 0.5;
+    }
+    .adventures-empty p {
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--stone);
+    }
+    .adventures-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+    .adventures-section-header h3 {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--forest);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .adventures-count-pill {
+        background: rgba(16,6,0,0.06);
+        color: var(--sage);
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 100px;
+    }
   </style>
 </head>
 <body>
@@ -1642,47 +1812,45 @@ $currentPage = 'hikerProfile'; // Change per page: 'explore', 'bookings', 'quiz'
         </div>
       </div>
 
-      <div style="margin-top: 24px;">
-        <div class="section-header" style="margin-bottom: 16px; padding-bottom: 0; border-bottom: none;">
-          <h3 style="font-size: 16px; font-weight: 600;">Recent Adventures</h3>
-          <button class="btn btn-primary" style="padding: 10px 20px; font-size: 12px;" onclick="exportHikingJourney()">✨ Share My Journey (JPG)</button>
+      <div style="margin-top: 28px;">
+        <div class="adventures-section-header">
+          <h3>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 3 3 20h18L14 8l-2 4z"/></svg>
+            Recent Adventures
+            <span class="adventures-count-pill"><?php echo count($finishedHikes); ?> completed</span>
+          </h3>
+          <button class="btn btn-primary" style="padding: 9px 18px; font-size: 12px;" onclick="exportHikingJourney()">Share Journey</button>
         </div>
-        
-        <div class="history-scroll-wrapper">
-          <div id="historyList" class="history-list">
-            <?php if (empty($historyItems)): ?>
-              <div class="empty-state">No hikes recorded yet. Make your first booking!</div>
-            <?php else: ?>
-              <?php foreach ($historyItems as $item): ?>
-                <div class="history-item" onclick="showHikeDetails(<?php echo htmlspecialchars(json_encode($item)); ?>)">
-    <div class="history-info">
-        <h4><?php echo htmlspecialchars($item['mountain_name']); ?></h4>
-        <p><?php echo date('F j, Y', strtotime($item['date'])); ?> · <?php echo htmlspecialchars($item['type']); ?></p>
-        <p><small><?php echo htmlspecialchars($item['location']); ?></small></p>
-    </div>
-    <div style="display: flex; gap: 8px; align-items: center;">
-        <span class="history-status status-<?php echo $item['status']; ?>"><?php echo ucfirst($item['status']); ?></span>
-        
-        <?php if ($item['status'] === 'finished'): ?>
-        <button class="btn-outline-small" style="padding: 4px 12px; font-size: 11px;" onclick="event.stopPropagation(); viewActivity(<?php echo $item['id']; ?>)">
-            📊 View Summary
-        </button>
-        <?php endif; ?>
-    </div>
-    <?php if ($item['status'] === 'active' || $item['status'] === 'pending'): ?>
-    <form id="cancelForm-<?php echo $item['id']; ?>" method="POST" style="margin:0;">
-        <input type="hidden" name="action" value="cancel_booking">
-        <input type="hidden" name="booking_id" value="<?php echo $item['id']; ?>">
-        <input type="hidden" name="booking_type" value="<?php echo $item['booking_type']; ?>">
-        <button type="button" class="btn-outline-danger" style="padding: 4px 12px; font-size: 11px;" onclick="event.stopPropagation(); confirmCancelHike('cancelForm-<?php echo $item['id']; ?>')">Cancel</button>
-    </form>
-    <?php endif; ?>
-</div>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </div>
+
+        <div class="adventures-list">
+          <?php if (empty($finishedHikes)): ?>
+            <div class="adventures-empty">
+              <div class="adventures-empty-icon">⛰</div>
+              <p>No completed hikes yet.<br>Finish your first adventure to see it here!</p>
+            </div>
+          <?php else: ?>
+            <?php foreach ($finishedHikes as $item): ?>
+              <div class="adventure-card">
+                <div class="adventure-icon">⛰</div>
+                <div class="adventure-body">
+                  <div class="adventure-name"><?php echo htmlspecialchars($item['mountain_name']); ?></div>
+                  <div class="adventure-meta">
+                    <span class="adventure-date"><?php echo date('M j, Y', strtotime($item['date'])); ?></span>
+                    <span class="adventure-sep"></span>
+                    <span class="adventure-type"><?php echo htmlspecialchars($item['type']); ?></span>
+                  </div>
+                </div>
+                <div class="adventure-cta">
+                  <button class="btn-view-summary" onclick="viewActivity(<?php echo $item['booking_id']; ?>)">
+                    <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    View Summary
+                  </button>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          <?php endif; ?>
         </div>
-      </div>
+      </div>      </div>
     </div>
 
     <div id="section-personal" class="profile-section">
@@ -2021,7 +2189,7 @@ $currentPage = 'hikerProfile'; // Change per page: 'explore', 'bookings', 'quiz'
   const historyData = <?php echo json_encode($historyItems); ?>;
   function initJourneyMap() {
     if (journeyMap) return;
-    const validHikes = historyData.filter(h => h.lat && h.lng && (h.status === 'completed' || h.status === 'active'));
+    const validHikes = historyData.filter(h => h.lat && h.lng && (h.status === 'finished' || h.status === 'completed' || h.status === 'active'));
     const center = validHikes.length > 0 ? [validHikes[0].lat, validHikes[0].lng] : [14.1333, 120.9167];
     journeyMap = L.map('journeyMap', { zoomControl: false, attributionControl: false }).setView(center, 10);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(journeyMap);

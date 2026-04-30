@@ -88,11 +88,10 @@ $manager_initials = implode('', array_map(function($word) {
 
 // Calculate stats
 $total_bookings = count($bookings);
-$pending_bookings = count(array_filter($bookings, fn($b) => $b['status'] === 'pending'));
-$active_bookings = count(array_filter($bookings, fn($b) => $b['status'] === 'active'));
-$finished_bookings = count(array_filter($bookings, fn($b) => $b['status'] === 'finished' || $b['status'] === 'completed'));
+$pending_bookings = count(array_filter($bookings, function($b) { return $b['status'] === 'pending'; }));
+$active_bookings = count(array_filter($bookings, function($b) { return $b['status'] === 'active'; }));
+$finished_bookings = count(array_filter($bookings, function($b) { return $b['status'] === 'finished' || $b['status'] === 'completed'; }));
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -100,6 +99,188 @@ $finished_bookings = count(array_filter($bookings, fn($b) => $b['status'] === 'f
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>LAKBAY Manager — Bookings</title>
 <link rel="stylesheet" href="manager.css">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
+
+<script>
+
+
+function updateClock() {
+  const d = new Date();
+  const dateEl = document.getElementById('topbarDate');
+  if (dateEl) {
+    dateEl.textContent = d.toLocaleDateString('en-PH', {weekday:'short', month:'short', day:'numeric'}).toUpperCase() + ' ' + d.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'});
+  }
+}
+
+function filterByStatus(status) {
+  const select = document.getElementById('filterStatus');
+  if (select) {
+    select.value = status;
+    applyFilters();
+  }
+}
+
+function applyFilters() {
+  const searchInp = document.getElementById('searchInp');
+  const filterStatus = document.getElementById('filterStatus');
+  if (!searchInp || !filterStatus) return;
+  
+  const searchTerm = searchInp.value.toLowerCase();
+  const statusFilter = filterStatus.value;
+  const rows = document.querySelectorAll('#bookingsTableBody tr');
+  let visibleCount = 0;
+  
+  rows.forEach(row => {
+    if (row.querySelector('td[colspan]')) return;
+    
+    const bookingNumber = row.querySelector('.booking-number')?.textContent.toLowerCase() || '';
+    const mountain = row.cells[2]?.textContent.toLowerCase() || '';
+    const statusSpan = row.querySelector('.status-badge');
+    const status = statusSpan ? statusSpan.textContent.toLowerCase().trim() : '';
+    const hikerName = row.cells[3]?.querySelector('div div:first-child')?.textContent.toLowerCase() || '';
+    
+    let matches = true;
+    if (searchTerm && !bookingNumber.includes(searchTerm) && !mountain.includes(searchTerm) && !hikerName.includes(searchTerm)) {
+      matches = false;
+    }
+    if (statusFilter && status !== statusFilter && status !== statusFilter.replace('_', ' ')) {
+      matches = false;
+    }
+    
+    row.style.display = matches ? '' : 'none';
+    if (matches) visibleCount++;
+  });
+  
+  const countEl = document.getElementById('bookingCount');
+  if (countEl) countEl.textContent = `${visibleCount} booking${visibleCount !== 1 ? 's' : ''}`;
+}
+
+function clearFilters() {
+  const searchInp = document.getElementById('searchInp');
+  const filterStatus = document.getElementById('filterStatus');
+  if (searchInp) searchInp.value = '';
+  if (filterStatus) filterStatus.value = '';
+  applyFilters();
+  showToast('Filters cleared!');
+}
+
+function updateGuide(select) {
+  const bookingId = select.dataset.bookingId;
+  const guideId = select.value;
+  
+  fetch('update_booking_guide.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ booking_id: bookingId, guide_id: guideId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      showToast('Guide assigned successfully!');
+      location.reload();
+    } else {
+      showToast(data.error || 'Update failed', 'error');
+    }
+  })
+  .catch(err => {
+    showToast('Error assigning guide', 'error');
+  });
+}
+
+function viewBooking(bookingId) {
+  fetch(`get_booking_details.php?id=${bookingId}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        const booking = data.booking;
+        const modalTitle = document.getElementById('modalTitle');
+        const modalSub = document.getElementById('modalSub');
+        const modalBody = document.getElementById('modalBody');
+        
+        if (modalTitle) modalTitle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20"><path d="M8 3l4 8 5-5 5 15H2L8 3z"/></svg> Booking ${booking.booking_number}`;
+        if (modalSub) modalSub.textContent = `${booking.mountain_name} · ${new Date(booking.hike_date).toLocaleDateString()}`;
+        
+        if (modalBody) modalBody.innerHTML = `
+          <div class="info-section">
+            <div class="info-row">
+              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 3l4 8 5-5 5 15H2L8 3z"/></svg></div>
+              <div><div class="info-label">Mountain</div><div class="info-value">${escapeHtml(booking.mountain_name)}</div></div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+              <div><div class="info-label">Hike Date & Time</div><div class="info-value">${new Date(booking.hike_date).toLocaleDateString()} at ${booking.start_time || 'Not set'}</div></div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+              <div><div class="info-label">Hiker</div><div class="info-value">${escapeHtml(booking.hiker_name)} (${booking.hiker_email})</div></div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+              <div><div class="info-label">Group Size</div><div class="info-value">${booking.number_of_hikers} hiker${booking.number_of_hikers > 1 ? 's' : ''}</div></div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+              <div><div class="info-label">Total Amount</div><div class="info-value">₱${parseFloat(booking.total_amount).toLocaleString()}</div></div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+              <div><div class="info-label">Downpayment</div><div class="info-value">₱${parseFloat(booking.downpayment_amount || 0).toLocaleString()} (${booking.downpayment_status})</div></div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+              <div><div class="info-label">Guide</div><div class="info-value">${escapeHtml(booking.guide_name || 'Not assigned')}</div></div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+              <div><div class="info-label">Status</div><div class="info-value"><span class="status-badge ${booking.status}">${booking.status === 'waiting_payment' ? 'Waiting Payment' : (booking.status === 'finished' ? 'Finished' : booking.status)}</span></div></div>
+            </div>
+            ${booking.special_requests ? `
+            <div class="info-row">
+              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
+              <div><div class="info-label">Special Requests</div><div class="info-value">${escapeHtml(booking.special_requests)}</div></div>
+            </div>` : ''}
+          </div>
+        `;
+        
+        const overlay = document.getElementById('modalOverlay');
+        if (overlay) overlay.classList.add('open');
+      }
+    })
+    .catch(err => console.error('Error:', err));
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>]/g, function(m) {
+    if (m === '&') return '&amp;';
+    if (m === '<') return '&lt;';
+    if (m === '>') return '&gt;';
+    return m;
+  });
+}
+
+function showToast(message, type = 'success') {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  toast.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg> ${message}`;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function closeModal(event) {
+  if (event && event.target !== event.currentTarget && event.target !== document.getElementById('modalOverlay')) return;
+  const overlay = document.getElementById('modalOverlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  setInterval(updateClock, 1000);
+  updateClock();
+  
+  // Sidebar links already handled via shared_sidebar.php
+});
+</script>
 <style>
 /* Base styles */
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
@@ -787,23 +968,23 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
     background: #e3f2fd;
     color: #1565c0;
 }
-.status-select {
+
+/* Status badge styling */
+.status-badge {
+    display: inline-block;
     padding: 6px 12px;
-    border-radius: 8px;
-    border: 1.5px solid var(--border2);
-    font-size: 12px;
+    border-radius: 20px;
+    font-size: 11px;
     font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
+    text-transform: capitalize;
 }
-.status-select:hover {
-    border-color: var(--gold);
-}
-.status-select:focus {
-    outline: none;
-    border-color: var(--gold);
-    box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
-}
+.status-badge.pending { background: var(--amber-bg); color: var(--amber); }
+.status-badge.waiting_payment { background: #fff3e0; color: #e65100; }
+.status-badge.active { background: #e8f5e9; color: #2e7d32; }
+.status-badge.finished { background: #e3f2fd; color: #1565c0; }
+.status-badge.completed { background: #e0f2fe; color: #0284c7; }
+.status-badge.cancelled { background: #fce4ec; color: #c62828; }
+
 .guide-select {
     padding: 6px 12px;
     border-radius: 8px;
@@ -833,40 +1014,38 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
     border-radius: 6px;
     display: inline-block;
 }
-/* Logout button style */
-.nav-item.logout {
-  margin-top: 12px;
-  border-radius: 0;
-  color: #b91c1c;
+.payment-status {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
 }
-.nav-item.logout:hover {
-  background: rgba(185, 28, 28, 0.08);
-  color: #b91c1c;
+.payment-paid {
+    background: #e8f5e9;
+    color: #2e7d32;
 }
-.nav-item.logout svg {
-  stroke: #b91c1c;
+.payment-partial {
+    background: #fff3e0;
+    color: #e65100;
 }
-.nav-item.logout:hover svg {
-  stroke: #b91c1c;
+.payment-unpaid {
+    background: #fce4ec;
+    color: #c62828;
 }
-/* Responsive */
-@media (max-width: 1024px) {
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 768px) {
-  .content { padding: 16px; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .fee-grid { grid-template-columns: 1fr; }
-  .data-table { font-size: 12px; }
-  .data-table th, .data-table td { padding: 10px 12px; }
-}
-@media (max-width: 640px) {
-  .stats-grid { grid-template-columns: 1fr; }
-  .filter-row { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 8px; }
-  .modal-container { max-width: 95%; }
-  .modal-body { padding: 16px; }
-  .toast { left: 20px; right: 20px; bottom: 20px; justify-content: center; }
-}
+
+
+/* ── TABS ── */
+.section-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:20px; }
+.section-tab { padding:10px 20px; font-size:13px; font-weight:600; cursor:pointer; color:var(--ink3); border-bottom:2px solid transparent; margin-bottom:-2px; transition:.15s; }
+.section-tab.active { color:var(--ink); border-color:var(--ink); }
+.section-tab:hover:not(.active) { color:var(--ink); }
+.tab-content { display:none; animation:fadeIn .25s ease; }
+.tab-content.active { display:block; }
+
+/* Layout helpers */
+.three-col { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin:20px 0; }
+@media (max-width: 900px) { .three-col { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -876,10 +1055,11 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
 <?php $activePage = 'bookings'; ?>
 <?php include 'shared_sidebar.php'; ?>
 <!-- MAIN -->
+<!-- Main Area -->
 <div class="main-area" id="mainArea">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="sidebar-toggle" onclick="toggleSidebar()">
+      <button class="sidebar-toggle">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>
@@ -970,17 +1150,17 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
                 <?= fmtDate($booking['hike_date']) ?><br>
                 <small><?= fmtTime($booking['start_time']) ?></small>
                </td>
-               <td><?= htmlspecialchars($booking['mountain_name']) ?></td>
-               <td>
+              <td><?= htmlspecialchars($booking['mountain_name']) ?></td>
+              <td>
                 <div style="display:flex;align-items:center;gap:8px;">
-                  <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg, var(--ink), var(--ink2));color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;"><?= substr($booking['hiker_name'] ?? '?', 0, 2) ?></div>
+                  <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg, var(--ink), var(--ink2));color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;"><?= substr(isset($booking['hiker_name']) ? $booking['hiker_name'] : '?', 0, 2) ?></div>
                   <div>
-                    <div style="font-weight:600;"><?= htmlspecialchars($booking['hiker_name'] ?? 'Unknown') ?></div>
+                    <div style="font-weight:600;"><?= htmlspecialchars(isset($booking['hiker_name']) ? $booking['hiker_name'] : 'Unknown') ?></div>
                     <div style="font-size:10px;color:var(--ink3);"><?= $booking['number_of_hikers'] ?> hiker(s)</div>
                   </div>
                 </div>
                </td>
-               <td>
+              <td>
                 <select class="guide-select" data-booking-id="<?= $booking['id'] ?>" onchange="updateGuide(this)">
                   <option value="">Assign Guide</option>
                   <?php foreach ($guides as $guide): ?>
@@ -990,23 +1170,18 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
                   <?php endforeach; ?>
                 </select>
                </td>
-               <td class="total-fee"><?= fmtMoney($booking['total_amount'] ?? 0) ?></td>
-               <td>
+               <td class="total-fee"><?= fmtMoney(isset($booking['total_amount']) ? $booking['total_amount'] : 0) ?></td>
+              <td>
                 <span class="payment-status <?= $booking['payment_status'] === 'paid' ? 'payment-paid' : ($booking['payment_status'] === 'partial' ? 'payment-partial' : 'payment-unpaid') ?>">
-                  <?= ucfirst($booking['payment_status'] ?? 'pending') ?>
+                  <?= ucfirst(isset($booking['payment_status']) ? $booking['payment_status'] : 'pending') ?>
                 </span>
                </td>
-               <td>
-                <select class="status-select" data-booking-id="<?= $booking['id'] ?>" onchange="updateStatus(this)">
-                  <option value="pending" <?php echo $booking['status'] === 'pending' ? 'selected' : ''; ?>>Pending</option>
-                  <option value="waiting_payment" <?php echo $booking['status'] === 'waiting_payment' ? 'selected' : ''; ?>>Waiting Payment</option>
-                  <option value="active" <?php echo $booking['status'] === 'active' ? 'selected' : ''; ?>>Active</option>
-                  <option value="finished" <?php echo $booking['status'] === 'finished' ? 'selected' : ''; ?>>Finished</option>
-                  <option value="completed" <?php echo $booking['status'] === 'completed' ? 'selected' : ''; ?>>Completed</option>
-                  <option value="cancelled" <?php echo $booking['status'] === 'cancelled' ? 'selected' : ''; ?>>Cancelled</option>
-                </select>
+              <td>
+                <span class="status-badge <?= $booking['status'] ?>">
+                  <?= ucfirst($booking['status'] === 'waiting_payment' ? 'Waiting Payment' : ($booking['status'] === 'finished' ? 'Finished' : $booking['status'])) ?>
+                </span>
                </td>
-               <td>
+              <td>
                 <button class="action-btn" onclick="viewBooking(<?= $booking['id'] ?>)" title="View Details">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M22 12c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2s10 4.48 10 10z"/></svg>
                 </button>
@@ -1052,198 +1227,7 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
 
 <div class="toast" id="toast"></div>
 
-<script>
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const mainArea = document.getElementById('mainArea');
-  sidebar.classList.toggle('collapsed');
-  mainArea.classList.toggle('expanded');
-}
+<!-- End of scripts -->
 
-function updateClock() {
-  const d = new Date();
-  const dateEl = document.getElementById('topbarDate');
-  if (dateEl) {
-    dateEl.textContent = d.toLocaleDateString('en-PH', {weekday:'short', month:'short', day:'numeric'}).toUpperCase() + ' ' + d.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'});
-  }
-}
-
-function filterByStatus(status) {
-  document.getElementById('filterStatus').value = status;
-  applyFilters();
-}
-
-function applyFilters() {
-  const searchTerm = document.getElementById('searchInp').value.toLowerCase();
-  const statusFilter = document.getElementById('filterStatus').value;
-  const rows = document.querySelectorAll('#bookingsTableBody tr');
-  let visibleCount = 0;
-  
-  rows.forEach(row => {
-    if (row.querySelector('td[colspan]')) return;
-    
-    const bookingNumber = row.querySelector('.booking-number')?.textContent.toLowerCase() || '';
-    const mountain = row.cells[2]?.textContent.toLowerCase() || '';
-    const statusSelect = row.querySelector('.status-select');
-    const status = statusSelect ? statusSelect.value : '';
-    const hikerName = row.cells[3]?.querySelector('div div:first-child')?.textContent.toLowerCase() || '';
-    
-    let matches = true;
-    if (searchTerm && !bookingNumber.includes(searchTerm) && !mountain.includes(searchTerm) && !hikerName.includes(searchTerm)) {
-      matches = false;
-    }
-    if (statusFilter && status !== statusFilter) {
-      matches = false;
-    }
-    
-    row.style.display = matches ? '' : 'none';
-    if (matches) visibleCount++;
-  });
-  
-  document.getElementById('bookingCount').textContent = `${visibleCount} booking${visibleCount !== 1 ? 's' : ''}`;
-}
-
-function clearFilters() {
-  document.getElementById('searchInp').value = '';
-  document.getElementById('filterStatus').value = '';
-  applyFilters();
-  showToast('Filters cleared!');
-}
-
-function updateStatus(select) {
-  const bookingId = select.dataset.bookingId;
-  const newStatus = select.value;
-  
-  if (!confirm(`Change booking status to ${newStatus.toUpperCase()}?`)) {
-    select.value = select.options[select.selectedIndex].getAttribute('data-original') || select.value;
-    return;
-  }
-  
-  fetch('update_booking_status.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ booking_id: bookingId, status: newStatus })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.success) {
-      showToast(`Booking status updated to ${newStatus}`);
-      location.reload();
-    } else {
-      showToast(data.error || 'Update failed', 'error');
-    }
-  })
-  .catch(err => {
-    showToast('Error updating status', 'error');
-  });
-}
-
-function updateGuide(select) {
-  const bookingId = select.dataset.bookingId;
-  const guideId = select.value;
-  
-  fetch('update_booking_guide.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ booking_id: bookingId, guide_id: guideId })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.success) {
-      showToast('Guide assigned successfully!');
-      location.reload();
-    } else {
-      showToast(data.error || 'Update failed', 'error');
-    }
-  })
-  .catch(err => {
-    showToast('Error assigning guide', 'error');
-  });
-}
-
-function viewBooking(bookingId) {
-  fetch(`get_booking_details.php?id=${bookingId}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) {
-        const booking = data.booking;
-        document.getElementById('modalTitle').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20"><path d="M8 3l4 8 5-5 5 15H2L8 3z"/></svg> Booking ${booking.booking_number}`;
-        document.getElementById('modalSub').textContent = `${booking.mountain_name} · ${new Date(booking.hike_date).toLocaleDateString()}`;
-        
-        document.getElementById('modalBody').innerHTML = `
-          <div class="info-section">
-            <div class="info-row">
-              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 3l4 8 5-5 5 15H2L8 3z"/></svg></div>
-              <div><div class="info-label">Mountain</div><div class="info-value">${escapeHtml(booking.mountain_name)}</div></div>
-            </div>
-            <div class="info-row">
-              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-              <div><div class="info-label">Hike Date & Time</div><div class="info-value">${new Date(booking.hike_date).toLocaleDateString()} at ${booking.start_time || 'Not set'}</div></div>
-            </div>
-            <div class="info-row">
-              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
-              <div><div class="info-label">Hiker</div><div class="info-value">${escapeHtml(booking.hiker_name)} (${booking.hiker_email})</div></div>
-            </div>
-            <div class="info-row">
-              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-              <div><div class="info-label">Group Size</div><div class="info-value">${booking.number_of_hikers} hiker${booking.number_of_hikers > 1 ? 's' : ''}</div></div>
-            </div>
-            <div class="info-row">
-              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-              <div><div class="info-label">Total Amount</div><div class="info-value">₱${parseFloat(booking.total_amount).toLocaleString()}</div></div>
-            </div>
-            <div class="info-row">
-              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
-              <div><div class="info-label">Downpayment</div><div class="info-value">₱${parseFloat(booking.downpayment_amount || 0).toLocaleString()} (${booking.downpayment_status})</div></div>
-            </div>
-            <div class="info-row">
-              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
-              <div><div class="info-label">Guide</div><div class="info-value">${escapeHtml(booking.guide_name || 'Not assigned')}</div></div>
-            </div>
-            ${booking.special_requests ? `
-            <div class="info-row">
-              <div class="info-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
-              <div><div class="info-label">Special Requests</div><div class="info-value">${escapeHtml(booking.special_requests)}</div></div>
-            </div>` : ''}
-          </div>
-        `;
-        
-        document.getElementById('modalOverlay').classList.add('open');
-      }
-    })
-    .catch(err => console.error('Error:', err));
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/[&<>]/g, function(m) {
-    if (m === '&') return '&amp;';
-    if (m === '<') return '&lt;';
-    if (m === '>') return '&gt;';
-    return m;
-  });
-}
-
-function showToast(message, type = 'success') {
-  const toast = document.getElementById('toast');
-  toast.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg> ${message}`;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 3000);
-}
-
-function closeModal(event) {
-  if (event && event.target !== event.currentTarget && event.target !== document.getElementById('modalOverlay')) return;
-  document.getElementById('modalOverlay').classList.remove('open');
-}
-
-// Save original values for status selects
-document.querySelectorAll('.status-select').forEach(select => {
-  select.setAttribute('data-original', select.value);
-});
-
-// Initialize
-setInterval(updateClock, 1000);
-updateClock();
-</script>
 </body>
 </html>

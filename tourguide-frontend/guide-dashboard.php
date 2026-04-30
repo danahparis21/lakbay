@@ -1937,19 +1937,27 @@ function filterByDate(iso) {
                 
                 // Show appropriate action buttons based on status
                 let actionButtons = '';
-                if (bk.status === 'active') {
-                    actionButtons = `
-                        <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
-                            <i class="fas fa-comment-dots"></i>
-                        </button>
-                    `;
-                } else if (bk.status === 'pending') {
-                    actionButtons = `
-                         <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
-                            <i class="fas fa-comment-dots"></i>
-                        </button>
-                    `;
-                }
+if (bk.status === 'active') {
+    actionButtons = `
+        <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
+            <i class="fas fa-comment-dots"></i>
+        </button>
+    `;
+} else if (bk.status === 'finished') {
+    // ADD THIS FOR FINISHED BOOKINGS
+    actionButtons = `
+        <button class="btn-icon-sm btn-view" title="View Hike Summary" onclick="viewGuideActivity(${bk.id})">
+            <i class="fas fa-chart-line"></i>
+        </button>
+       
+    `;
+} else if (bk.status === 'pending') {
+    actionButtons = `
+         <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
+            <i class="fas fa-comment-dots"></i>
+        </button>
+    `;
+}
                 
                 return `
                 <div class="booking-item" style="${bk.status === 'pending' && activeOnThisDate.length > 0 ? 'border-left: 3px solid #ffc107;' : ''}">
@@ -2399,6 +2407,9 @@ function escapeHtml(str) {
         if (m === '>') return '&gt;';
         return m;
     });
+}
+function viewGuideActivity(bookingId) {
+    window.location.href = `guide-view-activity.php?booking_id=${bookingId}`;
 }
 
 document.getElementById('viewAlertsBtn')?.addEventListener('click', () => openModal('alertsModal'));

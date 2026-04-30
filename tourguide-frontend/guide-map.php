@@ -1251,6 +1251,272 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
         max-height: 65vh;
       }
     }
+    /* Completion overlay styles - matching active-hike.php */
+.completion-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(16,6,0,0.55);
+    backdrop-filter: blur(18px);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0;
+}
+.completion-overlay.open { display: flex; }
+
+.completion-card {
+    background: #F8F7F5;
+    width: 100%;
+    max-width: 480px;
+    border-radius: 28px 28px 0 0;
+    overflow: hidden;
+    animation: sheetUp 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+    max-height: 92dvh;
+    overflow-y: auto;
+}
+
+.comp-hero {
+    background: #100600;
+    padding: 28px 24px 22px;
+    position: relative;
+    overflow: hidden;
+}
+.comp-hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 70% 70% at 85% 120%, rgba(201,123,26,0.22) 0%, transparent 65%);
+    pointer-events: none;
+}
+.comp-hero-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 14px;
+}
+.comp-hero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255,255,255,0.11);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 100px;
+    padding: 3px 11px;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.comp-hero-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: #C97B1A;
+    flex-shrink: 0;
+}
+.comp-hero-time {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    margin-left: auto;
+}
+.comp-hero-mountain {
+    font-size: 24px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: -0.3px;
+    line-height: 1.2;
+}
+.comp-hero-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.45);
+    margin-top: 5px;
+}
+
+.comp-map-wrap {
+    position: relative;
+    height: 180px;
+    background: #E8E5DF;
+    overflow: hidden;
+}
+#completionMap {
+    width: 100%; height: 100%;
+    display: block;
+}
+
+.comp-stats-row {
+    display: flex;
+    align-items: center;
+    padding: 20px 22px;
+    border-bottom: 1px solid #ECEAE6;
+    background: #FFFFFF;
+}
+.comp-stat-big {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.comp-stat-big-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 42px;
+    font-weight: 500;
+    color: #100600;
+    line-height: 1;
+    letter-spacing: -1.5px;
+}
+.comp-stat-big-unit {
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    color: #9A9A90;
+    font-weight: 500;
+    margin-left: 2px;
+}
+.comp-stat-big-lbl {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+    color: #9A9A90;
+    margin-top: 1px;
+}
+.comp-stat-divider {
+    width: 1px;
+    height: 52px;
+    background: #ECEAE6;
+    flex-shrink: 0;
+    margin: 0 20px;
+}
+.comp-stat-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+}
+.comp-stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.comp-stat-item-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    color: #100600;
+    line-height: 1.1;
+}
+.comp-stat-item-unit {
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    color: #9A9A90;
+    margin-left: 2px;
+}
+.comp-stat-item-lbl {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #9A9A90;
+}
+
+.comp-badge-row {
+    padding: 15px 22px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #ECEAE6;
+    background: #FFFFFF;
+}
+.comp-badge-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: #FDF3E0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+.comp-badge-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    font-weight: 500;
+    color: #C97B1A;
+}
+.comp-badge-lbl {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: rgba(201,123,26,0.6);
+}
+
+.comp-brand {
+    padding: 14px 22px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #F0EDE8;
+    border-bottom: 1px solid #ECEAE6;
+}
+.comp-brand-name {
+    font-size: 13px;
+    font-weight: 800;
+    color: #100600;
+    letter-spacing: -0.2px;
+}
+.comp-brand-sep {
+    width: 1px; height: 13px;
+    background: #D4CEC5;
+}
+.comp-brand-sub {
+    font-size: 10px;
+    color: #9A9A90;
+}
+
+.completion-actions {
+    display: flex;
+    gap: 10px;
+    padding: 16px 20px 20px;
+    background: #F8F7F5;
+}
+.completion-actions .btn-secondary {
+    flex: 0 0 auto;
+    padding: 12px 18px;
+    border-radius: 100px;
+    border: 1.5px solid #ECEAE6;
+    background: transparent;
+    color: #6B6B63;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+}
+.completion-actions .btn-primary {
+    flex: 1;
+    padding: 13px 20px;
+    border-radius: 100px;
+    border: none;
+    background: #100600;
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+}
+
+/* Start/Pause button styles */
+.fab-start-pause.active {
+    background: #F59E0B;
+    color: white;
+}
+.fab-start-pause.active svg {
+    stroke: white;
+}
+.fab-start-pause {
+    transition: all 0.2s ease;
+}
+
   </style>
 </head>
 <body>
@@ -1327,31 +1593,36 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
             </div>
             <?php endif; ?>
 
-            <!-- Status Bar -->
-            <?php if ($hike): ?>
-            <div class="map-status-bar">
-              <div class="live-dot"></div>
-              <div>
-                <div class="map-status-text">⛰ <?= htmlspecialchars($hike['mountain_name']) ?> — Active Trek</div>
-                <div class="map-status-sub" id="mapStatusSub"><?= count($bookingHikers) ?> hiker<?= count($bookingHikers) != 1 ? 's' : '' ?> · <span id="mapTimeSpan"></span></div>
-              </div>
-              <div class="crowd-indicator">
-                <i class="fas fa-users"></i>
-                <span id="crowdBadge" class="crowd-badge <?= htmlspecialchars($currentCrowdLevel ?? 'Low') ?>"><?= htmlspecialchars($currentCrowdLevel ?? 'Low') ?> Crowd</span>
-              </div>
-            </div>
-            <?php endif; ?>
+           <!-- Status Bar -->
+<?php if ($hike): ?>
+<div class="map-status-bar">
+    <div class="live-dot"></div>
+    <div>
+        <div class="map-status-text">⛰ <?= htmlspecialchars($hike['mountain_name']) ?> — Active Trek</div>
+        <div class="map-status-sub" id="mapStatusSub"><?= count($bookingHikers) ?> hiker<?= count($bookingHikers) != 1 ? 's' : '' ?> · <span id="mapTimeSpan"></span></div>
+    </div>
+    <div class="crowd-indicator">
+        <i class="fas fa-users"></i>
+        <span id="crowdBadge" class="crowd-badge <?= htmlspecialchars($currentCrowdLevel ?? 'Low') ?>"><?= htmlspecialchars($currentCrowdLevel ?? 'Low') ?> Crowd</span>
+    </div>
+    <!-- Add hidden status text for tracking state -->
+    <span id="statusText" style="display:none;">LIVE</span>
+</div>
+<?php endif; ?>
 
             <!-- FAB Controls -->
-            <div class="map-fabs">
-              <button class="map-fab" onclick="centerMap()" title="My Location"><i class="fas fa-location-crosshairs"></i></button>
-              <button class="map-fab" id="layerBtn" onclick="cycleLayer()" title="Map Style"><i class="fas fa-layer-group"></i></button>
-              <button class="map-fab" id="heatBtn" onclick="toggleHeatmap()" title="Heatmap"><i class="fas fa-fire"></i></button>
-              <button class="map-fab" id="trailBtn" onclick="toggleTrailMarkers()" title="Trail Markers"><i class="fas fa-signs-post"></i></button>
-              <button class="map-fab" id="waypointBtn" onclick="toggleWaypoints()" title="Toggle Waypoints">
-                <i class="fas fa-location-dot"></i>
-              </button>
-            </div>
+<div class="map-fabs">
+    <button class="map-fab" id="startPauseBtn" onclick="toggleTracking()" title="Start/Pause Tracking">
+        <i class="fas fa-play"></i>
+    </button>
+    <button class="map-fab" onclick="centerMap()" title="My Location"><i class="fas fa-location-crosshairs"></i></button>
+    <button class="map-fab" id="layerBtn" onclick="cycleLayer()" title="Map Style"><i class="fas fa-layer-group"></i></button>
+    <button class="map-fab" id="heatBtn" onclick="toggleHeatmap()" title="Heatmap"><i class="fas fa-fire"></i></button>
+    <button class="map-fab" id="trailBtn" onclick="toggleTrailMarkers()" title="Trail Markers"><i class="fas fa-signs-post"></i></button>
+    <button class="map-fab" id="waypointBtn" onclick="toggleWaypoints()" title="Toggle Waypoints">
+        <i class="fas fa-location-dot"></i>
+    </button>
+</div>
             
             <!-- Heatmap Legend -->
             <div class="heatmap-legend" id="heatmapLegend">
@@ -1527,33 +1798,73 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
   </div>
 </div>
 
-<!-- COMPLETION OVERLAY -->
+<!-- COMPLETION OVERLAY - Enhanced like active-hike.php -->
 <div class="completion-overlay" id="completionOverlay">
-  <div class="completion-card">
-    <div class="comp-emoji">🏔️</div>
-    <div class="comp-title">Hike Finished!</div>
-    <div class="comp-sub" id="compSub">Great work leading today's group</div>
-    <div class="comp-stats">
-      <div class="comp-stat">
-        <div class="comp-stat-val" id="compDist">—</div>
-        <div class="comp-stat-label">km covered</div>
-      </div>
-      <div class="comp-stat">
-        <div class="comp-stat-val" id="compTime">—</div>
-        <div class="comp-stat-label">duration</div>
-      </div>
-    </div>
-    <div class="comp-actions">
-      <button class="comp-btn-sec" onclick="document.getElementById('completionOverlay').classList.remove('open')">Close</button>
-      <a href="guide-dashboard.php" class="comp-btn-back">Back to Dashboard</a>
-    </div>
-  </div>
-</div>
+    <div class="completion-card">
+        <!-- Hero header -->
+        <div class="comp-hero">
+            <div class="comp-hero-eyebrow">
+                <span class="comp-hero-chip">
+                    <span class="comp-hero-dot"></span>Completed
+                </span>
+                <span class="comp-hero-time" id="compDate"></span>
+            </div>
+            <div class="comp-hero-mountain" id="compTitle">⛰ Mountain</div>
+            <div class="comp-hero-sub" id="compSub">Trail recorded with Lakbay</div>
+        </div>
 
+        <!-- Trail map -->
+        <div class="comp-map-wrap">
+            <canvas id="completionMap" style="width:100%; height:100%;"></canvas>
+        </div>
+
+        <!-- Stats row -->
+        <div class="comp-stats-row">
+            <div class="comp-stat-big">
+                <div><span class="comp-stat-big-val" id="compDist">0.0</span><span class="comp-stat-big-unit">km</span></div>
+                <div class="comp-stat-big-lbl">Distance</div>
+            </div>
+            <div class="comp-stat-divider"></div>
+            <div class="comp-stat-stack">
+                <div class="comp-stat-item">
+                    <span class="comp-stat-item-val" id="compTime">0:00</span>
+                    <span class="comp-stat-item-lbl">Duration</span>
+                </div>
+                <div class="comp-stat-item">
+                    <span class="comp-stat-item-val" id="compPace">0:00<span class="comp-stat-item-unit">/km</span></span>
+                    <span class="comp-stat-item-lbl">Avg Pace</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Badges earned -->
+        <div class="comp-badge-row">
+            <div class="comp-badge-icon">🏅</div>
+            <div>
+                <div class="comp-badge-val" id="compBadgesCount">0 badges</div>
+                <div class="comp-badge-lbl">Earned this hike</div>
+            </div>
+        </div>
+
+        <!-- LAKBAY brand -->
+        <div class="comp-brand">
+            <span class="comp-brand-name">LAKBAY</span>
+            <span class="comp-brand-sep"></span>
+            <span class="comp-brand-sub">Trail recorded with Lakbay</span>
+        </div>
+
+        <!-- Actions -->
+        <div class="completion-actions">
+            <button class="btn-secondary" onclick="shareCompletionCard()">📸 Save</button>
+            <a href="guide-dashboard.php" class="btn-primary" style="text-decoration:none;text-align:center;display:flex;align-items:center;justify-content:center;">Done</a>
+        </div>
+    </div>
+</div>
 
 <!-- ── SCRIPTS ── -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
 
 <script>
 // ── PHP DATA → JS ──────────────────────────────────────
@@ -1570,8 +1881,13 @@ const MOUNTAIN_ID = <?= json_encode($hike['mountain_id'] ?? null) ?>;
 const MOUNTAIN_NAME = <?= json_encode($hike['mountain_name'] ?? 'Unknown') ?>;
 const WAYPOINTS = <?= json_encode($waypoints) ?>;
 
+
 // ── STATE ───────────────────────────────────────────────
-let map, guideMarker, trailLayer, traveledLayer, heatmapLayer;
+let map, guideMarker, trailLayer, traveledLayer;
+let crowdMarkers = [];
+let currentHeatmapLayer = null;
+let heatmapAutoRefresh = null;
+let heatmapMode = 0; // 0 = off, 1 = blobs, 2 = heatmap
 let distMarkers = [], wpMarkers = [], hikerLeafletMarkers = {};
 let watchId = null, guideIntervalId = null, hikerPollId = null;
 let guidePosition = null;
@@ -1820,12 +2136,21 @@ function initMap() {
   drawTrail();
   placeWaypointMarkersFromDB();
   placeStartMarker();
-  buildHeatmap();
+  
+  // Start with subtle blobs by default
+  heatmapMode = 1;
+  buildBlobMarkers();
+  
+  // ⬇️⬇️⬇️ ADD THIS LINE TO ENABLE BOUNDARY MONITORING ⬇️⬇️⬇️
+  setTimeout(() => {
+      if (trailCoords && trailCoords.length) {
+          initBoundaryMonitoring();
+      }
+  }, 2000);
 
   if (trailCoords.length) {
     map.fitBounds(L.latLngBounds(trailCoords).pad(0.1));
   }
-  
   renderHikerListAndMarkers(BOOKING_HIKERS);
   startGuideGPS();
   hikerPollId = setInterval(fetchHikers, 15000);
@@ -1917,75 +2242,48 @@ function placeStartMarker() {
     .addTo(map);
 }
 
-// ── HEATMAP ──────────────────────────────────────────────
-let heatmapPoints = [];
-let heatmapAutoRefresh = null;
 
-async function buildHeatmap() {
-    if (!trailCoords.length || !MOUNTAIN_ID) return;
-    
-    const legend = document.getElementById('heatmapLegend');
-    if (legend) {
-        if (heatmapOn) legend.classList.add('visible');
-        else legend.classList.remove('visible');
-    }
-    
-    try {
-        const res = await fetch(`../api/detect_crowd_hotspots.php?mountain_id=${MOUNTAIN_ID}`);
-        const data = await res.json();
-        
-        if (data.success && data.points && data.points.length) {
-            heatmapPoints = data.points.map(p => [p.latitude, p.longitude, p.intensity]);
-            
-            if (heatmapLayer) {
-                map.removeLayer(heatmapLayer);
-            }
-            
-            heatmapLayer = L.heatLayer(heatmapPoints, { 
-                radius: 45, 
-                blur: 20, 
-                maxZoom: 18,
-                minOpacity: 0.4,
-                gradient: { 
-                    0.2: '#10B981',
-                    0.4: '#84CC16',
-                    0.6: '#F59E0B',
-                    0.8: '#EF4444',
-                    1.0: '#7F1D1D'
-                }
-            });
-            
-            if (heatmapOn) {
-                heatmapLayer.addTo(map);
-                showToast(`🔥 Heatmap showing ${data.points.length} crowded area(s)`);
-            }
-            
-            const highPoints = data.points.filter(p => p.intensity >= 0.7);
-            const medPoints = data.points.filter(p => p.intensity >= 0.4 && p.intensity < 0.7);
-            
-            let overallLevel = 'Low';
-            
-            if (highPoints.length > 0) {
-                overallLevel = 'High';
-            } else if (medPoints.length > 0) {
-                overallLevel = 'Medium';
-            }
-            
-            const badge = document.getElementById('crowdBadge');
-            if (badge) {
-                badge.className = `crowd-badge ${overallLevel}`;
-                badge.textContent = `${overallLevel} Crowd`;
-            }
-        } else {
-            if (heatmapLayer && heatmapOn) {
-                map.removeLayer(heatmapLayer);
-            }
-            heatmapPoints = [];
+
+// Returns CSS radial-gradient config per crowd level
+function getHeatBlobStyle(crowdLevel, reportCount) {
+    // Scale blob size slightly by report density (capped), but color is always level-driven
+    const scale = Math.min(1 + (reportCount - 1) * 0.18, 2.2);
+    const baseSize = Math.round(80 * scale); // px — fixed screen size, never changes with zoom
+
+    const configs = {
+        'High': {
+            core:   'rgba(239,68,68,0.92)',
+            mid:    'rgba(239,68,68,0.55)',
+            outer:  'rgba(239,68,68,0.20)',
+            edge:   'rgba(239,68,68,0)',
+            glow:   '0 0 18px 6px rgba(239,68,68,0.45)'
+        },
+        'Medium': {
+            core:   'rgba(245,158,11,0.90)',
+            mid:    'rgba(245,158,11,0.52)',
+            outer:  'rgba(245,158,11,0.18)',
+            edge:   'rgba(245,158,11,0)',
+            glow:   '0 0 16px 5px rgba(245,158,11,0.38)'
+        },
+        'Low': {
+            core:   'rgba(16,185,129,0.88)',
+            mid:    'rgba(16,185,129,0.50)',
+            outer:  'rgba(16,185,129,0.16)',
+            edge:   'rgba(16,185,129,0)',
+            glow:   '0 0 14px 4px rgba(16,185,129,0.34)'
         }
-    } catch (e) {
-        console.error('Heatmap fetch error:', e);
-    }
+    };
+
+    const c = configs[crowdLevel] || configs['Low'];
+
+    return {
+        size: baseSize,
+        gradient: `radial-gradient(circle, ${c.core} 0%, ${c.mid} 30%, ${c.outer} 60%, ${c.edge} 100%)`,
+        boxShadow: c.glow
+    };
 }
+
+
 
 async function submitCrowdLevel() {
     if (!selectedCrowdLevel) {
@@ -2022,7 +2320,7 @@ async function submitCrowdLevel() {
         const data = await res.json();
         if (data.success) {
             showToast(`✅ ${selectedCrowdLevel} crowd reported`);
-            setTimeout(() => buildHeatmap(), 500);
+            setTimeout(() => refreshCurrentMode(), 500);
             closeCrowdModal();
         } else {
             showToast('Error: ' + (data.message || 'Could not update crowd level'));
@@ -2032,43 +2330,244 @@ async function submitCrowdLevel() {
     }
 }
 
-function startHeatmapAutoRefresh() {
-    if (heatmapAutoRefresh) clearInterval(heatmapAutoRefresh);
-    heatmapAutoRefresh = setInterval(() => {
-        if (heatmapOn) {
-            buildHeatmap();
-        }
-    }, 120000);
-}
 
-function toggleHeatmap() {
-    heatmapOn = !heatmapOn;
-    const btn = document.getElementById('heatBtn');
-    const legend = document.getElementById('heatmapLegend');
-    
-    if (heatmapOn) {
-        if (heatmapPoints.length) {
-            if (heatmapLayer) heatmapLayer.addTo(map);
-        } else {
-            buildHeatmap().then(() => {
-                if (heatmapLayer) heatmapLayer.addTo(map);
-            });
+
+// Subtle blob markers (soft radial gradients, less intrusive) - INCREASED OPACITY
+function getSubtleBlobStyle(crowdLevel, reportCount) {
+    const scale = Math.min(1 + (reportCount - 1) * 0.1, 1.5);
+    const baseSize = Math.round(55 * scale); // Slightly larger
+
+    const configs = {
+        'High': {
+            core:   'rgba(239,68,68,0.65)',   // Increased from 0.35
+            mid:    'rgba(239,68,68,0.40)',
+            outer:  'rgba(239,68,68,0.15)',
+            edge:   'rgba(239,68,68,0)'
+        },
+        'Medium': {
+            core:   'rgba(245,158,11,0.60)',  // Increased from 0.30
+            mid:    'rgba(245,158,11,0.35)',
+            outer:  'rgba(245,158,11,0.12)',
+            edge:   'rgba(245,158,11,0)'
+        },
+        'Low': {
+            core:   'rgba(16,185,129,0.55)',  // Increased from 0.28
+            mid:    'rgba(16,185,129,0.30)',
+            outer:  'rgba(16,185,129,0.10)',
+            edge:   'rgba(16,185,129,0)'
         }
-        btn.classList.add('active');
-        startHeatmapAutoRefresh();
-        if (legend) legend.classList.add('visible');
-        showToast('🔥 Heatmap enabled - Click on trail to report crowd levels');
-        map.getContainer().style.cursor = 'crosshair';
-    } else {
-        if (heatmapLayer) map.removeLayer(heatmapLayer);
-        btn.classList.remove('active');
-        if (heatmapAutoRefresh) clearInterval(heatmapAutoRefresh);
-        showToast('Heatmap off');
-        if (legend) legend.classList.remove('visible');
-        map.getContainer().style.cursor = '';
+    };
+
+    const c = configs[crowdLevel] || configs['Low'];
+
+    return {
+        size: baseSize,
+        gradient: `radial-gradient(circle, ${c.core} 0%, ${c.mid} 40%, ${c.outer} 70%, ${c.edge} 100%)`
+    };
+}
+async function buildBlobMarkers() {
+    if (!trailCoords.length || !MOUNTAIN_ID) return;
+
+    try {
+        const res = await fetch(`../api/detect_crowd_hotspots.php?mountain_id=${MOUNTAIN_ID}`);
+        const data = await res.json();
+
+        // Clear old blob markers
+        crowdMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+        crowdMarkers = [];
+
+        if (data.success && data.points && data.points.length) {
+            data.points.forEach(point => {
+                const count = point.report_count || 1;
+                const style = getSubtleBlobStyle(point.crowd_level, count);
+                const half = Math.round(style.size / 2);
+
+                const html = `
+                  <div style="
+                    width:${style.size}px;
+                    height:${style.size}px;
+                    border-radius:50%;
+                    background:${style.gradient};
+                    cursor:pointer;
+                    transition:transform 0.1s ease;
+                    border:1px solid rgba(255,255,255,0.2);
+                  " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                    ${count > 1 ? `<div style="
+                      position:absolute;
+                      top:50%;left:50%;
+                      transform:translate(-50%,-50%);
+                      font-size:${Math.max(8, Math.round(style.size * 0.16))}px;
+                      font-weight:700;
+                      color:white;
+                      text-shadow:0 1px 2px rgba(0,0,0,0.3);
+                      pointer-events:none;
+                      line-height:1;
+                      font-family:'DM Sans',sans-serif;
+                    ">${count}</div>` : ''}
+                  </div>`;
+
+                const icon = L.divIcon({
+                    html,
+                    className: 'heat-blob-marker',
+                    iconSize: [style.size, style.size],
+                    iconAnchor: [half, half],
+                    popupAnchor: [0, -half]
+                });
+
+                const marker = L.marker([point.latitude, point.longitude], {
+                    icon,
+                    interactive: true,
+                    zIndexOffset: 100
+                });
+
+                marker.bindTooltip(`
+                  <div style="font-family:'DM Sans',sans-serif;padding:4px 2px;">
+                    <strong style="color:#100600;">${point.crowd_level} Crowd</strong><br>
+                    <span style="color:#555;">${count} report${count !== 1 ? 's' : ''}</span>
+                  </div>`, { sticky: true, offset: [0, -half - 4] });
+
+                marker.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    window._clickedLocation = { lat: point.latitude, lng: point.longitude };
+                    openCrowdModal();
+                });
+
+                marker.addTo(map);
+                crowdMarkers.push(marker);
+            });
+
+            // Update crowd badge
+            const highPoints = data.points.filter(p => p.crowd_level === 'High');
+            const medPoints = data.points.filter(p => p.crowd_level === 'Medium');
+            let overallLevel = 'Low';
+            if (highPoints.length > 0) overallLevel = 'High';
+            else if (medPoints.length > 0) overallLevel = 'Medium';
+
+            const badge = document.getElementById('crowdBadge');
+            if (badge) {
+                badge.className = `crowd-badge ${overallLevel}`;
+                badge.textContent = `${overallLevel} Crowd`;
+            }
+        }
+    } catch (e) {
+        console.error('Blob markers error:', e);
     }
 }
 
+async function buildHeatmapOverlay() {
+    if (!trailCoords.length || !MOUNTAIN_ID) return;
+
+    try {
+        const res = await fetch(`../api/detect_crowd_hotspots.php?mountain_id=${MOUNTAIN_ID}`);
+        const data = await res.json();
+
+        if (currentHeatmapLayer) {
+            map.removeLayer(currentHeatmapLayer);
+        }
+
+        if (data.success && data.points && data.points.length) {
+            // Use the original heatmap logic - use the intensity from the API directly
+            const heatPoints = data.points.map(p => [p.latitude, p.longitude, p.intensity]);
+            
+            currentHeatmapLayer = L.heatLayer(heatPoints, {
+                radius: 45,
+                blur: 20,
+                maxZoom: 18,
+                minOpacity: 0.4,
+                gradient: {
+                    0.2: '#10B981',   // Low - Green
+                    0.4: '#84CC16',   // Low-Medium - Light Green
+                    0.6: '#F59E0B',   // Medium - Orange
+                    0.8: '#EF4444',   // High - Red
+                    1.0: '#7F1D1D'    // Very High - Dark Red
+                }
+            });
+            currentHeatmapLayer.addTo(map);
+
+            // Update crowd badge
+            const highPoints = data.points.filter(p => p.intensity >= 0.7);
+            const medPoints = data.points.filter(p => p.intensity >= 0.4 && p.intensity < 0.7);
+            let overallLevel = 'Low';
+            if (highPoints.length > 0) overallLevel = 'High';
+            else if (medPoints.length > 0) overallLevel = 'Medium';
+
+            const badge = document.getElementById('crowdBadge');
+            if (badge) {
+                badge.className = `crowd-badge ${overallLevel}`;
+                badge.textContent = `${overallLevel} Crowd`;
+            }
+            
+            console.log(`🔥 Heatmap overlay: ${data.points.length} points`);
+
+        } else {
+            if (currentHeatmapLayer) {
+                map.removeLayer(currentHeatmapLayer);
+            }
+        }
+    } catch (e) {
+        console.error('Heatmap overlay error:', e);
+    }
+}
+function clearAllCrowdVisuals() {
+    // Clear blobs
+    crowdMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+    crowdMarkers = [];
+    // Clear heatmap
+    if (currentHeatmapLayer) {
+        map.removeLayer(currentHeatmapLayer);
+        currentHeatmapLayer = null;
+    }
+}
+
+async function refreshCurrentMode() {
+    if (heatmapMode === 1) {
+        await buildBlobMarkers();
+    } else if (heatmapMode === 2) {
+        await buildHeatmapOverlay();
+    }
+}
+
+function toggleHeatmap() {
+    // Cycle modes: 0 -> 1 -> 2 -> 0
+    heatmapMode = (heatmapMode + 1) % 3;
+    
+    const btn = document.getElementById('heatBtn');
+    const legend = document.getElementById('heatmapLegend');
+    
+    // Clear all existing visuals
+    clearAllCrowdVisuals();
+    
+    if (heatmapMode === 0) {
+        // Off
+        btn.classList.remove('active');
+        if (legend) legend.classList.remove('visible');
+        showToast('Crowd visualization off');
+        if (heatmapAutoRefresh) clearInterval(heatmapAutoRefresh);
+    } else if (heatmapMode === 1) {
+        // Subtle blobs
+        btn.classList.add('active');
+        if (legend) legend.classList.add('visible');
+        showToast('📍 Subtle crowd blobs enabled');
+        buildBlobMarkers();
+        startHeatmapAutoRefresh();
+    } else if (heatmapMode === 2) {
+        // Heatmap overlay
+        btn.classList.add('active');
+        if (legend) legend.classList.add('visible');
+        showToast('🔥 Heatmap overlay enabled');
+        buildHeatmapOverlay();
+        startHeatmapAutoRefresh();
+    }
+}
+
+function startHeatmapAutoRefresh() {
+    if (heatmapAutoRefresh) clearInterval(heatmapAutoRefresh);
+    heatmapAutoRefresh = setInterval(() => {
+        if (heatmapMode !== 0) {
+            refreshCurrentMode();
+        }
+    }, 120000);
+}
 function toggleTrailMarkers() {
   trailMarkersVisible = !trailMarkersVisible;
   distMarkers.forEach(m => trailMarkersVisible ? m.addTo(map) : map.removeLayer(m));
@@ -2519,68 +3018,283 @@ function showToast(msg, type = 'info') {
   }, 3500);
   _toastTimers.set(id, timer);
 }
-async function finishHike() {
-  if (hikeFinished) return;
-  
-  // Debug: Log what we're sending
-  console.log('=== FINISH HIKE DEBUG ===');
-  console.log('BOOKING_ID:', BOOKING_ID);
-  console.log('SESSION_TOKEN:', SESSION_TOKEN);
-  console.log('totalDistGuide:', totalDistGuide);
-  console.log('durationSec:', Math.floor((Date.now() - startTime) / 1000));
-  console.log('========================');
-  
-  const confirmed = await showConfirm(
-    'Complete Hike Session?', 
-    'Are you sure you want to end this hike? All hikers will be notified and tracking will stop.'
-  );
-  if (!confirmed) return;
+// ── TRACKING CONTROL (START/PAUSE) ──────────────────────
+let trackingActive = true;
+let pausedStartTime = null;
+let pausedDuration = 0;
 
-  const btn = document.getElementById('finishBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finishing...';
-
-  if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  if (guideIntervalId) { clearInterval(guideIntervalId); guideIntervalId = null; }
-  if (hikerPollId) { clearInterval(hikerPollId); hikerPollId = null; }
-
-  const durationSec = Math.floor((Date.now() - startTime) / 1000);
-
-  try {
-    const res = await fetch('../api/finish_hike.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        booking_id: BOOKING_ID,
-        session_token: SESSION_TOKEN,
-        distance: totalDistGuide,
-        duration: durationSec,
-        badges: []
-      })
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      hikeFinished = true;
-      const s = data.summary;
-      document.getElementById('compSub').textContent = `${s.mountain} — ${s.hike_date}`;
-      document.getElementById('compDist').textContent = s.distance_km.toFixed(1);
-      document.getElementById('compTime').textContent = s.duration;
-      document.getElementById('completionOverlay').classList.add('open');
-      showToast('🎉 Hike completed successfully!', 'success');
+function toggleTracking() {
+    const btn = document.getElementById('startPauseBtn');
+    
+    if (trackingActive) {
+        // Pause tracking
+        trackingActive = false;
+        if (watchId) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+        if (guideIntervalId) {
+            clearInterval(guideIntervalId);
+            guideIntervalId = null;
+        }
+        // Calculate paused duration
+        pausedStartTime = Date.now();
+        btn.innerHTML = '<i class="fas fa-pause"></i>';
+        btn.classList.add('active');
+        showToast('⏸️ GPS tracking paused');
+        
+        // Update status display if it exists
+        const statusText = document.getElementById('statusText');
+        if (statusText) statusText.textContent = 'PAUSED';
+        const mapStatusSub = document.getElementById('mapStatusSub');
+        if (mapStatusSub) {
+            const currentText = mapStatusSub.innerHTML;
+            if (!currentText.includes('(PAUSED)')) {
+                mapStatusSub.innerHTML = currentText + ' <span style="color:#F59E0B;">(PAUSED)</span>';
+            }
+        }
     } else {
-      showToast('❌ ' + (data.message || 'Could not finish hike'), 'error');
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finish Hike';
+        // Resume tracking
+        trackingActive = true;
+        if (pausedStartTime) {
+            pausedDuration += Date.now() - pausedStartTime;
+            pausedStartTime = null;
+        }
+        startGuideGPS();
+        btn.innerHTML = '<i class="fas fa-play"></i>';
+        btn.classList.remove('active');
+        showToast('▶️ GPS tracking resumed');
+        
+        // Update status display if it exists
+        const statusText = document.getElementById('statusText');
+        if (statusText) statusText.textContent = 'LIVE';
+        const mapStatusSub = document.getElementById('mapStatusSub');
+        if (mapStatusSub) {
+            mapStatusSub.innerHTML = mapStatusSub.innerHTML.replace(' <span style="color:#F59E0B;">(PAUSED)</span>', '');
+        }
     }
-  } catch (e) {
-    console.error('Finish hike error:', e);
-    showToast('❌ Network error — please try again', 'error');
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finish Hike';
-  }
 }
 
+// Modified finishHike - removed reachedCheckpoints reference
+async function finishHike() {
+    if (hikeFinished) return;
+    
+    const confirmed = await showConfirm(
+        'Complete Hike Session?', 
+        'Are you sure you want to end this hike? All hikers will be notified and tracking will stop.'
+    );
+    if (!confirmed) return;
+
+    const btn = document.getElementById('finishBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finishing...';
+
+    if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    if (guideIntervalId) { clearInterval(guideIntervalId); guideIntervalId = null; }
+    if (hikerPollId) { clearInterval(hikerPollId); hikerPollId = null; }
+
+    // Calculate actual duration minus paused time
+    let actualDurationSec = Math.floor((Date.now() - startTime - pausedDuration) / 1000);
+    if (actualDurationSec < 1) actualDurationSec = 1;
+
+    // For demo/testing - if no distance was tracked, use trail length
+    let finalDistance = totalDistGuide;
+    if (finalDistance === 0 && trailCoords.length > 0) {
+        // Calculate trail length from coordinates for demo
+        let trailLength = 0;
+        for (let i = 0; i < trailCoords.length - 1; i++) {
+            trailLength += calcDist(trailCoords[i][0], trailCoords[i][1], trailCoords[i+1][0], trailCoords[i+1][1]);
+        }
+        finalDistance = trailLength;
+        console.log('Demo mode: Using trail length:', finalDistance, 'km');
+    }
+
+    try {
+        const res = await fetch('../api/finish_hike.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                booking_id: BOOKING_ID,
+                session_token: SESSION_TOKEN,
+                distance: finalDistance,
+                duration: actualDurationSec,
+                badges: []  // Guide doesn't track badges, send empty array
+            })
+        });
+        
+        const responseText = await res.text();
+        console.log('Raw response:', responseText);
+        
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (e) {
+            console.error('Failed to parse JSON. Response was:', responseText);
+            showToast('Server error: ' + responseText.substring(0, 100));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finish Hike';
+            return;
+        }
+
+        if (data.success) {
+            hikeFinished = true;
+            const s = data.summary;
+            
+            // Populate the enhanced completion overlay
+            document.getElementById('compTitle').textContent = `⛰ ${s.mountain}`;
+            document.getElementById('compSub').textContent = `Finished at ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+            document.getElementById('compDate').textContent = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            document.getElementById('compDist').textContent = s.distance_km;
+            document.getElementById('compTime').textContent = s.duration;
+            document.getElementById('compPace').innerHTML = s.pace + '<span class="comp-stat-item-unit">/km</span>';
+            const badgeCount = s.badges_count || 0;
+            document.getElementById('compBadgesCount').textContent = badgeCount + ' badge' + (badgeCount !== 1 ? 's' : '');
+            
+            document.getElementById('completionOverlay').classList.add('open');
+            showToast('🎉 Hike completed successfully!', 'success');
+            
+            // Draw the trail map in the completion overlay using trailCoords
+            setTimeout(() => drawCompletionMap(), 200);
+        } else {
+            showToast('❌ ' + (data.message || 'Could not finish hike'), 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finish Hike';
+        }
+    } catch (e) {
+        console.error('Finish hike error:', e);
+        showToast('❌ Network error — please try again', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finish Hike';
+    }
+}
+// Draw trail map in completion overlay
+function drawCompletionMap() {
+    const canvas = document.getElementById('completionMap');
+    if (!canvas) return;
+    
+    const coords = trailCoords;
+    const wrap = canvas.parentElement;
+    const W = wrap.clientWidth || 420;
+    const H = wrap.clientHeight || 180;
+    canvas.width = W;
+    canvas.height = H;
+    
+    const ctx = canvas.getContext('2d');
+    
+    if (!coords || coords.length < 2) {
+        ctx.fillStyle = '#E8E5DF';
+        ctx.fillRect(0, 0, W, H);
+        ctx.font = '13px "DM Sans", sans-serif';
+        ctx.fillStyle = '#9A9A90';
+        ctx.textAlign = 'center';
+        ctx.fillText('No trail data available', W / 2, H / 2);
+        return;
+    }
+    
+    // Get bounds
+    let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+    coords.forEach(c => {
+        minLat = Math.min(minLat, c[0]); maxLat = Math.max(maxLat, c[0]);
+        minLng = Math.min(minLng, c[1]); maxLng = Math.max(maxLng, c[1]);
+    });
+    
+    const pad = 28;
+    const latR = maxLat - minLat || 0.001;
+    const lngR = maxLng - minLng || 0.001;
+    const scale = Math.min((W - pad * 2) / lngR, (H - pad * 2) / latR);
+    const offX = pad + ((W - pad * 2) - lngR * scale) / 2;
+    const offY = pad + ((H - pad * 2) - latR * scale) / 2;
+    const tx = lng => offX + (lng - minLng) * scale;
+    const ty = lat => offY + (H - pad * 2) - (lat - minLat) * scale;
+    
+    // Background
+    ctx.fillStyle = '#E8E5DF';
+    ctx.fillRect(0, 0, W, H);
+    
+    // Trail shadow
+    ctx.beginPath();
+    coords.forEach((c, i) => {
+        i === 0 ? ctx.moveTo(tx(c[1]), ty(c[0]) + 2) : ctx.lineTo(tx(c[1]), ty(c[0]) + 2);
+    });
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    
+    // Main trail
+    ctx.beginPath();
+    coords.forEach((c, i) => {
+        i === 0 ? ctx.moveTo(tx(c[1]), ty(c[0])) : ctx.lineTo(tx(c[1]), ty(c[0]));
+    });
+    ctx.strokeStyle = '#100600';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    // Start dot
+    const sx = tx(coords[0][1]), sy = ty(coords[0][0]);
+    ctx.beginPath();
+    ctx.arc(sx, sy, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#1B7045';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx, sy, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+    
+    // End dot
+    const ex = tx(coords[coords.length-1][1]), ey = ty(coords[coords.length-1][0]);
+    ctx.beginPath();
+    ctx.arc(ex, ey, 8, 0, Math.PI * 2);
+    ctx.fillStyle = '#B8312A';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(ex, ey, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+}
+
+// Share function for the completion card
+async function shareCompletionCard() {
+    // Create canvas with the completion card design
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 700;
+    const ctx = canvas.getContext('2d');
+    
+    // Draw the card (simplified version of the completion overlay)
+    ctx.fillStyle = '#F8F7F5';
+    ctx.fillRect(0, 0, 400, 700);
+    
+    // Add a simple text version for now
+    ctx.fillStyle = '#100600';
+    ctx.font = 'bold 20px "DM Sans", sans-serif';
+    ctx.fillText(`⛰ ${MOUNTAIN_NAME}`, 20, 50);
+    ctx.font = '14px "DM Sans", sans-serif';
+    ctx.fillStyle = '#666';
+    ctx.fillText(`${document.getElementById('compDist').textContent} km · ${document.getElementById('compTime').textContent}`, 20, 90);
+    
+    canvas.toBlob(async (blob) => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'My Lakbay Hike',
+                    text: `I conquered ${MOUNTAIN_NAME}! 🏔️`,
+                    files: [new File([blob], 'lakbay-hike.png', { type: 'image/png' })]
+                });
+                showToast('Shared! ✨');
+            } catch (e) {
+                showToast('Saved to gallery! 📸');
+            }
+        } else {
+            const link = document.createElement('a');
+            link.download = 'lakbay-hike.png';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+            showToast('Saved! 📸');
+        }
+    }, 'image/png');
+}
 // ── UTILS ─────────────────────────────────────────────────
 function calcDist(lat1, lon1, lat2, lon2) {
   const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
@@ -2772,16 +3486,273 @@ pulseStyle.textContent = `
     }
 `;
 document.head.appendChild(pulseStyle);
+// Boundary Warning System using your existing safety_alerts table
+let trailBoundaryPolygon = null;
+let boundaryWarningInterval = null;
+let warnedHikers = new Map(); // Track who has been warned
+
+// Create a buffer zone around the trail
+function createTrailBoundary(coords, bufferKm = 0.15) { // 150 meters buffer
+    if (!coords || coords.length < 3) return null;
+    
+    // Create a polygon by expanding outward from trail centerline
+    const bufferedPoints = [];
+    const center = getTrailCenter(coords);
+    
+    coords.forEach(coord => {
+        const dx = coord[0] - center.lat;
+        const dy = coord[1] - center.lng;
+        const distance = Math.sqrt(dx*dx + dy*dy);
+        
+        if (distance > 0.001) { // Only expand points that aren't at center
+            const angle = Math.atan2(dy, dx);
+            // Convert buffer from km to degrees (approx)
+            const bufferDeg = bufferKm / 111;
+            
+            const expandLat = Math.sin(angle) * bufferDeg;
+            const expandLng = Math.cos(angle) * bufferDeg;
+            
+            bufferedPoints.push([coord[0] + expandLat, coord[1] + expandLng]);
+            bufferedPoints.push([coord[0] - expandLat, coord[1] - expandLng]);
+        }
+    });
+    
+    if (bufferedPoints.length < 3) return null;
+    
+    // Create polygon from buffered points
+    return L.polygon(bufferedPoints, {
+        color: '#F59E0B',
+        weight: 2,
+        opacity: 0.5,
+        fillColor: '#F59E0B',
+        fillOpacity: 0.08,
+        dashArray: '8, 4',
+        interactive: false
+    });
+}
+
+function getTrailCenter(coords) {
+    let sumLat = 0, sumLng = 0;
+    coords.forEach(coord => {
+        sumLat += coord[0];
+        sumLng += coord[1];
+    });
+    return { lat: sumLat / coords.length, lng: sumLng / coords.length };
+}
+
+// Calculate distance from point to nearest trail point
+function getDistanceToTrail(lat, lng, trailCoords) {
+    let minDistance = Infinity;
+    for (let coord of trailCoords) {
+        const dist = calcDist(lat, lng, coord[0], coord[1]);
+        if (dist < minDistance) minDistance = dist;
+    }
+    return minDistance;
+}
+
+// Check hikers for boundary violations
+async function checkHikerBoundaries() {
+    if (!BOOKING_ID || !trailCoords.length) return;
+    
+    try {
+        const res = await fetch(`../api/get_guide_hikers.php?booking_id=${BOOKING_ID}`);
+        const data = await res.json();
+        
+        if (data.success && data.hikers) {
+            for (const hiker of data.hikers) {
+                if (hiker.latitude && hiker.longitude) {
+                    const lat = parseFloat(hiker.latitude);
+                    const lng = parseFloat(hiker.longitude);
+                    const name = hiker.name || 'Hiker';
+                    const userId = hiker.user_id || name;
+                    
+                    // Calculate distance to trail
+                    const distanceToTrail = getDistanceToTrail(lat, lng, trailCoords);
+                    const isOffTrail = distanceToTrail > 0.15; // More than 150m off trail
+                    
+                    const lastWarningTime = warnedHikers.get(userId) || 0;
+                    const now = Date.now();
+                    const warningCooldown = 300000; // 5 minutes between warnings
+                    
+                    if (isOffTrail && (now - lastWarningTime) > warningCooldown) {
+                        // Hiker is off trail - create safety alert in your existing table
+                        warnedHikers.set(userId, now);
+                        
+                        // Show alert on map
+                        const alertMsg = `⚠️ SAFETY ALERT: ${name} is off the trail (${(distanceToTrail * 1000).toFixed(0)}m from trail)!`;
+                        showToast(alertMsg, 'warning');
+                        
+                        // Flash the hiker's marker
+                        const marker = hikerLeafletMarkers[userId];
+                        if (marker) {
+                            const originalIcon = marker.options.icon;
+                            const warningIcon = L.divIcon({
+                                html: `<div class="hiker-pin">
+                                    <div class="hiker-pin-avatar" style="background: #E74C3C; animation: pulse-warning 1s infinite; border-color: #E74C3C;">⚠️</div>
+                                    <div class="hiker-pin-name" style="background: #E74C3C;">⚠️</div>
+                                </div>`,
+                                className: '', iconSize: [50, 52], iconAnchor: [25, 18]
+                            });
+                            marker.setIcon(warningIcon);
+                            
+                            setTimeout(() => {
+                                if (marker && !hikeFinished) {
+                                    const initials = (name || 'H').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+                                    const normalIcon = L.divIcon({
+                                        html: `<div class="hiker-pin">
+                                            <div class="hiker-pin-avatar">${initials}</div>
+                                            <div class="hiker-pin-name">${escapeHtml(name.split(' ')[0])}</div>
+                                        </div>`,
+                                        className: '', iconSize: [50, 52], iconAnchor: [25, 18]
+                                    });
+                                    marker.setIcon(normalIcon);
+                                }
+                            }, 10000);
+                        }
+                        
+                        // Create safety alert in your existing safety_alerts table
+                        await createSafetyAlert(BOOKING_ID, name, lat, lng, distanceToTrail);
+                        
+                        // Also update hiker_safety_status table
+                        await updateHikerSafetyStatus(BOOKING_ID, userId, name, 'unsafe', `Off trail by ${(distanceToTrail * 1000).toFixed(0)}m`);
+                        
+                        // Highlight in the list
+                        const trackItems = document.querySelectorAll('.track-item');
+                        trackItems.forEach(item => {
+                            if (item.querySelector('.track-name')?.textContent === name) {
+                                item.style.background = 'rgba(231, 76, 60, 0.2)';
+                                item.style.borderLeft = '4px solid #E74C3C';
+                                setTimeout(() => {
+                                    item.style.background = '';
+                                    item.style.borderLeft = '';
+                                }, 10000);
+                            }
+                        });
+                        
+                    } else if (!isOffTrail && warnedHikers.has(userId)) {
+                        // Hiker returned to trail
+                        warnedHikers.delete(userId);
+                        showToast(`✅ ${name} has returned to the trail`, 'success');
+                        
+                        // Update safety status back to safe
+                        await updateHikerSafetyStatus(BOOKING_ID, userId, name, 'safe', 'Returned to trail');
+                        
+                        // Reset marker
+                        const marker = hikerLeafletMarkers[userId];
+                        if (marker) {
+                            const initials = (name || 'H').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+                            const normalIcon = L.divIcon({
+                                html: `<div class="hiker-pin">
+                                    <div class="hiker-pin-avatar">${initials}</div>
+                                    <div class="hiker-pin-name">${escapeHtml(name.split(' ')[0])}</div>
+                                </div>`,
+                                className: '', iconSize: [50, 52], iconAnchor: [25, 18]
+                            });
+                            marker.setIcon(normalIcon);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Boundary check error:', e);
+    }
+}
+
+// Create safety alert using your existing send_safety_alert.php
+async function createSafetyAlert(bookingId, hikerName, lat, lng, distanceFromTrail) {
+    try {
+        const response = await fetch('../api/send_safety_alert.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                booking_id: bookingId,
+                title: '⚠️ Hiker Went Off Trail',
+                description: `${hikerName} has wandered ${(distanceFromTrail * 1000).toFixed(0)} meters off the designated trail. Immediate attention required.`,
+                type: 'boundary_violation',
+                severity: 'high',
+                hiker_involved: hikerName,
+                latitude: lat,
+                longitude: lng,
+                location: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+                reporter_name: GUIDE_NAME,
+                reporter_role: 'guide',
+                notify_admin: true
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            console.log('Safety alert created:', data.alert_id);
+            showToast(`⚠️ Safety alert created for ${hikerName}`, 'warning');
+        } else {
+            console.error('Failed to create safety alert:', data.message);
+        }
+    } catch (e) {
+        console.error('Error creating safety alert:', e);
+    }
+}
+
+// Update hiker safety status using your existing table
+async function updateHikerSafetyStatus(bookingId, userId, hikerName, status, notes) {
+    try {
+        const response = await fetch('../api/update_hiker_safety.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                booking_id: bookingId,
+                user_id: userId,
+                hiker_name: hikerName,
+                status: status,
+                notes: notes
+            })
+        });
+        const data = await response.json();
+        return data.success;
+    } catch (e) {
+        console.error('Error updating safety status:', e);
+        return false;
+    }
+}
+// Add CSS animation for warning pulse
+const warningStyle = document.createElement('style');
+warningStyle.textContent = `
+    @keyframes pulse-warning {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.8; }
+    }
+    
+`;
+document.head.appendChild(warningStyle);
+function initBoundaryMonitoring() {
+    if (trailCoords && trailCoords.length >= 3 && !trailBoundaryPolygon) {
+        // Optional: Show visual boundary (comment out if you don't want the orange polygon)
+        // trailBoundaryPolygon = createTrailBoundary(trailCoords, 0.15);
+        // if (trailBoundaryPolygon) {
+        //     trailBoundaryPolygon.addTo(map);
+        //     trailBoundaryPolygon.bindTooltip('🏔️ Trail Safety Zone', { sticky: true });
+        // }
+        
+        // Start boundary checking every 30 seconds (THIS IS THE IMPORTANT PART)
+        if (boundaryWarningInterval) clearInterval(boundaryWarningInterval);
+        boundaryWarningInterval = setInterval(checkHikerBoundaries, 30000);
+        console.log('✅ Boundary monitoring active - hikers will be checked every 30 seconds');
+    }
+}
+// Initialize everything properly
+document.addEventListener('DOMContentLoaded', () => {
+    if (HIKE_DATA) {
+        // Call the original initMap function
+        initMap();
+    }
+});
 
 window.addEventListener('beforeunload', () => {
-  if (watchId) navigator.geolocation.clearWatch(watchId);
-  if (guideIntervalId) clearInterval(guideIntervalId);
-  if (hikerPollId) clearInterval(hikerPollId);
+    if (watchId) navigator.geolocation.clearWatch(watchId);
+    if (guideIntervalId) clearInterval(guideIntervalId);
+    if (hikerPollId) clearInterval(hikerPollId);
+    if (boundaryWarningInterval) clearInterval(boundaryWarningInterval);
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (HIKE_DATA) initMap();
-});
 </script>
 </body>
 </html>

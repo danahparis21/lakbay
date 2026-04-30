@@ -182,10 +182,9 @@ foreach ($dbMountains as $dbMtn) {
         'reviewsList'  => $mountainReviews,
     ];
 }
-
 // --- Guide reviews ---
 $stmt = $pdo->query("
-    SELECT gr.*, u.name as user_name 
+    SELECT gr.*, u.name as user_name, u.avatar as user_avatar
     FROM guide_reviews gr JOIN users u ON gr.user_id = u.id
     WHERE gr.status = 'approved' ORDER BY gr.created_at DESC
 ");
@@ -196,6 +195,7 @@ foreach ($dbGuideReviews as $rev) {
         'id'         => $rev['id'],
         'author'     => $rev['user_name'],
         'initials'   => getUserInitials($rev['user_name']),
+        'avatar'     => $rev['user_avatar'] ?? null,
         'rating'     => intval($rev['rating']),
         'date'       => date('M d, Y', strtotime($rev['created_at'])),
         'comment'    => $rev['comment'],
@@ -1217,7 +1217,6 @@ $currentPage = 'explore'; // Change per page: 'explore', 'bookings', 'quiz', 'me
 </div>
 
 <div class="toast" id="toast"></div>
-
 <script>
 // ── DATA from PHP ──
 const mountains = <?= json_encode($mountains) ?>;
@@ -1228,6 +1227,7 @@ const currentUser = <?= json_encode($currentUser) ?>;
 // Debug log to see if mountains are loading
 console.log('Mountains loaded:', mountains.length);
 console.log('Guides loaded:', guides.length);
+console.log('Guides data sample:', guides[0]);
 
 // ── STATE ──
 let activeMtn    = null;
@@ -1237,6 +1237,15 @@ let activeSort   = '';
 let activeRevF   = 'all';
 let miniIdx      = 0;
 let miniTimer    = null;
+
+// Helper function to get avatar background style
+function getAvatarStyle(avatar, initials, colorIndex) {
+    if (avatar) {
+        return `background-image:url('/lakbay/${avatar}');background-size:cover;background-position:center;`;
+    }
+    const colors = ['#1a4d3a','#2c6e4f','#8a5a2a','#5a3a1a'];
+    return `background:${colors[colorIndex % colors.length]};`;
+}
 
 // ── UTILS ──
 function esc(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
@@ -1303,20 +1312,30 @@ function updateMini(total){
   document.querySelectorAll('.mini-dot').forEach((d,i)=>d.classList.toggle('on',i===miniIdx));
 }
 
-// ── GUIDES ──
 function renderGuides(){
   const track=document.getElementById('guidesTrack');
   if(!track) return;
   if(!guides || guides.length === 0){ track.innerHTML='<div style="padding:32px;color:var(--stone);">No guides available.</div>'; return; }
-  track.innerHTML=guides.map((g,i)=>`
+  track.innerHTML=guides.map((g,i)=>{
+    let avatarStyle = '';
+    if (g.avatar) {
+      // Use direct path from root - remove /lakbay prefix
+      const avatarUrl = '/' + g.avatar;
+      avatarStyle = `background-image:url('${avatarUrl}');background-size:cover;background-position:center;`;
+    } else {
+      const colors = ['#1a4d3a','#2c6e4f','#8a5a2a','#5a3a1a'];
+      avatarStyle = `background:${colors[i % colors.length]};`;
+    }
+    return `
     <div class="guide-card" onclick="openGuideModal(guides[${i}])">
-      <div class="guide-avatar" style="${g.avatar?`background-image:url('${g.avatar}');background-size:cover;`:`background-color:${['#1a4d3a','#2c6e4f','#8a5a2a','#5a3a1a'][(g.name?.length || 0)%4]};`}">${g.avatar?'':esc(g.initials)}</div>
+      <div class="guide-avatar" style="${avatarStyle}">${g.avatar ? '' : esc(g.initials)}</div>
       <div class="guide-name">${esc(g.name)}</div>
       <div class="guide-spec">${esc(g.specialization)}</div>
       <div class="guide-rating">★ ${g.rating}</div>
       <div class="guide-trips">${g.total_trips} trips</div>
       <span class="guide-avail ${g.is_available?'avail-yes':'avail-no'}">${g.is_available?'Available':'Busy'}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 function scrollGuides(dir){ document.getElementById('guidesTrack').scrollBy({left:dir*200,behavior:'smooth'}); }
 
@@ -1526,15 +1545,24 @@ function bookMtn(){ if(activeMtn){ localStorage.setItem('bookingMtn',JSON.string
 
 // ── GUIDE MODAL ──
 const covers=['https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1200&q=60','https://images.unsplash.com/photo-1454496522485-0a69b2730d75?w=1200&q=60','https://images.unsplash.com/photo-1465919292275-c60ad29da028?w=1200&q=60'];
-
 function openGuideModal(g){
   activeGuide=g;
   document.getElementById('gCoverImg').style.backgroundImage=`url('${g.cover||covers[g.id%covers.length]}')`;
   const av=document.getElementById('gModalAv');
   if(av) {
-    if(g.avatar){ av.style.backgroundImage=`url('${g.avatar}')`;av.textContent=''; }
-    else{ av.style.backgroundImage='';av.textContent=g.initials; av.style.backgroundColor=['#1a4d3a','#2c6e4f','#8a5a2a','#5a3a1a'][g.name.length%4]; }
+    if(g.avatar){ 
+      const avatarUrl = '/' + g.avatar;
+      av.style.backgroundImage=`url('${avatarUrl}')`;
+      av.style.backgroundSize='cover';
+      av.style.backgroundPosition='center';
+      av.textContent=''; 
+    } else { 
+      av.style.backgroundImage='';
+      av.textContent=g.initials; 
+      av.style.backgroundColor=['#1a4d3a','#2c6e4f','#8a5a2a','#5a3a1a'][g.name.length%4]; 
+    }
   }
+
   document.getElementById('gModalName').textContent=g.name;
   document.getElementById('gPills').innerHTML=`
     <span class="gpill gpill-spec"><svg viewBox="0 0 24 24"><path d="M4 22h16M6 4l6 8 6-8"/></svg>${esc(g.specialization)}</span>
@@ -1558,16 +1586,30 @@ function openGuideModal(g){
     ? g.mountains.map(m=>`<span class="mtn-tag-pill" onclick="openMtnFromGuide(${m.id})"><svg viewBox="0 0 24 24"><path d="M4 22h16M6 4l6 8 6-8"/></svg>${esc(m.name)}</span>`).join('')
     : '<p style="font-size:13px;color:var(--stone);">No specific mountain assignments.</p>';
   document.getElementById('gRevCt').textContent=g.reviews_count;
-  document.getElementById('gRevList').innerHTML=g.reviews.length
-    ? g.reviews.slice(0,4).map(r=>`<div class="g-rev-item">
+  
+ // Render reviews with avatars
+const revListHtml = g.reviews.length
+  ? g.reviews.slice(0,4).map((r, idx) => {
+      let revAvatarStyle = '';
+      if (r.avatar) {
+        const avatarUrl = '/' + r.avatar;
+        revAvatarStyle = `background-image:url('${avatarUrl}');background-size:cover;background-position:center;`;
+      } else {
+        const colors = ['#1a4d3a','#2c6e4f','#8a5a2a','#5a3a1a'];
+        revAvatarStyle = `background:${colors[idx % colors.length]};`;
+      }
+      return `<div class="g-rev-item">
         <div class="g-rev-hd">
-          <div class="g-rev-av">${esc(r.initials)}</div>
+          <div class="g-rev-av" style="${revAvatarStyle}">${r.avatar ? '' : esc(r.initials)}</div>
           <div><div class="g-rev-name">${esc(r.author)}</div><div class="g-rev-stars">${'★'.repeat(r.rating)+'☆'.repeat(5-r.rating)}</div></div>
           <div class="g-rev-date">${esc(r.date)}</div>
         </div>
         <div class="g-rev-comment">"${esc(r.comment)}"</div>
-      </div>`).join('')
-    : '<div style="padding:24px;text-align:center;color:var(--stone);font-size:13px;">No reviews yet.</div>';
+      </div>`;
+    }).join('')
+  : '<div style="padding:24px;text-align:center;color:var(--stone);font-size:13px;">No reviews yet.</div>';
+  document.getElementById('gRevList').innerHTML = revListHtml;
+  
   document.getElementById('gDetails').innerHTML=[
     {lbl:'Specialization',val:g.specialization},
     {lbl:'Experience',    val:g.years_experience+' years'},

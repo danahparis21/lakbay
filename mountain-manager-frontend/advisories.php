@@ -229,6 +229,10 @@ function getCrowdBadge($level) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>LAKBAY Manager — Advisories & Alerts</title>
 <link rel="stylesheet" href="manager.css">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
+
+<script>
+</script>
 <!-- Leaflet for maps -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -763,7 +767,7 @@ function getCrowdBadge($level) {
 <div class="main-area" id="mainArea">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="sidebar-toggle" onclick="toggleSidebar()">
+      <button class="sidebar-toggle">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>
@@ -1166,24 +1170,6 @@ function getCrowdBadge($level) {
 </div>
 
 <!-- Mobile Bottom Nav -->
-<div class="mobile-bottom-nav">
-  <a href="dashboard.php" class="mobile-nav-item">
-    <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-    <span>Home</span>
-  </a>
-  <a href="bookings.php" class="mobile-nav-item">
-    <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/></svg>
-    <span>Bookings</span>
-  </a>
-  <button class="mobile-nav-item active" onclick="location.reload()">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-    <span>Alerts</span>
-  </button>
-  <button class="mobile-nav-item" onclick="toggleMobileSidebar()">
-    <svg viewBox="0 0 24 24" fill="none"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-    <span>Menu</span>
-  </button>
-</div>
 
 <!-- Post Alert Modal -->
 <div class="modal-overlay" id="alertModal" onclick="closeModal(event, 'alertModal')">
@@ -1270,10 +1256,6 @@ function getCrowdBadge($level) {
 const managerId = <?= json_encode($manager_id) ?>;
 const mountains = <?= json_encode($assigned_mountains) ?>;
 
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('collapsed');
-  document.getElementById('mainArea').classList.toggle('expanded');
-}
 
 function toggleMobileSidebar() {
   document.getElementById('sidebar').classList.toggle('mobile-open');
@@ -1458,39 +1440,6 @@ function markBroadcastRead(broadcastId, element) {
 function refreshWeather() {
   showToast('Refreshing weather data...', 'info');
   setTimeout(() => location.reload(), 500);
-}
-
-// Add this helper function near your other helper functions
-function getWeatherRecommendation($weather_code, $precip, $wind, $temp) {
-    $recommendations = [];
-    
-    if ($weather_code >= 95) {
-        $recommendations[] = ['level' => 'critical', 'message' => 'THUNDERSTORM - SUSPEND ALL ACTIVITIES'];
-        $recommendations[] = ['level' => 'critical', 'message' => 'Evacuate trails immediately. Seek shelter.'];
-    } elseif ($weather_code >= 61 && $weather_code <= 67) {
-        $recommendations[] = ['level' => 'warning', 'message' => 'Heavy rain expected - trails may be dangerous'];
-        $recommendations[] = ['level' => 'warning', 'message' => 'Guides must carry emergency shelter'];
-    } elseif ($precip > 5) {
-        $recommendations[] = ['level' => 'warning', 'message' => 'Rain expected - bring waterproof gear'];
-    }
-    
-    if ($wind > 40) {
-        $recommendations[] = ['level' => 'warning', 'message' => 'Strong winds - extra caution at summit'];
-    }
-    
-    if ($temp > 30) {
-        $recommendations[] = ['level' => 'info', 'message' => 'Heat warning - bring extra water (3L+)'];
-    }
-    
-    if ($temp < 10) {
-        $recommendations[] = ['level' => 'warning', 'message' => 'Cold temps - severe weather gear required'];
-    }
-    
-    if (empty($recommendations)) {
-        $recommendations[] = ['level' => 'success', 'message' => 'Perfect hiking conditions!'];
-    }
-    
-    return $recommendations;
 }
 
 // Update time

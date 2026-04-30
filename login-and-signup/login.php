@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'hiker'   => '../hiker-frontend/explore.php',
                 'guide'   => '../tourguide-frontend/guide-dashboard.php',
                 'manager' => '../mountain-manager-frontend/dashboard.php',
-                'admin'   => '../admin-frontend/dashboard-admin.php',
+                'admin'   => '../pages/dashboard-admin.php',
             ];
             $redirect_url = $roleMap[$user['role']] ?? '../hiker-frontend/explore.php';
             $success_redirect = true;

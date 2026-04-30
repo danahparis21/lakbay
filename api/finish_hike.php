@@ -13,13 +13,22 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$userId = $_SESSION['user_id'];
+$userId = $_SESSION['user_id']; // <-- MOVED THIS UP
+
+// Check if user is a guide
+$stmt = $pdo->prepare("SELECT id FROM guides WHERE user_id = ?");
+$stmt->execute([$userId]);
+if (!$stmt->fetch()) {
+    echo json_encode(['success' => false, 'message' => 'Only guides can finish hikes']);
+    exit;
+}
+
 $input = json_decode(file_get_contents('php://input'), true);
 
 $bookingId    = $input['booking_id'] ?? null;
 $sessionToken = $input['session_token'] ?? null;
 $distance     = $input['distance'] ?? 0;
-$duration     = (int)round($input['duration'] ?? 0);  // ← FIXED HERE
+$duration     = (int)round($input['duration'] ?? 0);
 $badges       = $input['badges'] ?? [];
 
 if (!$bookingId) {
@@ -30,9 +39,9 @@ if (!$bookingId) {
 try {
     $pdo->beginTransaction();
 
-    // Get booking details
+    // Get booking details including guide_id
     $stmt = $pdo->prepare("
-        SELECT b.id, b.status, b.mountain_id, m.name as mountain_name
+        SELECT b.id, b.status, b.mountain_id, b.guide_id, m.name as mountain_name
         FROM bookings b
         JOIN mountains m ON b.mountain_id = m.id
         WHERE b.id = ?
@@ -74,11 +83,11 @@ try {
     }
     
     $avgSpeed = $distance > 0 ? ($distance / ($duration / 3600)) : 0;
-$paceMinutes = $distance > 0 ? ($duration / 60) / $distance : 0;
-// Safe pace formatting without implicit float conversion
-$paceMinutesInt = (int)floor($paceMinutes);
-$paceSecondsInt = (int)round(($paceMinutes - $paceMinutesInt) * 60);
-$paceFormatted = $paceMinutesInt . ":" . str_pad((string)$paceSecondsInt, 2, "0", STR_PAD_LEFT);
+    $paceMinutes = $distance > 0 ? ($duration / 60) / $distance : 0;
+    $paceMinutesInt = (int)floor($paceMinutes);
+    $paceSecondsInt = (int)round(($paceMinutes - $paceMinutesInt) * 60);
+    $paceFormatted = $paceMinutesInt . ":" . str_pad((string)$paceSecondsInt, 2, "0", STR_PAD_LEFT);
+    
     // Mark booking as finished
     $stmt = $pdo->prepare("UPDATE bookings SET status = 'finished' WHERE id = ?");
     $stmt->execute([$bookingId]);
@@ -102,6 +111,27 @@ $paceFormatted = $paceMinutesInt . ":" . str_pad((string)$paceSecondsInt, 2, "0"
         $sessionToken
     ]);
 
+    // UPDATE GUIDE AVAILABILITY
+    if ($booking['guide_id']) {
+        // Update guide: is_available = 1, currently_on_hike = 0
+        $stmt = $pdo->prepare("
+            UPDATE guides 
+            SET is_available = 1, 
+                currently_on_hike = 0,
+                trail_status = 'safe'
+            WHERE id = ?
+        ");
+        $stmt->execute([$booking['guide_id']]);
+        
+        // Also update total_trips count for the guide
+        $stmt = $pdo->prepare("
+            UPDATE guides 
+            SET total_trips = total_trips + 1 
+            WHERE id = ?
+        ");
+        $stmt->execute([$booking['guide_id']]);
+    }
+
     $pdo->commit();
 
     // Build summary with Strava-like stats
@@ -111,7 +141,7 @@ $paceFormatted = $paceMinutesInt . ":" . str_pad((string)$paceSecondsInt, 2, "0"
 
     echo json_encode([
         'success'  => true,
-        'message'  => 'Hike finished successfully!',
+        'message'  => 'Hike finished successfully! Guide is now available for new bookings.',
         'summary'  => [
             'mountain'       => $booking['mountain_name'],
             'distance_km'    => round((float)$distance, 2),

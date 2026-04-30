@@ -118,7 +118,7 @@ $mtn_count = count($assigned_mountains ?? []);
   </div>
 </aside>
 
-<!-- Logout confirm modal - FIXED CSS -->
+<!-- Logout confirm modal -->
 <div id="logoutModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 10000; align-items: center; justify-content: center;">
   <div style="background: white; border-radius: 24px; max-width: 400px; width: 90%; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
     <div style="padding: 20px 24px 0; display: flex; justify-content: space-between; align-items: center;">
@@ -153,10 +153,42 @@ function doLogout() {
   window.location.href = '../login-and-signup/login.php';
 }
 
-// Close modal when clicking outside
-document.getElementById('logoutModal')?.addEventListener('click', function(e) {
-  if (e.target === this) {
+// Unified click listener for sidebar toggle and outside clicks
+document.addEventListener('click', function(e) {
+  const sidebar = document.getElementById('sidebar');
+  const mainArea = document.getElementById('mainArea');
+  const isToggleBtn = e.target.closest('.sidebar-toggle');
+  
+  if (isToggleBtn) {
+    // Handle toggle button click
+    if (sidebar) {
+      if (window.innerWidth <= 768) {
+        sidebar.classList.toggle('mobile-open');
+      } else {
+        sidebar.classList.toggle('collapsed');
+        if (mainArea) mainArea.classList.toggle('expanded');
+      }
+    }
+  } else if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('mobile-open')) {
+    // Handle click outside open sidebar on mobile
+    if (!sidebar.contains(e.target)) {
+      sidebar.classList.remove('mobile-open');
+    }
+  }
+  
+  // Logout modal click outside
+  const logoutModal = document.getElementById('logoutModal');
+  if (e.target === logoutModal) {
     closeLogoutModal();
   }
+});
+
+// Close sidebar when clicking on a nav link on mobile
+document.querySelectorAll('.nav-item').forEach(link => {
+  link.addEventListener('click', () => {
+    if (window.innerWidth <= 768) {
+      document.getElementById('sidebar')?.classList.remove('mobile-open');
+    }
+  });
 });
 </script>

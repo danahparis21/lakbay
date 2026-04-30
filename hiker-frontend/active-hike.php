@@ -1160,80 +1160,258 @@ if (!$activeSession) {
         }
 
         /* ─── COMPLETION SUMMARY OVERLAY ──────────────── */
+        /* ── COMPLETION OVERLAY ── */
         .completion-overlay {
             position: fixed;
             inset: 0;
             z-index: 2000;
-            background: rgba(16,6,0,0.6);
-            backdrop-filter: blur(16px);
+            background: rgba(16,6,0,0.55);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
             display: none;
-            align-items: center;
+            align-items: flex-end;
             justify-content: center;
-            padding: 20px;
+            padding: 0;
         }
-        .completion-overlay.open {
-            display: flex;
-        }
+        .completion-overlay.open { display: flex; }
+
         .completion-card {
-            background: white;
-            border: 1px solid var(--border);
-            border-radius: 28px;
+            background: #F8F7F5;
             width: 100%;
-            max-width: 400px;
-            padding: 32px 24px 24px;
-            text-align: center;
-            animation: sheetUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            max-width: 480px;
+            border-radius: 28px 28px 0 0;
+            overflow: hidden;
+            animation: sheetUp 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+            max-height: 92dvh;
+            overflow-y: auto;
         }
-        .completion-emoji { font-size: 56px; margin-bottom: 16px; }
-        .completion-title {
-            font-family: 'DM Sans', sans-serif;
-            font-size: 24px;
-            font-weight: 800;
-            color: var(--primary);
-            margin-bottom: 6px;
+
+        /* Card hero — dark, matches active-hike header */
+        .comp-hero {
+            background: #100600;
+            padding: 28px 24px 22px;
+            position: relative;
+            overflow: hidden;
         }
-        .completion-sub {
-            font-size: 13px;
-            color: var(--text-muted);
-            margin-bottom: 20px;
+        .comp-hero::before {
+            content: '';
+            position: absolute; inset: 0;
+            background: radial-gradient(ellipse 70% 70% at 85% 120%, rgba(201,123,26,0.22) 0%, transparent 65%);
+            pointer-events: none;
         }
-        .completion-stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 20px;
+        .comp-hero-eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 14px;
         }
-        .comp-stat {
-            background: var(--cream);
-            border: 1px solid rgba(0,0,0,0.05);
-            border-radius: var(--radius-sm);
-            padding: 14px 10px;
-        }
-        .comp-stat-val {
-            font-family: 'DM Mono', monospace;
-            font-size: 22px;
-            font-weight: 500;
-            color: var(--primary);
-            line-height: 1;
-            margin-bottom: 4px;
-        }
-        .comp-stat-label {
+        .comp-hero-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(255,255,255,0.11);
+            border: 1px solid rgba(255,255,255,0.16);
+            border-radius: 100px;
+            padding: 3px 11px;
             font-size: 10px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.8);
+            letter-spacing: 0.5px;
             text-transform: uppercase;
-            letter-spacing: 0.6px;
-            color: var(--text-muted);
         }
+        .comp-hero-dot {
+            width: 5px; height: 5px;
+            border-radius: 50%;
+            background: #C97B1A;
+            flex-shrink: 0;
+        }
+        .comp-hero-time {
+            font-size: 11px;
+            color: rgba(255,255,255,0.4);
+            margin-left: auto;
+        }
+        .comp-hero-mountain {
+            font-size: 24px;
+            font-weight: 700;
+            color: #FFFFFF;
+            letter-spacing: -0.3px;
+            line-height: 1.2;
+        }
+        .comp-hero-sub {
+            font-size: 12px;
+            color: rgba(255,255,255,0.45);
+            margin-top: 5px;
+        }
+
+        /* Trail map inside card */
+        .comp-map-wrap {
+            position: relative;
+            height: 180px;
+            background: #E8E5DF;
+            overflow: hidden;
+        }
+        #completionMap {
+            width: 100%; height: 100%;
+            display: block;
+        }
+
+        /* Primary stat row */
+        .comp-stats-row {
+            display: flex;
+            align-items: center;
+            padding: 20px 22px;
+            border-bottom: 1px solid #ECEAE6;
+            background: #FFFFFF;
+        }
+        .comp-stat-big {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .comp-stat-big-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 42px;
+            font-weight: 500;
+            color: #100600;
+            line-height: 1;
+            letter-spacing: -1.5px;
+        }
+        .comp-stat-big-unit {
+            font-size: 14px;
+            font-family: 'DM Sans', sans-serif;
+            color: #9A9A90;
+            font-weight: 500;
+            margin-left: 2px;
+        }
+        .comp-stat-big-lbl {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.9px;
+            color: #9A9A90;
+            margin-top: 1px;
+        }
+        .comp-stat-divider {
+            width: 1px;
+            height: 52px;
+            background: #ECEAE6;
+            flex-shrink: 0;
+            margin: 0 20px;
+        }
+        .comp-stat-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 11px;
+        }
+        .comp-stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .comp-stat-item-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 18px;
+            font-weight: 500;
+            color: #100600;
+            line-height: 1.1;
+        }
+        .comp-stat-item-unit {
+            font-size: 12px;
+            font-family: 'DM Sans', sans-serif;
+            color: #9A9A90;
+            margin-left: 2px;
+        }
+        .comp-stat-item-lbl {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #9A9A90;
+        }
+
+        /* Badge row */
+        .comp-badge-row {
+            padding: 15px 22px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid #ECEAE6;
+            background: #FFFFFF;
+        }
+        .comp-badge-icon {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            background: #FDF3E0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 15px;
+            flex-shrink: 0;
+        }
+        .comp-badge-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 16px;
+            font-weight: 500;
+            color: #C97B1A;
+        }
+        .comp-badge-lbl {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: rgba(201,123,26,0.6);
+        }
+
+        /* Brand strip */
+        .comp-brand {
+            padding: 14px 22px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #F0EDE8;
+            border-bottom: 1px solid #ECEAE6;
+        }
+        .comp-brand-name {
+            font-size: 13px;
+            font-weight: 800;
+            color: #100600;
+            letter-spacing: -0.2px;
+        }
+        .comp-brand-sep { width: 1px; height: 13px; background: #D4CEC5; }
+        .comp-brand-sub { font-size: 10px; color: #9A9A90; }
+
+        /* Action buttons */
         .completion-actions {
             display: flex;
             gap: 10px;
-            margin-top: 8px;
+            padding: 16px 20px 20px;
+            background: #F8F7F5;
         }
         .completion-actions .btn-secondary {
             flex: 0 0 auto;
+            padding: 12px 18px;
+            border-radius: 100px;
+            border: 1.5px solid #ECEAE6;
+            background: transparent;
+            color: #6B6B63;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer;
         }
         .completion-actions .btn-primary {
             flex: 1;
+            padding: 13px 20px;
+            border-radius: 100px;
+            border: none;
+            background: #100600;
+            color: white;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(16,6,0,0.22);
         }
+        .completion-actions .btn-primary:hover { opacity: 0.88; }
 
         @media (max-width: 380px) {
             .mountain-title { font-size: 13px; }
@@ -1649,12 +1827,12 @@ if (!$activeSession) {
 
         <!-- Finish Hike Button -->
         <div class="finish-hike-area">
-            <button class="btn-finish-hike" id="finishHikeBtn" onclick="finishHike()">
-                <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                Finish Hike
-            </button>
-            <div class="finish-note">Stops GPS tracking &amp; saves your route</div>
-        </div>
+    <button class="btn-finish-hike" id="finishHikeBtn" onclick="finishHike()" style="opacity:0.7;">
+        <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        Request Guide to Finish
+    </button>
+    <div class="finish-note">Only your guide can officially end the hike when everyone is safe</div>
+</div>
     </div>
 </div>
 
@@ -1691,52 +1869,71 @@ if (!$activeSession) {
 <!-- ── COMPLETION SUMMARY OVERLAY ─────────────────────── -->
 <div class="completion-overlay" id="completionOverlay">
     <div class="completion-card">
-        <div class="completion-emoji">🎉</div>
-        <div class="completion-title" id="compTitle">Hike Complete!</div>
-        <div class="completion-sub" id="compSub">Amazing work on the trail today</div>
-        
-        <!-- Mini map preview -->
-        <div id="completionMap" style="height: 160px; width: 100%; border-radius: 16px; margin-bottom: 16px; overflow: hidden; background: #1a2e1a;"></div>
-        
-        <div class="completion-stats">
-            <div class="comp-stat">
-                <div class="comp-stat-val" id="compDist">0.0</div>
-                <div class="comp-stat-label">km hiked</div>
+
+        <!-- Hero header -->
+        <div class="comp-hero">
+            <div class="comp-hero-eyebrow">
+                <span class="comp-hero-chip">
+                    <span class="comp-hero-dot"></span>Completed
+                </span>
+                <span class="comp-hero-time" id="compDate"></span>
             </div>
-            <div class="comp-stat">
-                <div class="comp-stat-val" id="compTime">0:00</div>
-                <div class="comp-stat-label">duration</div>
+            <div class="comp-hero-mountain" id="compTitle">⛰ Mountain</div>
+            <div class="comp-hero-sub" id="compSub">Trail recorded with Lakbay</div>
+        </div>
+
+        <!-- Trail map -->
+        <div class="comp-map-wrap">
+            <canvas id="completionMap"></canvas>
+        </div>
+
+        <!-- Distance (big) | Duration + Pace -->
+        <div class="comp-stats-row">
+            <div class="comp-stat-big">
+                <div>
+                    <span class="comp-stat-big-val" id="compDist">0.0</span>
+                    <span class="comp-stat-big-unit">km</span>
+                </div>
+                <div class="comp-stat-big-lbl">Distance</div>
             </div>
-            <div class="comp-stat">
-                <div class="comp-stat-val" id="compPace">0:00</div>
-                <div class="comp-stat-label">pace /km</div>
-            </div>
-            <div class="comp-stat">
-                <div class="comp-stat-val" id="compSpeed">0.0</div>
-                <div class="comp-stat-label">avg speed</div>
-            </div>
-            <div class="comp-stat" style="grid-column: span 2;">
-                <div class="comp-stat-val" id="compBadgesCount">0</div>
-                <div class="comp-stat-label">badges earned</div>
+            <div class="comp-stat-divider"></div>
+            <div class="comp-stat-stack">
+                <div class="comp-stat-item">
+                    <span class="comp-stat-item-val" id="compTime">0:00</span>
+                    <span class="comp-stat-item-lbl">Duration</span>
+                </div>
+                <div class="comp-stat-item">
+                    <span class="comp-stat-item-val" id="compPace">0:00<span class="comp-stat-item-unit">/km</span></span>
+                    <span class="comp-stat-item-lbl">Avg Pace</span>
+                </div>
             </div>
         </div>
-        
-        <!-- LAKBAY Branding -->
-        <div style="margin: 12px 0; padding: 8px; border-top: 1px solid rgba(0,0,0,0.06); border-bottom: 1px solid rgba(0,0,0,0.06);">
-            <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-                <span style="font-family: 'DM Sans', sans-serif; font-size: 18px; font-weight: 800; color: #100600;">LAKBAY</span>
-                <span style="color: rgba(0,0,0,0.2);">|</span>
-                <span style="font-size: 11px; color: #aaa;">Trail recorded with Lakbay</span>
+
+        <!-- Badges -->
+        <div class="comp-badge-row">
+            <div class="comp-badge-icon">🏅</div>
+            <div>
+                <div class="comp-badge-val" id="compBadgesCount">0 badges</div>
+                <div class="comp-badge-lbl">Earned this hike</div>
             </div>
         </div>
-        
+
+        <!-- LAKBAY brand -->
+        <div class="comp-brand">
+            <span class="comp-brand-name">LAKBAY</span>
+            <span class="comp-brand-sep"></span>
+            <span class="comp-brand-sub">Trail recorded with Lakbay</span>
+        </div>
+
+        <!-- Actions -->
         <div class="completion-actions">
             <button class="btn-secondary" onclick="window.location.href='hikerProfile.php'">Profile</button>
-            <button class="btn-secondary" onclick="shareActivity()" id="shareBtn">Share</button>
-            <a href="bookings.php" class="btn-primary" style="text-decoration:none;text-align:center;">Done</a>
+            <button class="btn-secondary" onclick="shareCompletionCard()" id="shareBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="vertical-align:middle;margin-right:4px"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>Save
+            </button>
+            <a href="bookings.php" class="btn-primary" style="text-decoration:none;text-align:center;display:flex;align-items:center;justify-content:center;">Done</a>
         </div>
     </div>
-
 </div>
 
 <!-- ── TOAST ──────────────────────────────────────────── -->
@@ -2647,8 +2844,56 @@ function completeHike() {
     document.getElementById('statusText').textContent = 'DONE ⛰';
 }
 
-// ── FINISH HIKE (MANUAL) ──────────────────────────────────
+// Replace the finishHike function in active-hike.php with this:
+
+// ── CHECK IF HIKE IS FINISHED BY GUIDE ──────────────────
+let hikeFinishedByGuide = false;
+
+async function checkHikeStatus() {
+    if (hikeFinished || hikeFinishedByGuide) return;
+    
+    try {
+        const res = await fetch(`../api/check_hike_status.php?booking_id=${bookingId}`);
+        const data = await res.json();
+        
+        if (data.success && data.status === 'finished') {
+            // Guide has finished the hike
+            hikeFinishedByGuide = true;
+            
+            // Show completion summary
+            showCompletionSummary(data.summary);
+            
+            // Disable the finish button if it exists
+            const finishBtn = document.getElementById('finishHikeBtn');
+            if (finishBtn) {
+                finishBtn.disabled = true;
+                finishBtn.innerHTML = '<span>✅ Hike Completed by Guide</span>';
+            }
+            
+            showToast('🏁 The guide has completed the hike!');
+        }
+    } catch (e) {
+        console.error('Error checking hike status:', e);
+    }
+}
+
+// Poll for hike status every 30 seconds
+let statusCheckInterval = null;
+
+function startStatusPolling() {
+    if (statusCheckInterval) clearInterval(statusCheckInterval);
+    statusCheckInterval = setInterval(checkHikeStatus, 30000);
+}
+
+// Modify the finishHike function to show that only guides can finish
 async function finishHike() {
+    // Check if user is a guide (you can add a flag from PHP)
+    const isGuide = <?= isset($isGuide) && $isGuide ? 'true' : 'false' ?>;
+    
+    if (!isGuide) {
+        showToast('Only the guide can finish this hike. The guide will end the session when everyone is safe.');
+        return;
+    }
     if (hikeFinished) return;
 
     const btn = document.getElementById('finishHikeBtn');
@@ -2744,172 +2989,239 @@ async function finishHike() {
 }
 }
 function showCompletionSummary(summary) {
+    // Update status pill
     document.getElementById('statusText').textContent = 'COMPLETED';
     const pill = document.getElementById('statusPill');
-    pill.style.background = 'rgba(6,214,160,0.18)';
-    pill.style.borderColor = 'rgba(6,214,160,0.3)';
-    pill.style.color = 'var(--success)';
-    pill.querySelector('.status-dot').style.animation = 'none';
+    if (pill) {
+        pill.style.background = 'rgba(27,112,69,0.15)';
+        pill.style.borderColor = 'rgba(27,112,69,0.25)';
+        pill.style.color = '#1B7045';
+        const dot = pill.querySelector('.status-dot');
+        if (dot) dot.style.animation = 'none';
+    }
 
-    // Update all stats
-    document.getElementById('compTitle').textContent = `${summary.mountain} — Complete!`;
-    document.getElementById('compDist').innerHTML = `${summary.distance_km} <span style="font-size:12px;">km</span>`;
-    document.getElementById('compTime').innerHTML = `${summary.duration} <span style="font-size:12px;"></span>`;
-    document.getElementById('compPace').innerHTML = `${summary.pace} <span style="font-size:12px;">/km</span>`;
-    document.getElementById('compSpeed').innerHTML = `${summary.avg_speed_kmh} <span style="font-size:12px;">km/h</span>`;
-    document.getElementById('compBadgesCount').textContent = `${summary.badges_count} badges earned`;
+    // Populate hero
+    document.getElementById('compTitle').textContent = '⛰ ' + summary.mountain;
+    document.getElementById('compSub').textContent = 'Finished at ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    document.getElementById('compDate').textContent = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+    // Populate stats — clean values, no extra spans needed
+    document.getElementById('compDist').textContent = summary.distance_km;
+    document.getElementById('compTime').textContent = summary.duration;
+    document.getElementById('compPace').innerHTML = summary.pace + '<span class="comp-stat-item-unit">/km</span>';
+    const badgeCount = summary.badges_count || 0;
+    document.getElementById('compBadgesCount').textContent = badgeCount + ' badge' + (badgeCount !== 1 ? 's' : '');
+
+    // Show overlay
     document.getElementById('completionOverlay').classList.add('open');
-    
-    const btn = document.getElementById('finishHikeBtn');
-    btn.style.display = 'none';
-    
-    // Wait for the modal to fully render and get proper dimensions
-    setTimeout(() => {
-        drawCompletionMap();
-    }, 200);
+    document.getElementById('finishHikeBtn').style.display = 'none';
+
+    // Draw trail map after layout settles
+    setTimeout(drawCompletionMap, 200);
 }
 
 function drawCompletionMap() {
-    console.log('drawCompletionMap called');
-    
+    const canvas = document.getElementById('completionMap');
+    if (!canvas) return;
+
     let coords = null;
-    
-    if (trailCoords && trailCoords.length > 0) {
-        coords = trailCoords;
-        console.log('Using trailCoords:', coords.length, 'points');
-    } else if (trailData && trailData.type === 'LineString' && trailData.coordinates) {
+    if (trailCoords && trailCoords.length > 0) coords = trailCoords;
+    else if (trailData && trailData.type === 'LineString' && trailData.coordinates)
         coords = trailData.coordinates.map(c => [c[1], c[0]]);
-        console.log('Using trailData:', coords.length, 'points');
-    }
-    
-    if (!coords || coords.length === 0) {
-        console.log('No trail coordinates available');
-        const mapContainer = document.getElementById('completionMap');
-        if (mapContainer) {
-            mapContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: rgba(255,255,255,0.5); font-size: 12px;">🗺️ Loading trail map...</div>';
-        }
-        return;
-    }
-    
-    const mapContainer = document.getElementById('completionMap');
-    if (!mapContainer) {
-        console.log('completionMap element not found');
-        return;
-    }
-    
-    // Force a height on the container if needed
-    if (mapContainer.clientHeight === 0) {
-        console.log('Container has 0 height, forcing style');
-        mapContainer.style.height = '160px';
-        mapContainer.style.minHeight = '160px';
-    }
-    
-    console.log('Container dimensions after fix:', mapContainer.clientWidth, 'x', mapContainer.clientHeight);
-    
-    // Clear and create canvas (reliable fallback)
-    mapContainer.innerHTML = '';
-    
-    const canvas = document.createElement('canvas');
-    canvas.width = mapContainer.clientWidth || 400;
-    canvas.height = mapContainer.clientHeight || 160;
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-    canvas.style.background = '#1a2e1a';
-    canvas.style.borderRadius = '16px';
-    canvas.style.display = 'block';
-    mapContainer.appendChild(canvas);
-    
+
+    const wrap = canvas.parentElement;
+    const W = wrap.clientWidth || 420;
+    const H = wrap.clientHeight || 180;
+    canvas.width  = W;
+    canvas.height = H;
+
     const ctx = canvas.getContext('2d');
-    
-    // Calculate bounds
+
+    if (!coords || coords.length < 2) {
+        ctx.fillStyle = '#E8E5DF';
+        ctx.fillRect(0, 0, W, H);
+        ctx.font = '13px "DM Sans", sans-serif';
+        ctx.fillStyle = '#9A9A90';
+        ctx.textAlign = 'center';
+        ctx.fillText('No trail data available', W / 2, H / 2);
+        return;
+    }
+
+    // Map bounds
     let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
     coords.forEach(c => {
-        minLat = Math.min(minLat, c[0]);
-        maxLat = Math.max(maxLat, c[0]);
-        minLng = Math.min(minLng, c[1]);
-        maxLng = Math.max(maxLng, c[1]);
+        minLat = Math.min(minLat, c[0]); maxLat = Math.max(maxLat, c[0]);
+        minLng = Math.min(minLng, c[1]); maxLng = Math.max(maxLng, c[1]);
     });
-    
-    const latRange = maxLat - minLat;
-    const lngRange = maxLng - minLng;
-    const padding = 20;
-    const width = canvas.width;
-    const height = canvas.height;
-    
-    if (width > 0 && height > 0) {
-        // Draw background
-        ctx.fillStyle = '#1a2e1a';
-        ctx.fillRect(0, 0, width, height);
-        
-        // Draw trail
+
+    const pad = 28;
+    const latR = maxLat - minLat || 0.001;
+    const lngR = maxLng - minLng || 0.001;
+    const scale = Math.min((W - pad * 2) / lngR, (H - pad * 2) / latR);
+    const offX = pad + ((W - pad * 2) - lngR * scale) / 2;
+    const offY = pad + ((H - pad * 2) - latR * scale) / 2;
+    const tx = lng => offX + (lng - minLng) * scale;
+    const ty = lat => offY + (H - pad * 2) - (lat - minLat) * scale;
+
+    // Warm stone background
+    ctx.fillStyle = '#E8E5DF';
+    ctx.fillRect(0, 0, W, H);
+
+    // Trail shadow
+    ctx.beginPath();
+    coords.forEach((c, i) => { i === 0 ? ctx.moveTo(tx(c[1]), ty(c[0]) + 2) : ctx.lineTo(tx(c[1]), ty(c[0]) + 2); });
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 5;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+
+    // Trail line — dark primary
+    ctx.beginPath();
+    coords.forEach((c, i) => { i === 0 ? ctx.moveTo(tx(c[1]), ty(c[0])) : ctx.lineTo(tx(c[1]), ty(c[0])); });
+    ctx.strokeStyle = '#100600'; ctx.lineWidth = 3; ctx.stroke();
+
+    // Start dot (green)
+    const sx = tx(coords[0][1]), sy = ty(coords[0][0]);
+    ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.fillStyle = '#1B7045'; ctx.fill();
+    ctx.beginPath(); ctx.arc(sx, sy, 3.5, 0, Math.PI * 2); ctx.fillStyle = 'white'; ctx.fill();
+
+    // End dot (red)
+    const ex = tx(coords[coords.length-1][1]), ey = ty(coords[coords.length-1][0]);
+    ctx.beginPath(); ctx.arc(ex, ey, 8, 0, Math.PI * 2); ctx.fillStyle = '#B8312A'; ctx.fill();
+    ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI * 2); ctx.fillStyle = 'white'; ctx.fill();
+}
+
+// ── SHARE: transparent canvas, IG-story ready ─────────────
+async function shareCompletionCard() {
+    showToast('Creating your card…');
+
+    const W = 420, PAD = 32;
+    const mapH   = 260, statsH = 120, badgeH = 60, footH = 52;
+    const H = mapH + statsH + badgeH + footH;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    // Trail map
+    let coords = null;
+    if (trailCoords && trailCoords.length > 0) coords = trailCoords;
+    else if (trailData && trailData.type === 'LineString' && trailData.coordinates)
+        coords = trailData.coordinates.map(c => [c[1], c[0]]);
+
+    if (coords && coords.length > 1) {
+        let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+        coords.forEach(c => {
+            minLat = Math.min(minLat, c[0]); maxLat = Math.max(maxLat, c[0]);
+            minLng = Math.min(minLng, c[1]); maxLng = Math.max(maxLng, c[1]);
+        });
+        const mp = 36, mW = W - mp * 2, mH = mapH - mp * 2;
+        const latR = maxLat - minLat || 0.001, lngR = maxLng - minLng || 0.001;
+        const scale = Math.min(mW / lngR, mH / latR);
+        const offX = mp + (mW - lngR * scale) / 2;
+        const offY = mp + (mH - latR * scale) / 2;
+        const tx = lng => offX + (lng - minLng) * scale;
+        const ty = lat => offY + mH - (lat - minLat) * scale;
+
+        // Trail line
         ctx.beginPath();
-        ctx.strokeStyle = '#00e5b4';
-        ctx.lineWidth = 3;
-        ctx.lineCap = 'round';
-        
-        for (let i = 0; i < coords.length; i++) {
-            const x = padding + ((coords[i][1] - minLng) / lngRange) * (width - padding * 2);
-            const y = height - (padding + ((coords[i][0] - minLat) / latRange) * (height - padding * 2));
-            
-            if (i === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
+        coords.forEach((c, i) => { i === 0 ? ctx.moveTo(tx(c[1]), ty(c[0])) : ctx.lineTo(tx(c[1]), ty(c[0])); });
+        ctx.strokeStyle = '#100600'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+
+        // Start dot
+        const sx = tx(coords[0][1]), sy = ty(coords[0][0]);
+        ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI*2); ctx.fillStyle = '#1B7045'; ctx.fill();
+        ctx.beginPath(); ctx.arc(sx, sy, 3.5, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
+
+        // End dot
+        const ex = tx(coords[coords.length-1][1]), ey = ty(coords[coords.length-1][0]);
+        ctx.beginPath(); ctx.arc(ex, ey, 8, 0, Math.PI*2); ctx.fillStyle = '#B8312A'; ctx.fill();
+        ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
+
+        // Mountain label
+        ctx.font = '600 10px "DM Sans", sans-serif'; ctx.fillStyle = 'rgba(16,6,0,0.5)';
+        ctx.textAlign = 'left';
+        ctx.fillText('⛰ ' + mountainName, PAD, mapH - 12);
+    }
+
+    // Separator
+    ctx.strokeStyle = 'rgba(16,6,0,0.08)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD, mapH); ctx.lineTo(W - PAD, mapH); ctx.stroke();
+
+    // Stats
+    const sY = mapH + 20;
+    ctx.font = '500 52px "DM Mono", monospace'; ctx.fillStyle = '#100600'; ctx.textAlign = 'left';
+    const distText = document.getElementById('compDist').textContent;
+    ctx.fillText(distText, PAD, sY + 52);
+    const numW = ctx.measureText(distText).width;
+    ctx.font = '500 15px "DM Sans", sans-serif'; ctx.fillStyle = 'rgba(16,6,0,0.4)';
+    ctx.fillText('km', PAD + numW + 6, sY + 50);
+    ctx.font = '600 9px "DM Sans", sans-serif'; ctx.fillStyle = 'rgba(16,6,0,0.3)';
+    ctx.fillText('DISTANCE', PAD, sY + 68);
+
+    const divX = W / 2 + 16;
+    ctx.strokeStyle = 'rgba(16,6,0,0.1)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(divX, sY + 4); ctx.lineTo(divX, sY + 86); ctx.stroke();
+
+    const rX = divX + 22;
+    ctx.font = '500 22px "DM Mono", monospace'; ctx.fillStyle = '#100600';
+    ctx.fillText(document.getElementById('compTime').textContent, rX, sY + 34);
+    ctx.font = '600 9px "DM Sans", sans-serif'; ctx.fillStyle = 'rgba(16,6,0,0.3)';
+    ctx.fillText('DURATION', rX, sY + 48);
+
+    ctx.font = '500 22px "DM Mono", monospace'; ctx.fillStyle = '#100600';
+    ctx.fillText(document.getElementById('compPace').textContent.replace('/km','').trim() + ' /km', rX, sY + 76);
+    ctx.font = '600 9px "DM Sans", sans-serif'; ctx.fillStyle = 'rgba(16,6,0,0.3)';
+    ctx.fillText('AVG PACE', rX, sY + 90);
+
+    // Badge
+    const bY = mapH + statsH;
+    ctx.strokeStyle = 'rgba(16,6,0,0.07)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD, bY); ctx.lineTo(W - PAD, bY); ctx.stroke();
+    ctx.font = '16px serif'; ctx.textAlign = 'left'; ctx.fillText('🏅', PAD, bY + 36);
+    ctx.font = '500 17px "DM Mono", monospace'; ctx.fillStyle = '#C97B1A';
+    ctx.fillText(document.getElementById('compBadgesCount').textContent, PAD + 26, bY + 36);
+    ctx.font = '600 9px "DM Sans", sans-serif'; ctx.fillStyle = 'rgba(201,123,26,0.55)';
+    ctx.fillText('EARNED THIS HIKE', PAD + 26, bY + 51);
+
+    // LAKBAY footer
+    const fY = bY + badgeH + 8;
+    ctx.strokeStyle = 'rgba(16,6,0,0.07)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD, fY); ctx.lineTo(W - PAD, fY); ctx.stroke();
+    ctx.font = '800 13px "DM Sans", sans-serif'; ctx.fillStyle = 'rgba(16,6,0,0.7)'; ctx.textAlign = 'left';
+    ctx.fillText('LAKBAY', PAD, fY + 24);
+    ctx.strokeStyle = 'rgba(16,6,0,0.15)'; ctx.beginPath(); ctx.moveTo(PAD + 60, fY + 12); ctx.lineTo(PAD + 60, fY + 28); ctx.stroke();
+    ctx.font = '400 10px "DM Sans", sans-serif'; ctx.fillStyle = 'rgba(16,6,0,0.35)';
+    ctx.fillText('Trail recorded with Lakbay', PAD + 70, fY + 24);
+
+    // Export
+    canvas.toBlob(async (blob) => {
+        const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        if (mobile && navigator.share && navigator.canShare) {
+            try {
+                const file = new File([blob], 'lakbay_hike.png', { type: 'image/png' });
+                await navigator.share({ title: 'My Lakbay Hike', text: 'I just conquered ' + mountainName + '! ⛰️', files: [file] });
+                showToast('Shared! ✨');
+            } catch(err) {
+                if (err.name !== 'AbortError') await _copyBlob(blob);
             }
+        } else {
+            await _copyBlob(blob);
         }
-        ctx.stroke();
-        
-        // Draw start marker
-        const startX = padding + ((coords[0][1] - minLng) / lngRange) * (width - padding * 2);
-        const startY = height - (padding + ((coords[0][0] - minLat) / latRange) * (height - padding * 2));
-        ctx.fillStyle = '#00e5b4';
-        ctx.beginPath();
-        ctx.arc(startX, startY, 6, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(startX, startY, 3, 0, 2 * Math.PI);
-        ctx.fill();
-        
-        // Draw end marker
-        const endX = padding + ((coords[coords.length-1][1] - minLng) / lngRange) * (width - padding * 2);
-        const endY = height - (padding + ((coords[coords.length-1][0] - minLat) / latRange) * (height - padding * 2));
-        ctx.fillStyle = '#ffd700';
-        ctx.beginPath();
-        ctx.arc(endX, endY, 7, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(endX, endY, 3, 0, 2 * Math.PI);
-        ctx.fill();
-        
-        console.log('Canvas trail drawn!', width, 'x', height);
-    } else {
-        console.log('Canvas dimensions invalid:', width, 'x', height);
-        mapContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: rgba(255,255,255,0.5); font-size: 12px;">🗺️ Trail map</div>';
+    }, 'image/png');
+}
+
+async function _copyBlob(blob) {
+    try {
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        showToast('📸 Copied! Paste into your IG story.');
+    } catch {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.download = 'lakbay_hike.png'; a.href = url; a.click();
+        URL.revokeObjectURL(url);
+        showToast('📸 Saved to downloads!');
     }
 }
-// Share activity function (placeholder - can be extended later)
-function shareActivity() {
-    // Create a shareable message
-    const distance = document.getElementById('compDist').innerText;
-    const duration = document.getElementById('compTime').innerText;
-    const mountain = document.getElementById('compTitle').innerText;
-    
-    const shareText = `${mountain}\n📏 ${distance} hiked\n⏱️ ${duration}\n\nTracked with Lakbay 🏔️`;
-    
-    if (navigator.share) {
-        navigator.share({
-            title: 'My Lakbay Hike',
-            text: shareText,
-            url: window.location.href
-        }).catch(() => {});
-    } else {
-        navigator.clipboard.writeText(shareText);
-        showToast('Stats copied to clipboard!');
-    }
-}
+
 // ── END-TIME NUDGE ────────────────────────────────────────
 function checkEndTimeNudge() {
     if (hikeFinished || nudgeDismissed || nudgeShown) return;

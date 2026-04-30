@@ -88,6 +88,13 @@ if (!empty($mountain_ids)) {
         ");
         $stmt->execute([$booking['id']]);
         $booking['payments'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Calculate if all payments are fully paid
+        $booking['fully_paid'] = true;
+        foreach ($booking['payments'] as $p) {
+            if ($p['registration_paid'] !== 'paid') $booking['fully_paid'] = false;
+            if ($booking['environmental_fee'] > 0 && $p['environmental_paid'] !== 'paid') $booking['fully_paid'] = false;
+        }
     }
 }
 
@@ -123,27 +130,42 @@ $manager_initials = implode('', array_map(function($word) {
     return strtoupper($word[0]);
 }, explode(' ', $manager_name)));
 
-// Calculate stats
-$total_bookings = count($bookings);
-$total_paid_reg = 0;
-$total_reg = 0;
-$total_paid_env = 0;
-$total_env = 0;
+// Calculate stats (only for active/unpaid bookings)
+$active_bookings = array_filter($bookings, function($b) { return !$b['fully_paid']; });
+$total_active_bookings = count($active_bookings);
 $total_hikers = 0;
+$total_unpaid_reg = 0;
+$total_unpaid_env = 0;
+$total_fees_unpaid = 0;
 
 foreach ($bookings as $booking) {
-    $total_hikers += $booking['number_of_hikers'];
     foreach ($booking['payments'] as $payment) {
-        $total_reg++;
-        if ($payment['registration_paid'] === 'paid') $total_paid_reg++;
-        
-        if ($booking['environmental_fee'] > 0) {
-            $total_env++;
-            if ($payment['environmental_paid'] === 'paid') $total_paid_env++;
+        if (!$booking['fully_paid']) {
+            $total_hikers++;
+            if ($payment['registration_paid'] !== 'paid') {
+                $total_unpaid_reg++;
+                $total_fees_unpaid += $payment['registration_amount'];
+            }
+            if ($booking['environmental_fee'] > 0 && $payment['environmental_paid'] !== 'paid') {
+                $total_unpaid_env++;
+                $total_fees_unpaid += $payment['environmental_amount'];
+            }
         }
     }
 }
-$collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $total_paid_env) / ($total_reg + $total_env) * 100) : 0;
+
+// Calculate completed stats
+$completed_bookings = array_filter($bookings, function($b) { return $b['fully_paid']; });
+$total_completed_bookings = count($completed_bookings);
+$total_collected = 0;
+foreach ($bookings as $booking) {
+    if ($booking['fully_paid']) {
+        foreach ($booking['payments'] as $payment) {
+            if ($payment['registration_paid'] === 'paid') $total_collected += $payment['registration_amount'];
+            if ($booking['environmental_fee'] > 0 && $payment['environmental_paid'] === 'paid') $total_collected += $payment['environmental_amount'];
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -152,7 +174,11 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>LAKBAY Manager — Payments</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
+
 <link rel="stylesheet" href="manager.css">
+<script>
+</script>
 <style>
   /* Sidebar - Desktop */
 .sidebar {
@@ -256,18 +282,18 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 .sidebar-footer-name { font-size: 12px; font-weight: 700; color: var(--ink); }
 .sidebar-footer-role { font-size: 10px; color: rgba(16,6,0,0.5); }
 
-/* Page specific styles */
+/* Page specific styles - Mobile Responsive */
 .payment-stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
     margin-bottom: 24px;
 }
 .stat-card {
     background: var(--white);
     border-radius: var(--r);
     border: 1px solid var(--border);
-    padding: 20px;
+    padding: 16px;
     transition: all 0.2s;
 }
 .stat-card:hover {
@@ -276,56 +302,61 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 }
 .stat-value {
     font-family: 'Playfair Display', serif;
-    font-size: 32px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--ink);
+    word-break: break-word;
 }
 .stat-label {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--ink3);
-    margin-top: 8px;
+    margin-top: 6px;
+    line-height: 1.3;
 }
 .booking-group {
     background: var(--white);
     border-radius: var(--r);
     border: 1px solid var(--border);
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     overflow: hidden;
 }
 .booking-header {
     background: linear-gradient(135deg, var(--ink) 0%, var(--ink2) 100%);
-    padding: 16px 20px;
+    padding: 14px 16px;
     color: white;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
 }
 .booking-header-left {
     flex: 1;
+    min-width: 150px;
 }
 .booking-id {
     font-family: 'DM Mono', monospace;
-    font-size: 13px;
+    font-size: 11px;
     background: rgba(255,255,255,0.15);
-    padding: 4px 10px;
+    padding: 3px 8px;
     border-radius: 6px;
     display: inline-block;
 }
 .booking-mountain {
     font-weight: 700;
-    margin-top: 6px;
+    margin-top: 5px;
+    font-size: 13px;
 }
 .booking-meta {
-    font-size: 11px;
+    font-size: 10px;
     opacity: 0.7;
-    margin-top: 4px;
+    margin-top: 3px;
+    line-height: 1.3;
 }
 .progress-bar {
-    width: 120px;
-    height: 6px;
+    width: 80px;
+    height: 5px;
     background: rgba(255,255,255,0.2);
     border-radius: 3px;
     overflow: hidden;
@@ -334,6 +365,17 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
     height: 100%;
     background: var(--gold);
     transition: width 0.3s;
+}
+.bgh-pct {
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 35px;
+}
+.bgh-chevron {
+    transition: transform 0.2s;
+}
+.bgh-chevron.open {
+    transform: rotate(180deg);
 }
 .booking-body {
     padding: 0;
@@ -347,9 +389,9 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 .payment-row {
     display: flex;
     align-items: center;
-    padding: 16px 20px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--border);
-    gap: 16px;
+    gap: 12px;
     flex-wrap: wrap;
 }
 .payment-row:last-child {
@@ -358,12 +400,13 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 .hiker-info {
     display: flex;
     align-items: center;
-    gap: 12px;
-    min-width: 180px;
+    gap: 10px;
+    min-width: 140px;
+    flex: 1;
 }
 .hiker-avatar {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--ink), var(--ink2));
     color: var(--gold);
@@ -371,31 +414,33 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
     align-items: center;
     justify-content: center;
     font-weight: 700;
+    font-size: 12px;
+    flex-shrink: 0;
 }
 .fee-section {
     flex: 1;
-    min-width: 200px;
+    min-width: 150px;
 }
 .fee-label {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
     color: var(--ink3);
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 .fee-amount {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--ink);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 .fee-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
+    gap: 5px;
+    padding: 5px 12px;
     border-radius: 20px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
@@ -419,27 +464,31 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 .bulk-bar {
     background: var(--ink);
     color: white;
-    padding: 12px 20px;
+    padding: 12px 16px;
     border-radius: 12px;
     display: none;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 20px;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
+    position: sticky;
+    top: 10px;
+    z-index: 100;
 }
 .bulk-bar.show {
     display: flex;
 }
 .bulk-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
+    flex-wrap: wrap;
 }
 .bulk-btn {
-    padding: 6px 16px;
+    padding: 5px 12px;
     border-radius: 20px;
     border: none;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
@@ -461,15 +510,16 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
     gap: 8px;
     margin-bottom: 20px;
     flex-wrap: wrap;
+    align-items: center;
 }
 .filter-tab {
-    padding: 8px 20px;
+    padding: 6px 16px;
     border-radius: 30px;
     background: var(--white);
     border: 1px solid var(--border);
     cursor: pointer;
     transition: all 0.2s;
-    font-size: 13px;
+    font-size: 12px;
 }
 .filter-tab.active {
     background: var(--ink);
@@ -478,18 +528,17 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 }
 .mtn-tabs {
     display: flex;
-    gap: 8px;
-    margin-bottom: 20px;
+    gap: 6px;
     flex-wrap: wrap;
 }
 .mtn-tab {
-    padding: 8px 20px;
+    padding: 6px 14px;
     border-radius: 30px;
     background: var(--white);
     border: 1px solid var(--border);
     cursor: pointer;
     transition: all 0.2s;
-    font-size: 13px;
+    font-size: 12px;
 }
 .mtn-tab.active {
     background: var(--ink);
@@ -498,16 +547,18 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 }
 .toast {
     position: fixed;
-    bottom: 30px;
-    right: 30px;
+    bottom: 20px;
+    right: 20px;
+    left: 20px;
     background: var(--ink);
     color: white;
-    padding: 12px 24px;
+    padding: 12px 20px;
     border-radius: 30px;
     font-size: 13px;
     z-index: 1000;
     opacity: 0;
     transition: opacity 0.3s;
+    text-align: center;
 }
 .toast.show {
     opacity: 1;
@@ -528,6 +579,77 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 .nav-item.logout:hover svg {
   stroke: #b91c1c;
 }
+.badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+}
+.badge.status-paid {
+    background: var(--green-bg);
+    color: var(--green);
+}
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+}
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+.btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.btn-primary {
+    background: var(--gold);
+    color: var(--ink);
+}
+.btn-primary:hover {
+    background: #c9a83c;
+}
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 11px;
+}
+.completed-badge {
+    background: var(--green-bg);
+    color: var(--green);
+    margin-left: 8px;
+}
+
+/* Tablet and up */
+@media (min-width: 768px) {
+    .payment-stats-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+    }
+    .stat-value {
+        font-size: 32px;
+    }
+    .stat-label {
+        font-size: 12px;
+    }
+    .payment-row {
+        flex-wrap: nowrap;
+        padding: 16px 20px;
+    }
+    .hiker-info {
+        min-width: 180px;
+    }
+    .fee-section {
+        min-width: 200px;
+    }
+    .toast {
+        left: auto;
+        right: 30px;
+        bottom: 30px;
+    }
+}
 </style>
 </head>
 <body>
@@ -540,7 +662,7 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 <div class="main-area" id="mainArea">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="sidebar-toggle" onclick="toggleSidebar()">
+      <button class="sidebar-toggle">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>
@@ -557,20 +679,20 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
     <!-- Stats Cards -->
     <div class="payment-stats-grid">
       <div class="stat-card">
-        <div class="stat-value"><?= $total_bookings ?></div>
-        <div class="stat-label">Total Bookings</div>
+        <div class="stat-value"><?= $total_active_bookings ?></div>
+        <div class="stat-label">Pending Bookings</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value"><?= $total_completed_bookings ?></div>
+        <div class="stat-label">Completed Bookings</div>
       </div>
       <div class="stat-card">
         <div class="stat-value"><?= $total_hikers ?></div>
-        <div class="stat-label">Total Hikers</div>
+        <div class="stat-label">Unpaid Hikers</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value"><?= $collection_rate ?>%</div>
-        <div class="stat-label">Collection Rate</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">₱<?= number_format($total_paid_reg + $total_paid_env, 2) ?></div>
-        <div class="stat-label">Fees Collected</div>
+        <div class="stat-value">₱<?= number_format($total_fees_unpaid, 0) ?></div>
+        <div class="stat-label">Pending Collection</div>
       </div>
     </div>
 
@@ -582,10 +704,9 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
         <div class="filter-tab" data-mtn="<?= $mtn['id'] ?>" onclick="filterByMountain(<?= $mtn['id'] ?>)"><?= htmlspecialchars($mtn['name']) ?></div>
         <?php endforeach; ?>
       </div>
-      <div class="filter-tabs" style="margin-left: auto;">
-        <div class="filter-tab active" data-status="all" onclick="filterByStatus('all')">All</div>
-        <div class="filter-tab" data-status="unpaid" onclick="filterByStatus('unpaid')">Unpaid Only</div>
-        <div class="filter-tab" data-status="paid" onclick="filterByStatus('paid')">Paid Only</div>
+      <div style="margin-left: auto;">
+        <div class="filter-tab active" data-status="active" onclick="filterByStatus('active')">Active</div>
+        <div class="filter-tab" data-status="completed" onclick="filterByStatus('completed')">Completed</div>
       </div>
     </div>
 
@@ -601,9 +722,13 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
       </div>
     </div>
 
-    <!-- Bookings List -->
-    <div id="bookingsList">
-      <?php foreach ($bookings as $booking): 
+    <!-- Active Bookings List -->
+    <div id="activeBookingsList">
+      <?php 
+      $has_active = false;
+      foreach ($bookings as $booking): 
+        if ($booking['fully_paid']) continue; // Skip completed bookings for active list
+        $has_active = true;
         $booking_progress = 0;
         $booking_total = 0;
         $booking_paid = 0;
@@ -618,7 +743,7 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
         }
         $booking_progress = $booking_total > 0 ? round($booking_paid / $booking_total * 100) : 0;
       ?>
-      <div class="booking-group" data-booking-id="<?= $booking['id'] ?>" data-mountain-id="<?= $booking['mountain_id'] ?>">
+      <div class="booking-group" data-booking-id="<?= $booking['id'] ?>" data-mountain-id="<?= $booking['mountain_id'] ?>" data-status="active">
         <div class="booking-header" onclick="toggleBooking(this)">
           <div class="booking-header-left">
             <div class="booking-id"><?= htmlspecialchars($booking['booking_number']) ?></div>
@@ -627,8 +752,7 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
               <?= fmtDate($booking['hike_date']) ?> · 
               <?= fmtTime($booking['start_time']) ?> · 
               <?= getHikeTypeLabel($booking['hike_type']) ?> · 
-              <?= $booking['number_of_hikers'] ?> hiker(s) · 
-              Guide: <?= htmlspecialchars($booking['guide_name'] ?? 'Unassigned') ?>
+              <?= $booking['number_of_hikers'] ?> hiker(s)
             </div>
           </div>
           <div>
@@ -655,8 +779,8 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
             <div class="hiker-info">
               <div class="hiker-avatar"><?= substr($hiker_name, 0, 2) ?></div>
               <div>
-                <div style="font-weight: 600;"><?= htmlspecialchars($hiker_name) ?></div>
-                <div style="font-size: 11px; color: var(--ink3);"><?= $payment['source_type'] === 'user' ? 'Booker' : 'Additional Hiker' ?></div>
+                <div style="font-weight: 600; font-size: 13px;"><?= htmlspecialchars($hiker_name) ?></div>
+                <div style="font-size: 10px; color: var(--ink3);"><?= $payment['source_type'] === 'user' ? 'Booker' : 'Additional Hiker' ?></div>
               </div>
             </div>
             <div class="fee-section">
@@ -689,11 +813,80 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
         </div>
       </div>
       <?php endforeach; ?>
-      <?php if (empty($bookings)): ?>
-      <div class="empty-state" style="text-align: center; padding: 60px;">
-        <div class="empty-state-icon" style="font-size: 48px; margin-bottom: 16px;">💰</div>
-        <h3>No payments to display</h3>
-        <p>No active bookings found for your mountains.</p>
+      <?php if (!$has_active): ?>
+      <div class="empty-state">
+        <div class="empty-state-icon">✅</div>
+        <h3>No pending payments</h3>
+        <p>All bookings are fully paid. Check the Completed tab.</p>
+      </div>
+      <?php endif; ?>
+    </div>
+
+    <!-- Completed Bookings List (hidden by default) -->
+    <div id="completedBookingsList" style="display: none;">
+      <?php 
+      $has_completed = false;
+      foreach ($bookings as $booking): 
+        if (!$booking['fully_paid']) continue; // Skip active bookings
+        $has_completed = true;
+      ?>
+      <div class="booking-group" data-booking-id="<?= $booking['id'] ?>" data-mountain-id="<?= $booking['mountain_id'] ?>" data-status="completed">
+        <div class="booking-header" onclick="toggleBooking(this)">
+          <div class="booking-header-left">
+            <div class="booking-id"><?= htmlspecialchars($booking['booking_number']) ?></div>
+            <div class="booking-mountain"><?= htmlspecialchars($booking['mountain_name']) ?></div>
+            <div class="booking-meta">
+              <?= fmtDate($booking['hike_date']) ?> · 
+              <?= fmtTime($booking['start_time']) ?> · 
+              <?= getHikeTypeLabel($booking['hike_type']) ?> · 
+              <?= $booking['number_of_hikers'] ?> hiker(s)
+            </div>
+          </div>
+          <div>
+            <span class="badge status-paid">✓ COMPLETED</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: 100%"></div>
+          </div>
+          <div class="bgh-pct">100%</div>
+          <div class="bgh-chevron">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
+        <div class="booking-body">
+          <?php foreach ($booking['payments'] as $payment): 
+            $hiker_name = $payment['hiker_name'] ?? 'Unknown Hiker';
+          ?>
+          <div class="payment-row" data-payment-id="<?= $payment['id'] ?>">
+            <div class="hiker-info">
+              <div class="hiker-avatar"><?= substr($hiker_name, 0, 2) ?></div>
+              <div>
+                <div style="font-weight: 600; font-size: 13px;"><?= htmlspecialchars($hiker_name) ?></div>
+                <div style="font-size: 10px; color: var(--ink3);"><?= $payment['source_type'] === 'user' ? 'Booker' : 'Additional Hiker' ?></div>
+              </div>
+            </div>
+            <div class="fee-section">
+              <div class="fee-label">Registration Fee</div>
+              <div class="fee-amount"><?= fmtMoney($payment['registration_amount']) ?></div>
+              <span class="fee-badge paid">✓ Paid</span>
+            </div>
+            <?php if ($booking['environmental_fee'] > 0): ?>
+            <div class="fee-section">
+              <div class="fee-label">Environmental Fee</div>
+              <div class="fee-amount"><?= fmtMoney($payment['environmental_amount']) ?></div>
+              <span class="fee-badge paid">✓ Paid</span>
+            </div>
+            <?php endif; ?>
+          </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+      <?php endforeach; ?>
+      <?php if (!$has_completed): ?>
+      <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <h3>No completed bookings yet</h3>
+        <p>Completed bookings will appear here.</p>
       </div>
       <?php endif; ?>
     </div>
@@ -703,9 +896,9 @@ $collection_rate = ($total_reg + $total_env) > 0 ? round(($total_paid_reg + $tot
 <div class="toast" id="toast"></div>
 
 <script>
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('collapsed');
-  document.getElementById('mainArea').classList.toggle('expanded');
+
+function toggleMobileSidebar() {
+  document.getElementById('sidebar').classList.toggle('mobile-open');
 }
 
 function updateClock() {
@@ -723,48 +916,53 @@ function toggleBooking(header) {
   if (chevron) chevron.classList.toggle('open');
 }
 
-function filterByMountain(mountainId) {
-  document.querySelectorAll('.mtn-tab').forEach(tab => tab.classList.remove('active'));
-  document.querySelector(`.mtn-tab[data-mtn="${mountainId}"]`)?.classList.add('active');
-  
-  const bookings = document.querySelectorAll('.booking-group');
-  bookings.forEach(booking => {
-    const bookingMtn = parseInt(booking.dataset.mountainId);
-    if (mountainId === 'all' || bookingMtn === mountainId) {
-      booking.style.display = '';
-    } else {
-      booking.style.display = 'none';
-    }
-  });
-}
-
-let currentStatusFilter = 'all';
+let currentStatusFilter = 'active';
 
 function filterByStatus(status) {
   currentStatusFilter = status;
-  document.querySelectorAll('.filter-tabs .filter-tab').forEach(tab => {
+  const activeList = document.getElementById('activeBookingsList');
+  const completedList = document.getElementById('completedBookingsList');
+  const filterTabs = document.querySelectorAll('.filter-tab[data-status]');
+  
+  filterTabs.forEach(tab => {
     if (tab.getAttribute('data-status') === status) {
       tab.classList.add('active');
-    } else if (tab.getAttribute('data-status')) {
+    } else {
       tab.classList.remove('active');
     }
   });
   
-  const paymentRows = document.querySelectorAll('.payment-row:not(:last-child)');
-  paymentRows.forEach(row => {
-    const regBadge = row.querySelector('.fee-section:first-child .fee-badge');
-    const envBadge = row.querySelector('.fee-section:last-child .fee-badge');
-    
-    if (status === 'all') {
-      row.style.display = '';
-    } else if (status === 'unpaid') {
-      const regUnpaid = regBadge && regBadge.classList.contains('unpaid');
-      const envUnpaid = envBadge && envBadge.classList.contains('unpaid');
-      row.style.display = (regUnpaid || envUnpaid) ? '' : 'none';
-    } else if (status === 'paid') {
-      const regPaid = regBadge && regBadge.classList.contains('paid');
-      const envPaid = envBadge && envBadge.classList.contains('paid');
-      row.style.display = (regPaid && envPaid) ? '' : 'none';
+  if (status === 'active') {
+    activeList.style.display = 'block';
+    completedList.style.display = 'none';
+    document.getElementById('bulkBar').classList.remove('show');
+    clearSelection();
+  } else {
+    activeList.style.display = 'none';
+    completedList.style.display = 'block';
+    document.getElementById('bulkBar').classList.remove('show');
+    clearSelection();
+  }
+}
+
+function filterByMountain(mountainId) {
+  document.querySelectorAll('.mtn-tab').forEach(tab => tab.classList.remove('active'));
+  const selectedTab = document.querySelector(`.mtn-tab[data-mtn="${mountainId}"]`);
+  if (selectedTab) selectedTab.classList.add('active');
+  
+  // Filter both active and completed lists
+  ['activeBookingsList', 'completedBookingsList'].forEach(listId => {
+    const container = document.getElementById(listId);
+    if (container) {
+      const bookings = container.querySelectorAll('.booking-group');
+      bookings.forEach(booking => {
+        const bookingMtn = parseInt(booking.dataset.mountainId);
+        if (mountainId === 'all' || bookingMtn === mountainId) {
+          booking.style.display = '';
+        } else {
+          booking.style.display = 'none';
+        }
+      });
     }
   });
 }
@@ -773,7 +971,13 @@ function filterByStatus(status) {
 let selectedPayments = new Set();
 
 function updateBulkBar() {
-  const checkboxes = document.querySelectorAll('.hiker-checkbox:checked');
+  // Only show bulk bar if we're in active view
+  if (currentStatusFilter !== 'active') {
+    document.getElementById('bulkBar').classList.remove('show');
+    return;
+  }
+  
+  const checkboxes = document.querySelectorAll('#activeBookingsList .hiker-checkbox:checked');
   selectedPayments.clear();
   checkboxes.forEach(cb => {
     selectedPayments.add(parseInt(cb.dataset.paymentId));
@@ -791,7 +995,7 @@ function updateBulkBar() {
 }
 
 function clearSelection() {
-  document.querySelectorAll('.hiker-checkbox').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#activeBookingsList .hiker-checkbox').forEach(cb => cb.checked = false);
   selectedPayments.clear();
   updateBulkBar();
 }
@@ -815,7 +1019,7 @@ function bulkUpdate(feeType, status) {
   .then(data => {
     if (data.success) {
       showToast(`${selectedPayments.size} hiker(s) updated successfully!`);
-      location.reload();
+      setTimeout(() => location.reload(), 1500);
     } else {
       showToast('Error: ' + (data.message || 'Update failed'));
     }
@@ -832,35 +1036,22 @@ function updatePayment(paymentId, feeType, currentStatus) {
   else if (currentStatus === 'paid') newStatus = 'waived';
   else newStatus = 'unpaid';
   
-  console.log('Sending request to: update_payment.php');
-  console.log('Data:', { payment_id: paymentId, fee_type: feeType, status: newStatus });
-  
   fetch('update_payment.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ payment_id: paymentId, fee_type: feeType, status: newStatus })
   })
-  .then(res => {
-    console.log('Response status:', res.status);
-    console.log('Response headers:', res.headers);
-    return res.text(); // Get raw text first to debug
-  })
-  .then(text => {
-    console.log('Raw response:', text);
-    try {
-      const data = JSON.parse(text);
-      if (data.success) {
-        location.reload();
-      } else {
-        showToast('Error: ' + (data.error || 'Update failed'));
-      }
-    } catch (e) {
-      console.error('JSON parse error:', e);
-      showToast('Server error - check console');
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      showToast('Payment updated!');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast('Error: ' + (data.error || 'Update failed'));
     }
   })
   .catch(err => {
-    console.error('Fetch error:', err);
+    console.error(err);
     showToast('Network error');
   });
 }
@@ -877,7 +1068,7 @@ function markAllPaidForBooking(bookingId) {
   .then(data => {
     if (data.success) {
       showToast('All fees for this booking marked as paid!');
-      location.reload();
+      setTimeout(() => location.reload(), 1000);
     } else {
       showToast('Error: ' + (data.message || 'Update failed'));
     }
@@ -906,5 +1097,6 @@ if (mtnParam) {
   filterByMountain(parseInt(mtnParam));
 }
 </script>
+
 </body>
 </html>

@@ -444,16 +444,28 @@ $stmt->execute([
 $bookingHikerIds = [];
 
 // Insert main booker as first hiker (always a registered user)
-$stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
-$stmt->execute([$dbBookingId, $bookingData['hikers'][0]]);
+$stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name, age, emergency_contact_name, emergency_contact_number) VALUES (?, ?, ?, ?, ?)");
+$firstHiker = $bookingData['hikers'][0];
+$stmt->execute([
+    $dbBookingId, 
+    is_array($firstHiker) ? $firstHiker['name'] : $firstHiker,
+    is_array($firstHiker) ? ($firstHiker['age'] ?? null) : null,
+    is_array($firstHiker) ? ($firstHiker['emergency_contact_name'] ?? null) : null,
+    is_array($firstHiker) ? ($firstHiker['emergency_contact_number'] ?? null) : null
+]);
 $bookingHikerIds[0] = $pdo->lastInsertId();
 
 // Insert additional hikers
 for ($i = 1; $i < count($bookingData['hikers']); $i++) {
-    $hikerName = $bookingData['hikers'][$i];
+    $hiker = $bookingData['hikers'][$i];
+    $hikerName = is_array($hiker) ? $hiker['name'] : $hiker;
+    $hikerAge = is_array($hiker) ? ($hiker['age'] ?? null) : null;
+    $hikerEcName = is_array($hiker) ? ($hiker['emergency_contact_name'] ?? null) : null;
+    $hikerEcNumber = is_array($hiker) ? ($hiker['emergency_contact_number'] ?? null) : null;
+    
     if (!empty($hikerName)) {
-        $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name) VALUES (?, ?)");
-        $stmt->execute([$dbBookingId, $hikerName]);
+        $stmt = $pdo->prepare("INSERT INTO booking_hikers (booking_id, hiker_name, age, emergency_contact_name, emergency_contact_number) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([$dbBookingId, $hikerName, $hikerAge, $hikerEcName, $hikerEcNumber]);
         $bookingHikerIds[$i] = $pdo->lastInsertId();
     }
 }
@@ -2940,13 +2952,18 @@ function openBookingFlow() {
     type: 'day',
     pax: 1,
     solo: true,
-    hikers: [loggedInUserName],
+    hikers: [{ 
+        name: loggedInUserName, 
+        age: null, 
+        emergency_contact_name: '', 
+        emergency_contact_number: '' 
+    }],
     bookerName: loggedInUserName,
     guide: null,
-    date: todayStr,  // Force today's date
+    date: todayStr,
     time: '',
     camping: false
-  };
+};
   currentStep = 0;
   flowMode = null;
   foundHike = null;
@@ -3183,19 +3200,27 @@ function renderStep(n) {
         </div>
       </div>
       <div id="groupSection" style="display:${flowState.solo?'none':'block'};">
-        <div class="hikers-section">
-          <div class="inp-label">Add Hikers</div>
-          <div class="hiker-input-row">
-            <input type="text" id="hikerFirstName" placeholder="First name" maxlength="50">
-            <input type="text" id="hikerLastName" placeholder="Last name" maxlength="50">
-            <button class="btn btn-primary btn-sm" onclick="addHiker()">
-              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add
-            </button>
-          </div>
-          <div id="hikerListContainer" class="hiker-list"></div>
-          <div class="hiker-count-display" id="hikerCount">${flowState.hikers.length}/12 hikers</div>
+    <div class="hikers-section">
+        <div class="inp-label">Add Hikers</div>
+        <div class="hiker-input-row" style="flex-wrap:wrap;">
+            <input type="text" id="hikerFirstName" placeholder="First name" maxlength="50" style="flex:1; min-width:100px;">
+            <input type="text" id="hikerLastName" placeholder="Last name" maxlength="50" style="flex:1; min-width:100px;">
         </div>
-      </div>
+        <div class="hiker-input-row" style="flex-wrap:wrap;">
+            <input type="text" id="hikerEmergencyName" placeholder="Emergency contact name" maxlength="100" style="flex:1; min-width:150px;">
+            <input type="tel" id="hikerEmergencyNumber" placeholder="Emergency phone (+63...)" maxlength="15" style="flex:1; min-width:130px;">
+            <button class="btn btn-primary btn-sm" onclick="addHiker()">
+                <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add
+            </button>
+        </div>
+        <div id="hikerListContainer" class="hiker-list"></div>
+        <div class="hiker-count-display" id="hikerCount">${flowState.hikers.length}/12 hikers</div>
+        <div class="info-note" style="margin-top:8px; font-size:10px;">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Emergency contact info required for all hikers for safety purposes.
+        </div>
+    </div>
+</div>
       ${flowState.type==='overnight'?`
       <div style="margin-bottom:16px;">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;background:var(--sky);border-radius:10px;border:1.5px solid ${flowState.camping?'var(--forest)':'transparent'};">
@@ -3563,43 +3588,87 @@ function saveStep2Temp() {
   if(cc) flowState.camping = cc.checked;
 }
 function updateHikersUI() {
-  const c = document.getElementById('hikerListContainer'); if(!c) return;
-  c.innerHTML = flowState.hikers.map((h,i)=>`
-    <div class="hiker-list-item ${i===0?'booker':''}">
-      <div class="hiker-info">
-        <div class="hiker-avatar">${h.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-        <div>
-          <div class="hiker-name">${h}</div>
-          <div class="hiker-tag">${i===0?'Booking organizer':('Hiker '+(i+1))}</div>
+    const c = document.getElementById('hikerListContainer'); 
+    if(!c) return;
+    
+    c.innerHTML = flowState.hikers.map((h, i) => {
+        // Handle both string and object formats
+        const displayName = typeof h === 'string' ? h : (h.name || '');
+        const age = typeof h === 'object' ? (h.age || '') : '';
+        const ecName = typeof h === 'object' ? (h.emergency_contact_name || '') : '';
+        const ecNumber = typeof h === 'object' ? (h.emergency_contact_number || '') : '';
+        
+        return `
+        <div class="hiker-list-item ${i===0?'booker':''}">
+            <div class="hiker-info">
+                <div class="hiker-avatar">${displayName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
+                <div>
+                    <div class="hiker-name">${escapeHtml(displayName)}</div>
+                    <div class="hiker-tag">${i===0?'Booking organizer':('Hiker '+(i+1))}</div>
+                    ${ecName ? `<div class="hiker-tag">📞 ${escapeHtml(ecName)} (${escapeHtml(ecNumber)})</div>` : ''}
+                </div>
+            </div>
+            ${i>0 ? `
+            <div class="hiker-actions">
+                <button class="hiker-action-btn edit" onclick="editHikerInline(${i})" title="Edit">
+                    <svg viewBox="0 0 24 24"><path d="M17 3l4 4-7 7H10v-4l7-7z"/><path d="M4 20h16"/></svg>
+                </button>
+                <button class="hiker-action-btn remove" onclick="removeHiker(${i})" title="Remove">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            ` : ''}
         </div>
-      </div>
-      ${i>0?`<div class="hiker-actions">
-        <button class="hiker-action-btn edit" onclick="editHikerInline(${i})" title="Edit">
-          <svg viewBox="0 0 24 24"><path d="M17 3l4 4-7 7H10v-4l7-7z"/><path d="M4 20h16"/></svg>
-        </button>
-        <button class="hiker-action-btn remove" onclick="removeHiker(${i})" title="Remove">
-          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>`:''}
-    </div>
-    <div class="hiker-edit-inline" id="hikeredit${i}">
-      <input type="text" id="hikerEditVal${i}" value="${h}" placeholder="Full name">
-      <button class="save-edit" onclick="saveHikerEdit(${i})">Save</button>
-      <button class="save-edit" style="background:var(--sky);color:var(--stone);" onclick="document.getElementById('hikeredit${i}').classList.remove('visible')">Cancel</button>
-    </div>`).join('');
-  const cd = document.getElementById('hikerCount');
-  if(cd) cd.textContent = `${flowState.hikers.length}/12 hikers`;
+        <div class="hiker-edit-inline" id="hikeredit${i}">
+            <input type="text" id="hikerEditName${i}" value="${escapeHtml(displayName)}" placeholder="Full name">
+            <input type="text" id="hikerEditEcName${i}" value="${escapeHtml(ecName)}" placeholder="Emergency contact name">
+            <input type="tel" id="hikerEditEcNumber${i}" value="${escapeHtml(ecNumber)}" placeholder="Emergency phone">
+            <button class="save-edit" onclick="saveHikerEdit(${i})">Save</button>
+            <button class="save-edit" style="background:var(--sky);color:var(--stone);" onclick="document.getElementById('hikeredit${i}').classList.remove('visible')">Cancel</button>
+        </div>`;
+    }).join('');
+    
+    const cd = document.getElementById('hikerCount');
+    if(cd) cd.textContent = `${flowState.hikers.length}/12 hikers`;
 }
+
+// Helper function to escape HTML
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
 function addHiker() {
-  const fn = document.getElementById('hikerFirstName')?.value.trim();
-  const ln = document.getElementById('hikerLastName')?.value.trim();
-  if(!fn) { showToast('Please enter a first name'); return; }
-  if(flowState.hikers.length>=12) { showToast('Maximum 12 hikers'); return; }
-  flowState.hikers.push(`${fn} ${ln}`.trim());
-  flowState.pax = flowState.hikers.length;
-  document.getElementById('hikerFirstName').value='';
-  document.getElementById('hikerLastName').value='';
-  updateHikersUI();
+    const fn = document.getElementById('hikerFirstName')?.value.trim();
+    const ln = document.getElementById('hikerLastName')?.value.trim();
+    const ecName = document.getElementById('hikerEmergencyName')?.value.trim();
+    const ecNumber = document.getElementById('hikerEmergencyNumber')?.value.trim();
+    
+    if(!fn) { showToast('Please enter a first name'); return; }
+    if(!ecName) { showToast('Please enter emergency contact name'); return; }
+    if(!ecNumber) { showToast('Please enter emergency contact number'); return; }
+    if(!ecNumber.match(/^\+?[0-9]{10,13}$/)) { showToast('Please enter a valid phone number (10-13 digits)'); return; }
+    
+    if(flowState.hikers.length >= 12) { showToast('Maximum 12 hikers'); return; }
+    
+    const fullName = `${fn} ${ln}`.trim();
+    flowState.hikers.push({
+        name: fullName,
+        emergency_contact_name: ecName,
+        emergency_contact_number: ecNumber
+    });
+    flowState.pax = flowState.hikers.length;
+    
+    document.getElementById('hikerFirstName').value = '';
+    document.getElementById('hikerLastName').value = '';
+    document.getElementById('hikerEmergencyName').value = '';
+    document.getElementById('hikerEmergencyNumber').value = '';
+    updateHikersUI();
 }
 function removeHiker(i) {
   if(i===0) return;
@@ -3607,16 +3676,27 @@ function removeHiker(i) {
   flowState.pax = flowState.hikers.length;
   updateHikersUI();
 }
+// Updated editHikerInline function
 function editHikerInline(i) {
-  document.querySelectorAll('.hiker-edit-inline').forEach(el=>el.classList.remove('visible'));
-  const el = document.getElementById('hikeredit'+i);
-  if(el) el.classList.add('visible');
+    document.querySelectorAll('.hiker-edit-inline').forEach(el=>el.classList.remove('visible'));
+    const el = document.getElementById('hikeredit'+i);
+    if(el) el.classList.add('visible');
 }
 function saveHikerEdit(i) {
-  const val = document.getElementById('hikerEditVal'+i)?.value.trim();
-  if(!val) { showToast('Name cannot be empty'); return; }
-  flowState.hikers[i] = val;
-  updateHikersUI();
+    const nameVal = document.getElementById('hikerEditName'+i)?.value.trim();
+    const ecNameVal = document.getElementById('hikerEditEcName'+i)?.value.trim();
+    const ecNumberVal = document.getElementById('hikerEditEcNumber'+i)?.value.trim();
+    
+    if(!nameVal) { showToast('Name cannot be empty'); return; }
+    if(!ecNameVal) { showToast('Emergency contact name cannot be empty'); return; }
+    if(!ecNumberVal) { showToast('Emergency contact number cannot be empty'); return; }
+    
+    flowState.hikers[i] = {
+        name: nameVal,
+        emergency_contact_name: ecNameVal,
+        emergency_contact_number: ecNumberVal
+    };
+    updateHikersUI();
 }
 function selectGuide(id) {
     flowState.guide = guides.find(g => g.id === id);
@@ -4736,15 +4816,22 @@ function createBooking() {
     const campF = (isON && flowState.camping && f.campFee) ? f.campFee * pax : 0;
     const total = regTotal + envTotal + guideFee + campF;
     const downpaymentAmount = Math.max(200, Math.round(guideFee * 0.2));
-   const nb = {
+  const hikersForDb = flowState.hikers.map(h => ({
+    name: typeof h === 'string' ? h : h.name,
+    age: typeof h === 'object' ? (h.age || null) : null,
+    emergency_contact_name: typeof h === 'object' ? h.emergency_contact_name : null,
+    emergency_contact_number: typeof h === 'object' ? h.emergency_contact_number : null
+}));
+
+const nb = {
     mountainId: m.id, mountain: m.name, date: flowState.date,
     time: flowState.time || '08:00', type: flowState.type, status: 'pending',
     guideId: flowState.guide.id, guideName: flowState.guide.name,
     guideInitials: flowState.guide.initials, pax,
-    hikers: [...flowState.hikers], totalFee: total,
+    hikers: hikersForDb,  // Store the full object array
+    totalFee: total,
     createdAt: Date.now(), nudges: 0, lastNudge: 0,
     camping: flowState.camping || false, notes: '',
-    // NEW DOWNPAYMENT FIELDS
     downpaymentAmount: downpaymentAmount,
     downpaymentDeadline: null,
     downpaymentStatus: 'unpaid'

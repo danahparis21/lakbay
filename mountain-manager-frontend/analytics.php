@@ -242,6 +242,10 @@ function fmtMoney($amount) {
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>LAKBAY Manager — Analytics</title>
 <link rel="stylesheet" href="manager.css">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
+
+<script>
+</script>
 <style>
 /* Analytics page specific styles only - NO sidebar styles */
 
@@ -357,7 +361,7 @@ function fmtMoney($amount) {
 <div class="main-area" id="mainArea">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="sidebar-toggle" onclick="toggleSidebar()">
+      <button class="sidebar-toggle">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>
@@ -402,9 +406,9 @@ function fmtMoney(amount) {
     return '₱' + amount.toLocaleString();
 }
 
-function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('collapsed');
-    document.getElementById('mainArea').classList.toggle('expanded');
+
+function toggleMobileSidebar() {
+    document.getElementById('sidebar').classList.toggle('mobile-open');
 }
 
 function showToast(msg, type) {
@@ -683,5 +687,6 @@ function escapeHtml(str) {
 
 renderAnalytics();
 </script>
+
 </body>
 </html>
