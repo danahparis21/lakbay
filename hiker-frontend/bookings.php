@@ -150,14 +150,11 @@ function getGuidesFromDB($pdo) {
 }
 function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
     $bookings = [];
-    $debugFile = 'C:\Users\63945\Documents\lakbay_docker\lakbay\api\debug.log';
-    
+   
     if (!$currentUserId) return $bookings;
     
     // Write to debug log
-    file_put_contents($debugFile, "\n=== getUserBookingsFromDB called ===\n", FILE_APPEND);
-    file_put_contents($debugFile, "Current User ID: $currentUserId\n", FILE_APPEND);
-    file_put_contents($debugFile, "Current User Name: $currentUserName\n", FILE_APPEND);
+  
     
     try {
         // Simplified query - first get all bookings where user is owner
