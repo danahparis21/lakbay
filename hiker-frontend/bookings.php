@@ -307,9 +307,10 @@ LEFT JOIN guides g ON b.guide_id = g.id
             ];
         }
         
+   } catch (PDOException $e) {
+        error_log('Bookings fetch error: ' . $e->getMessage());
+        return $bookings;  // ← Now properly returns on error
     }
-    
-    return $bookings;
 }
 
 // Get data from database
