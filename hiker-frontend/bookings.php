@@ -305,11 +305,13 @@ LEFT JOIN guides g ON b.guide_id = g.id
                 'relationship' => 'joined',
                 'joinedFromId' => $row['booking_number']
             ];
-        }
+      }
         
-   } catch (PDOException $e) {
+        return $bookings;  // ← ADD THIS LINE
+        
+    } catch (PDOException $e) {
         error_log('Bookings fetch error: ' . $e->getMessage());
-        return $bookings;  // ← Now properly returns on error
+        return $bookings;
     }
 }
 
