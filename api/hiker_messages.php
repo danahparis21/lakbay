@@ -6,9 +6,7 @@ error_reporting(E_ALL);
 
 require_once __DIR__ . '/../config/db.php';
 session_start();
-function debug_log($data) {
-    file_put_contents(__DIR__ . '/debug.log', date('Y-m-d H:i:s') . ' - ' . print_r($data, true) . PHP_EOL, FILE_APPEND);
-}
+
 
 header('Content-Type: application/json');
 
