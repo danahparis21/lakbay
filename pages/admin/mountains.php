@@ -924,6 +924,8 @@ let currentMountainName = '';
 let heatmapMap = null;
 let heatLayer = null;
 let trailLayer = null;
+let waypointMarkers = [];  // ← ADD THIS LINE
+let currentHeatmapPoints = [];  // ← Also add this for the heatmap points
 
 // ========== EDIT MOUNTAIN FUNCTIONS ==========
 function openEditModal(mountainId, mountainName) {
