@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
             exit;
         }
         
-        // Get crowd reports for a mountain
+        // Get crowd reports
         if (isset($_POST['action']) && $_POST['action'] === 'get_crowd_reports') {
             $mountain_id = $_POST['mountain_id'] ?? 0;
             
@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
             exit;
         }
         
-        // Get heatmap data for a mountain with trail
+        // Get heatmap data with trail
         if (isset($_POST['action']) && $_POST['action'] === 'get_heatmap_data') {
             $mountain_id = $_POST['mountain_id'] ?? 0;
             
@@ -95,12 +95,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
                 exit;
             }
             
-            // Get the mountain's data
             $stmt = $pdo->prepare("SELECT * FROM mountains WHERE id = ?");
             $stmt->execute([$mountain_id]);
             $mountain = $stmt->fetch(PDO::FETCH_ASSOC);
             
-            // Get trail data from tracks table
             $trailCoordinates = [];
             $stmt = $pdo->prepare("SELECT lat, lon, ele, idx FROM tracks WHERE mountain_id = ? OR fileId = ? ORDER BY idx ASC");
             $fileIdMap = [1 => 'BATULAO', 2 => 'APAYANG', 3 => 'LANTIK', 4 => 'TALAMITAM'];
@@ -112,7 +110,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
                 $trailCoordinates[] = [(float)$p['lon'], (float)$p['lat']];
             }
             
-            // Get waypoints
             $stmt = $pdo->prepare("
                 SELECT id, name, type, latitude, longitude, elevation, description 
                 FROM trail_waypoints 
@@ -122,7 +119,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
             $stmt->execute([$mountain_id]);
             $waypoints = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
-            // Get crowd reports to generate heatmap points
             $stmt = $pdo->prepare("
                 SELECT latitude, longitude, crowd_level, created_at, notes
                 FROM crowd_reports
@@ -132,7 +128,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
             $stmt->execute([$mountain_id]);
             $reports = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
-            // Generate heatmap points from reports
             $heatmapPoints = [];
             $crowdIntensity = ['Low' => 0.3, 'Medium' => 0.6, 'High' => 0.9, 'Very High' => 1.0];
             
@@ -148,10 +143,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
                 ];
             }
             
-            // If no reports, generate sample points along trail for demo
             if (empty($heatmapPoints) && !empty($trailCoordinates)) {
                 foreach ($trailCoordinates as $idx => $coord) {
-                    // Simulate crowd intensity based on position (peak areas have higher intensity)
                     $intensity = 0.2 + (sin($idx * 0.2) * 0.3);
                     $heatmapPoints[] = [
                         'lat' => $coord[1],
@@ -181,24 +174,266 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
             exit;
         }
         
-        // Update mountain
+        // ========== UPDATE MOUNTAIN ==========
         if (isset($_POST['action']) && $_POST['action'] === 'update_mountain') {
-            // ... existing update mountain code ...
+            $id = $_POST['id'] ?? 0;
+            
+            if (!$id) {
+                echo json_encode(['success' => false, 'message' => 'Mountain ID is required']);
+                exit;
+            }
+            
+            $allowedDifficulties = ['Easy', 'Easy to Moderate', 'Moderate', 'Difficult', 'Very Difficult'];
+            $allowedCrowdLevels = ['Low', 'Moderate', 'High', 'Very High'];
+            $allowedStatuses = ['Open', 'Limited', 'Closed'];
+            
+            $updateFields = [];
+            $params = [];
+            
+            if (isset($_POST['name'])) {
+                $updateFields[] = "name = ?";
+                $params[] = trim($_POST['name']);
+            }
+            
+            if (isset($_POST['location'])) {
+                $updateFields[] = "location = ?";
+                $params[] = trim($_POST['location']);
+            }
+            
+            if (isset($_POST['elevation'])) {
+                $updateFields[] = "elevation = ?";
+                $params[] = trim($_POST['elevation']);
+            }
+            
+            if (isset($_POST['difficulty']) && in_array($_POST['difficulty'], $allowedDifficulties)) {
+                $updateFields[] = "difficulty = ?";
+                $params[] = $_POST['difficulty'];
+            }
+            
+            if (isset($_POST['crowdLevel']) && in_array($_POST['crowdLevel'], $allowedCrowdLevels)) {
+                $updateFields[] = "crowdLevel = ?";
+                $params[] = $_POST['crowdLevel'];
+            }
+            
+            if (isset($_POST['duration'])) {
+                $updateFields[] = "duration = ?";
+                $params[] = trim($_POST['duration']);
+            }
+            
+            if (isset($_POST['jumpOff'])) {
+                $updateFields[] = "jumpOff = ?";
+                $params[] = trim($_POST['jumpOff']);
+            }
+            
+            if (isset($_POST['description'])) {
+                $updateFields[] = "description = ?";
+                $params[] = trim($_POST['description']);
+            }
+            
+            if (isset($_POST['rating'])) {
+                $updateFields[] = "rating = ?";
+                $params[] = floatval($_POST['rating']);
+            }
+            
+            if (isset($_POST['weatherAdvisory'])) {
+                $updateFields[] = "weatherAdvisory = ?";
+                $params[] = trim($_POST['weatherAdvisory']);
+            }
+            
+            if (isset($_POST['peakTimes'])) {
+                $updateFields[] = "peakTimes = ?";
+                $params[] = trim($_POST['peakTimes']);
+            }
+            
+            if (isset($_POST['status']) && in_array($_POST['status'], $allowedStatuses)) {
+                $updateFields[] = "status = ?";
+                $params[] = $_POST['status'];
+            }
+            
+            if (isset($_POST['rules'])) {
+                $rulesArray = array_filter(array_map('trim', explode("\n", trim($_POST['rules']))));
+                $updateFields[] = "rules = ?";
+                $params[] = json_encode(array_values($rulesArray));
+            }
+            
+            if (isset($_POST['envReminders'])) {
+                $envArray = array_filter(array_map('trim', explode("\n", trim($_POST['envReminders']))));
+                $updateFields[] = "envReminders = ?";
+                $params[] = json_encode(array_values($envArray));
+            }
+            
+            if (isset($_POST['hazards'])) {
+                $hazardsArray = array_filter(array_map('trim', explode("\n", trim($_POST['hazards']))));
+                $updateFields[] = "hazards = ?";
+                $params[] = json_encode(array_values($hazardsArray));
+            }
+            
+            if (isset($_POST['trail_length_km'])) {
+                $updateFields[] = "trail_length_km = ?";
+                $params[] = floatval($_POST['trail_length_km']);
+            }
+            
+            if (isset($_POST['estimated_duration'])) {
+                $updateFields[] = "estimated_duration = ?";
+                $params[] = floatval($_POST['estimated_duration']);
+            }
+            
+            if (isset($_POST['registration_fee'])) {
+                $updateFields[] = "registration_fee = ?";
+                $params[] = floatval($_POST['registration_fee']);
+            }
+            
+            if (isset($_POST['environmental_fee'])) {
+                $updateFields[] = "environmental_fee = ?";
+                $params[] = floatval($_POST['environmental_fee']);
+            }
+            
+            if (isset($_POST['start_point_lat'])) {
+                $updateFields[] = "start_point_lat = ?";
+                $params[] = floatval($_POST['start_point_lat']);
+            }
+            
+            if (isset($_POST['start_point_lng'])) {
+                $updateFields[] = "start_point_lng = ?";
+                $params[] = floatval($_POST['start_point_lng']);
+            }
+            
+            if (!empty($updateFields)) {
+                $params[] = $id;
+                $sql = "UPDATE mountains SET " . implode(', ', $updateFields) . " WHERE id = ?";
+                $stmt = $pdo->prepare($sql);
+                if ($stmt->execute($params)) {
+                    echo json_encode(['success' => true, 'message' => 'Mountain updated successfully']);
+                } else {
+                    echo json_encode(['success' => false, 'message' => 'Database error']);
+                }
+            } else {
+                echo json_encode(['success' => false, 'message' => 'No fields to update']);
+            }
+            exit;
+        }
+        
+        // Get single mountain data for edit modal
+        if (isset($_POST['action']) && $_POST['action'] === 'get_mountain') {
+            $id = $_POST['id'] ?? 0;
+            
+            if (!$id) {
+                echo json_encode(['success' => false, 'message' => 'Mountain ID is required']);
+                exit;
+            }
+            
+            $stmt = $pdo->prepare("SELECT * FROM mountains WHERE id = ?");
+            $stmt->execute([$id]);
+            $mountain = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($mountain) {
+                $mountain['rules'] = json_decode($mountain['rules'] ?? '[]', true);
+                $mountain['envReminders'] = json_decode($mountain['envReminders'] ?? '[]', true);
+                $mountain['hazards'] = json_decode($mountain['hazards'] ?? '[]', true);
+                
+                echo json_encode(['success' => true, 'mountain' => $mountain]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Mountain not found']);
+            }
+            exit;
         }
         
         // Assign manager
         if (isset($_POST['action']) && $_POST['action'] === 'assign_manager') {
-            // ... existing assign manager code ...
+            $mountain_id = $_POST['mountain_id'] ?? 0;
+            $manager_id = $_POST['manager_id'] ?? 0;
+            $send_email = isset($_POST['send_email']) ? true : false;
+            
+            if (!$mountain_id || !$manager_id) {
+                echo json_encode(['success' => false, 'message' => 'Mountain and Manager are required']);
+                exit;
+            }
+            
+            $stmt = $pdo->prepare("SELECT id FROM manager_mountains WHERE mountain_id = ? AND manager_id = ?");
+            $stmt->execute([$mountain_id, $manager_id]);
+            if ($stmt->fetch()) {
+                echo json_encode(['success' => false, 'message' => 'Already assigned']);
+                exit;
+            }
+            
+            $stmt = $pdo->prepare("INSERT INTO manager_mountains (manager_id, mountain_id, assigned_date, is_primary) VALUES (?, ?, NOW(), 0)");
+            if ($stmt->execute([$manager_id, $mountain_id])) {
+                if ($send_email) {
+                    $stmt = $pdo->prepare("SELECT name, email FROM users WHERE id = ?");
+                    $stmt->execute([$manager_id]);
+                    $manager = $stmt->fetch(PDO::FETCH_ASSOC);
+                    $stmt = $pdo->prepare("SELECT name FROM mountains WHERE id = ?");
+                    $stmt->execute([$mountain_id]);
+                    $mountain = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($manager && $manager['email']) {
+                        sendAssignmentEmail($manager['email'], $manager['name'], $mountain['name']);
+                    }
+                }
+                echo json_encode(['success' => true, 'message' => 'Manager assigned successfully']);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Failed to assign manager']);
+            }
+            exit;
         }
         
         // Remove manager
         if (isset($_POST['action']) && $_POST['action'] === 'remove_manager') {
-            // ... existing remove manager code ...
+            $assignment_id = $_POST['assignment_id'] ?? 0;
+            
+            if (!$assignment_id) {
+                echo json_encode(['success' => false, 'message' => 'Assignment ID required']);
+                exit;
+            }
+            
+            $stmt = $pdo->prepare("DELETE FROM manager_mountains WHERE id = ?");
+            if ($stmt->execute([$assignment_id])) {
+                echo json_encode(['success' => true, 'message' => 'Manager removed']);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Failed to remove']);
+            }
+            exit;
         }
         
         // Create new manager
         if (isset($_POST['action']) && $_POST['action'] === 'create_manager') {
-            // ... existing create manager code ...
+            $name = $_POST['name'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $phone = $_POST['phone'] ?? '';
+            
+            if (empty($name) || empty($email)) {
+                echo json_encode(['success' => false, 'message' => 'Name and email required']);
+                exit;
+            }
+            
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+            $stmt->execute([$email]);
+            if ($stmt->fetch()) {
+                echo json_encode(['success' => false, 'message' => 'Email already exists']);
+                exit;
+            }
+            
+            $defaultPassword = 'Password123!';
+            $hashedPassword = password_hash($defaultPassword, PASSWORD_DEFAULT);
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO users (name, email, phone, role, password, created_at, hiking_level, location_tracking_enabled) 
+                VALUES (?, ?, ?, 'manager', ?, NOW(), 'beginner', 1)
+            ");
+            
+            if ($stmt->execute([$name, $email, $phone, $hashedPassword])) {
+                $newManagerId = $pdo->lastInsertId();
+                sendWelcomeEmail($email, $name, $defaultPassword);
+                echo json_encode([
+                    'success' => true, 
+                    'message' => 'Manager created',
+                    'manager_id' => $newManagerId,
+                    'manager_name' => $name,
+                    'manager_email' => $email
+                ]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Failed to create manager']);
+            }
+            exit;
         }
         
         echo json_encode(['success' => false, 'message' => 'Invalid action']);
@@ -213,44 +448,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
 // ========== EMAIL FUNCTIONS ==========
 function sendWelcomeEmail($email, $name, $password) {
     $subject = "Welcome to LAKBAY - Manager Account Created";
-    $message = "
-    <html>
-    <head>
-        <style>
-            body { font-family: 'Inter', sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; background: #f8f9fa; }
-            .header { background: #0a1c2a; color: white; padding: 20px; text-align: center; border-radius: 12px 12px 0 0; }
-            .content { background: white; padding: 30px; border-radius: 0 0 12px 12px; }
-            .credentials { background: #f0f2f5; padding: 15px; border-radius: 8px; margin: 20px 0; }
-            .btn { background: #d4af37; color: #0a1c2a; padding: 10px 20px; text-decoration: none; border-radius: 8px; display: inline-block; }
-        </style>
-    </head>
-    <body>
-        <div class='container'>
-            <div class='header'><h2>🏔️ Welcome to LAKBAY!</h2></div>
-            <div class='content'>
-                <p>Dear <strong>" . htmlspecialchars($name) . "</strong>,</p>
-                <p>Your manager account has been created for the LAKBAY Mountain Management System.</p>
-                <div class='credentials'>
-                    <p><strong>🔐 Login Credentials:</strong></p>
-                    <p>📧 Email: <strong>" . htmlspecialchars($email) . "</strong></p>
-                    <p>🔑 Password: <strong>" . htmlspecialchars($password) . "</strong></p>
-                </div>
-                <p>For security reasons, please change your password after your first login.</p>
-                <p style='margin-top: 25px;'><a href='https://yourdomain.com/login-and-signup/login.php' class='btn'>Login to Your Account</a></p>
-                <p>Best regards,<br><strong>LAKBAY Team</strong></p>
-            </div>
-        </div>
-    </body>
-    </html>
-    ";
+    $message = "<html><body><h2>Welcome to LAKBAY!</h2><p>Dear $name,</p><p>Your manager account has been created.</p><p>Email: $email<br>Password: $password</p><p>Please change your password after first login.</p></body></html>";
     $headers = "MIME-Version: 1.0\r\nContent-type:text/html;charset=UTF-8\r\nFrom: LAKBAY System <noreply@lakbay.com>\r\n";
     @mail($email, $subject, $message, $headers);
 }
 
 function sendAssignmentEmail($email, $managerName, $mountainName) {
-    $subject = "LAKBAY - You've been assigned to manage " . $mountainName;
-    $message = "<html><body><h2>🏔️ Mountain Assignment</h2><p>Dear <strong>" . htmlspecialchars($managerName) . "</strong>,</p><p>You have been assigned as the manager for <strong>" . htmlspecialchars($mountainName) . "</strong>.</p><p>Best regards,<br><strong>LAKBAY Admin Team</strong></p></body></html>";
+    $subject = "LAKBAY - Assigned to manage $mountainName";
+    $message = "<html><body><h2>Mountain Assignment</h2><p>Dear $managerName,</p><p>You have been assigned as manager for $mountainName.</p></body></html>";
     $headers = "MIME-Version: 1.0\r\nContent-type:text/html;charset=UTF-8\r\nFrom: LAKBAY System <noreply@lakbay.com>\r\n";
     @mail($email, $subject, $message, $headers);
 }
@@ -265,7 +470,7 @@ $stmt = $pdo->prepare("SELECT id, name, email, phone FROM users WHERE role = 'ma
 $stmt->execute();
 $allManagers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Fetch manager assignments for each mountain
+// Fetch manager assignments
 $managerAssignments = [];
 foreach ($mountains as $mountain) {
     $stmt = $pdo->prepare("
@@ -276,10 +481,6 @@ foreach ($mountains as $mountain) {
     ");
     $stmt->execute([$mountain['id']]);
     $managerAssignments[$mountain['id']] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    $stmt = $pdo->prepare("SELECT COUNT(*) as active_count FROM bookings WHERE mountain_id = ? AND status = 'active' AND hike_date >= CURDATE()");
-    $stmt->execute([$mountain['id']]);
-    $mountain['active_hikers_today'] = $stmt->fetch(PDO::FETCH_ASSOC)['active_count'] ?? 0;
 }
 
 // Default image bank
@@ -309,11 +510,9 @@ function getMountainPhoto($mountain, $imgBank) {
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
-
   <link rel="stylesheet" href="shared.css">
-  <style>
-    .mtn-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px; margin-bottom: 48px; }
+ <style>
+  .mtn-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px; margin-bottom: 48px; }
     .mtn-card { background: white; border-radius: 28px; overflow: hidden; border: 1px solid #EFF2F8; }
     .mtn-photo { height: 170px; background-size: cover; background-position: center; position: relative; }
     .mtn-badge-overlay { position: absolute; top: 14px; right: 16px; }
@@ -333,6 +532,24 @@ function getMountainPhoto($mountain, $imgBank) {
     .btn-ghost { background: #F0F2F5; color: #1F2A3A; }
     .btn-outline { background: transparent; border: 1px solid #E2E6EC; }
     .btn-warning { background: #c9a84c; color: #111318; }
+    .btn-success { background: #1E7B48; color: white; }
+    
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(10,12,18,0.55); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: #fff; border-radius: 28px; width: 100%; max-width: 800px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-box-large { max-width: 800px !important; }
+    .modal-header { padding: 20px 24px; border-bottom: 1px solid #EFF2F6; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .modal-title { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 600; }
+    .modal-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: #F2F4F8; cursor: pointer; }
+    .modal-body { flex: 1; overflow-y: auto; padding: 24px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid #EFF2F6; display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
+    
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .full-width { grid-column: 1 / -1; }
+    .form-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #6C7A8E; display: block; margin-bottom: 6px; }
+    .form-control, .form-select, .form-textarea { width: 100%; border: 1.5px solid #E5E9EF; border-radius: 12px; padding: 10px 14px; font-size: 13px; font-family: 'Inter', sans-serif; outline: none; background: white; }
+    .form-control:focus, .form-select:focus, .form-textarea:focus { border-color: #111318; }
+    .form-textarea { resize: vertical; min-height: 80px; }
     
     /* Heatmap Modal - Side by Side Layout */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(10,12,18,0.55); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
@@ -379,48 +596,76 @@ function getMountainPhoto($mountain, $imgBank) {
     .manager-option { padding: 12px; cursor: pointer; border-bottom: 1px solid #E5E9EF; display: flex; justify-content: space-between; align-items: center; }
     .manager-option:hover { background: #F8F9FB; }
     .manager-option.selected { background: #e0e7ff; }
-    .form-control { width: 100%; border: 1.5px solid #E5E9EF; border-radius: 12px; padding: 10px 14px; font-size: 14px; outline: none; }
-    .form-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #6C7A8E; display: block; margin-bottom: 6px; }
-    .form-group { margin-bottom: 16px; }
-    .modal-footer { padding: 16px 24px; border-top: 1px solid #EFF2F6; display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
     
+    @media (max-width: 900px) { .heatmap-layout { flex-direction: column; } .reports-column { border-left: none; border-top: 1px solid #EFF2F6; max-height: 300px; } .mtn-grid { grid-template-columns: 1fr; } .form-row { grid-template-columns: 1fr; } }
     @media (max-width: 900px) { .heatmap-layout { flex-direction: column; } .reports-column { border-left: none; border-top: 1px solid #EFF2F6; max-height: 300px; } .mtn-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body data-page="mountains">
 <div class="app">
 
-  <aside class="sidebar">
+ <!-- SIDEBAR -->
+<aside class="sidebar">
     <div>
-      <div class="logo">
-        <div class="logo-wordmark"><div class="logo-icon"><svg viewBox="0 0 28 28" fill="none"><path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/><path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/></svg></div>LAKBAY</div>
-        <div class="logo-sub">wilderness: Silence beneath steps</div>
-      </div>
-      <ul class="nav-list">
-        <li class="nav-item" data-href="/pages/dashboard-admin.php"><i class="fas fa-chart-line"></i> Dashboard</li>
-        <li class="nav-item active" data-href="/pages/admin/mountains.php"><i class="fas fa-mountain"></i> Mountains</li>
-        <li class="nav-item" data-href="/pages/admin/hikers.php"><i class="fas fa-person-hiking"></i> Hikers</li>
-        <li class="nav-item" data-href="/pages/admin/guides.php"><i class="fas fa-chalkboard-user"></i> Guides</li>
-        <div class="nav-divider"></div>
-        <li class="nav-item" data-href="/pages/admin/payments.php"><i class="fas fa-coins"></i> Revenue</li>
-        <li class="nav-item" data-href="/pages/admin/alerts.php"><i class="fas fa-bell"></i> Alerts</li>
-        <li class="nav-item" data-href="/pages/admin/analytics.php"><i class="fas fa-chart-simple"></i> Analytics</li>
-      </ul>
+        <div class="logo">
+            <div class="logo-wordmark">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 22L10 10L14 16L18 8L24 22H4Z" fill="#111318" opacity="0.9"/>
+                        <path d="M14 16L18 8L24 22H14V16Z" fill="#111318" opacity="0.35"/>
+                    </svg>
+                </div>
+                LAKBAY
+            </div>
+            <div class="logo-sub">wilderness: Silence beneath steps</div>
+        </div>
+        <div style="margin-bottom:8px; padding-left:28px;">
+            <div class="nav-section-label">Navigation</div>
+        </div>
+        <ul class="nav-list">
+            <li class="nav-item" data-href="/pages/dashboard-admin.php"><i class="fas fa-chart-line"></i> Dashboard</li>
+            <li class="nav-item active" data-href="/pages/admin/mountains.php"><i class="fas fa-mountain"></i> Mountains</li>
+            <li class="nav-item" data-href="/pages/admin/hikers.php"><i class="fas fa-person-hiking"></i> Hikers</li>
+            <li class="nav-item" data-href="/pages/admin/guides.php"><i class="fas fa-chalkboard-user"></i> Guides</li>
+            <div class="nav-divider"></div>
+            <li class="nav-item" data-href="/pages/admin/payments.php"><i class="fas fa-coins"></i> Revenue</li>
+            <li class="nav-item" data-href="/pages/admin/reviews.php"><i class="fas fa-star"></i> Reviews</li>
+            <li class="nav-item" data-href="/pages/admin/alerts.php"><i class="fas fa-bell"></i> Alerts</li>
+            <li class="nav-item" data-href="/pages/admin/analytics.php"><i class="fas fa-chart-simple"></i> Analytics</li>
+        </ul>
     </div>
     <div>
-      <button class="logout-btn" onclick="showLogoutModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;"><i class="fas fa-right-from-bracket"></i> Log Out</button>
-      <div class="sidebar-footer">TEAM AURIX</div>
+        <button class="logout-btn" onclick="showLogoutModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
+            <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
+            Log Out
+        </button>
+        <div class="sidebar-footer">
+            <div class="status-dot"></div> 
+            TEAM AURIX
+        </div>
     </div>
-  </aside>
+</aside>
 
+  <!-- MAIN -->
   <div class="main">
     <div class="topbar">
       <div class="page-heading"><i class="fas fa-mountain"></i> Mountains</div>
       <div class="topbar-right">
         <div class="topbar-date" id="liveDate"></div>
-        <div class="topbar-user"><div class="avatar"><?= htmlspecialchars($adminInitial) ?></div><?= htmlspecialchars($adminName) ?></div>
+        <div class="topbar-user" style="cursor: pointer;">
+          <div class="avatar" id="topbarAvatar">
+            <?php if (!empty($_SESSION['user_avatar'])): ?>
+              <img src="<?= htmlspecialchars($_SESSION['user_avatar']) ?>" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+            <?php else: ?>
+              <?= htmlspecialchars($adminInitial) ?>
+            <?php endif; ?>
+          </div>
+          <?= htmlspecialchars($adminName) ?>
+          <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
+        </div>
       </div>
     </div>
+
 
     <div class="content">
       <div class="mtn-grid">
@@ -434,12 +679,13 @@ function getMountainPhoto($mountain, $imgBank) {
           <div class="mtn-info">
             <div class="mtn-name"><?= htmlspecialchars($mountain['name']) ?></div>
             <div class="mtn-detail"><i class="fas fa-arrow-up"></i> <?= htmlspecialchars($mountain['elevation']) ?></div>
-            <div class="mtn-detail"><i class="fas fa-signal"></i> <?= htmlspecialchars($mountain['difficulty']) ?> · ₱<?= number_format($mountain['fee']) ?> fee</div>
+            <div class="mtn-detail"><i class="fas fa-signal"></i> <?= htmlspecialchars($mountain['difficulty']) ?></div>
             <div class="mtn-detail"><i class="fas fa-clock"></i> <?= htmlspecialchars($mountain['duration']) ?> · <i class="fas fa-users"></i> <?= htmlspecialchars($mountain['crowdLevel']) ?> Crowd</div>
             <div class="mtn-detail"><i class="fas fa-map-pin"></i> <?= htmlspecialchars($mountain['location']) ?></div>
+            <div class="mtn-detail"><i class="fas fa-ticket-alt"></i> Registration: ₱<?= number_format($mountain['registration_fee']) ?> | Environmental: ₱<?= number_format($mountain['environmental_fee']) ?></div>
             
             <div class="manager-list">
-              <div class="mtn-detail" style="font-size:11px; font-weight:600;">👥 ASSIGNED MANAGERS</div>
+              <div class="mtn-detail" style="font-size:11px; font-weight:600;">ASSIGNED MANAGERS</div>
               <?php if (empty($managers)): ?>
                 <span class="manager-tag" style="background:#F0F2F5;">No managers assigned</span>
               <?php else: ?>
@@ -451,13 +697,171 @@ function getMountainPhoto($mountain, $imgBank) {
             </div>
             
             <div class="mtn-actions">
-              <button class="btn edit-mtn-btn" data-id="<?= $mountain['id'] ?>" style="flex:1"><i class="fas fa-edit"></i> Edit</button>
+              <button class="btn edit-mtn-btn" data-id="<?= $mountain['id'] ?>" data-name="<?= htmlspecialchars($mountain['name']) ?>" style="flex:1"><i class="fas fa-edit"></i> Edit</button>
               <button class="btn btn-warning crowd-heatmap-btn" data-id="<?= $mountain['id'] ?>" data-name="<?= htmlspecialchars($mountain['name']) ?>" style="flex:1"><i class="fas fa-fire"></i> Crowd Heatmap</button>
             </div>
           </div>
         </div>
         <?php endforeach; ?>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MOUNTAIN MODAL -->
+<div class="modal-overlay" id="editMountainModal">
+  <div class="modal-box modal-box-large">
+    <div class="modal-header">
+      <div class="modal-title" id="editModalTitle">Edit Mountain</div>
+      <button class="modal-close" onclick="closeEditModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editMountainId">
+      
+      <div class="form-row">
+        <div class="full-width">
+          <label class="form-label">Mountain Name</label>
+          <input type="text" class="form-control" id="editName">
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div>
+          <label class="form-label">Location</label>
+          <input type="text" class="form-control" id="editLocation">
+        </div>
+        <div>
+          <label class="form-label">Elevation (MASL)</label>
+          <input type="text" class="form-control" id="editElevation" placeholder="e.g., 811 MASL">
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div>
+          <label class="form-label">Difficulty</label>
+          <select class="form-select" id="editDifficulty">
+            <option value="Easy">Easy</option>
+            <option value="Easy to Moderate">Easy to Moderate</option>
+            <option value="Moderate">Moderate</option>
+            <option value="Difficult">Difficult</option>
+            <option value="Very Difficult">Very Difficult</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Crowd Level</label>
+          <select class="form-select" id="editCrowdLevel">
+            <option value="Low">Low</option>
+            <option value="Moderate">Moderate</option>
+            <option value="High">High</option>
+            <option value="Very High">Very High</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div>
+          <label class="form-label">Duration</label>
+          <input type="text" class="form-control" id="editDuration" placeholder="e.g., 3-4 hours">
+        </div>
+        <div>
+          <label class="form-label">Status</label>
+          <select class="form-select" id="editStatus">
+            <option value="Open">Open</option>
+            <option value="Limited">Limited</option>
+            <option value="Closed">Closed</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div>
+          <label class="form-label">Registration Fee (₱)</label>
+          <input type="number" class="form-control" id="editRegistrationFee">
+        </div>
+        <div>
+          <label class="form-label">Environmental Fee (₱)</label>
+          <input type="number" class="form-control" id="editEnvironmentalFee">
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div>
+          <label class="form-label">Trail Length (km)</label>
+          <input type="number" step="0.1" class="form-control" id="editTrailLength">
+        </div>
+        <div>
+          <label class="form-label">Est. Duration (hours)</label>
+          <input type="number" step="0.5" class="form-control" id="editEstimatedDuration">
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div>
+          <label class="form-label">Jump Off Point</label>
+          <input type="text" class="form-control" id="editJumpOff">
+        </div>
+        <div>
+          <label class="form-label">Rating (0-5)</label>
+          <input type="number" step="0.1" class="form-control" id="editRating">
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div>
+          <label class="form-label">Start Point Latitude</label>
+          <input type="text" step="0.00001" class="form-control" id="editStartPointLat">
+        </div>
+        <div>
+          <label class="form-label">Start Point Longitude</label>
+          <input type="text" step="0.00001" class="form-control" id="editStartPointLng">
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="full-width">
+          <label class="form-label">Description</label>
+          <textarea class="form-textarea" id="editDescription" rows="3"></textarea>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="full-width">
+          <label class="form-label">Weather Advisory</label>
+          <textarea class="form-textarea" id="editWeatherAdvisory" rows="2"></textarea>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="full-width">
+          <label class="form-label">Peak Times</label>
+          <textarea class="form-textarea" id="editPeakTimes" rows="2"></textarea>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="full-width">
+          <label class="form-label">Rules (one per line)</label>
+          <textarea class="form-textarea" id="editRules" rows="3"></textarea>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="full-width">
+          <label class="form-label">Environmental Reminders (one per line)</label>
+          <textarea class="form-textarea" id="editEnvReminders" rows="3"></textarea>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="full-width">
+          <label class="form-label">Hazards (one per line)</label>
+          <textarea class="form-textarea" id="editHazards" rows="3"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-success" onclick="saveMountain()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -508,11 +912,11 @@ function getMountainPhoto($mountain, $imgBank) {
   </div>
 </div>
 
-<!-- Assign Manager Modal -->
-<div class="modal-overlay" id="assignModal"><div class="modal-box" style="max-width: 500px;"><div class="modal-header"><div class="modal-title" id="assignModalTitle">Assign Manager</div><button class="modal-close" onclick="closeAssignModal()"><i class="fas fa-times"></i></button></div><div class="modal-body"><input type="hidden" id="assignMountainId"><div class="form-group"><label class="form-label">Select Manager</label><div class="manager-select-list" id="managerSelectList"><?php foreach ($allManagers as $manager): ?><div class="manager-option" data-id="<?= $manager['id'] ?>" data-name="<?= htmlspecialchars($manager['name']) ?>" data-email="<?= htmlspecialchars($manager['email']) ?>"><div><strong><?= htmlspecialchars($manager['name']) ?></strong><br><small style="color:#8A99AE;"><?= htmlspecialchars($manager['email']) ?></small></div><input type="radio" name="selected_manager" value="<?= $manager['id'] ?>"></div><?php endforeach; ?></div></div><div class="form-group"><label class="form-label"><input type="checkbox" id="sendEmailCheckbox" checked> Send email notification</label></div><hr><div class="form-group"><button class="btn btn-primary" style="width:100%;" onclick="openCreateManagerModal()"><i class="fas fa-user-plus"></i> Create New Manager</button></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="closeAssignModal()">Cancel</button><button class="btn btn-primary" onclick="confirmAssignManager()">Assign Manager</button></div></div></div>
+<!-- ASSIGN MANAGER MODAL -->
+<div class="modal-overlay" id="assignModal"><div class="modal-box" style="max-width: 500px;"><div class="modal-header"><div class="modal-title" id="assignModalTitle">Assign Manager</div><button class="modal-close" onclick="closeAssignModal()"><i class="fas fa-times"></i></button></div><div class="modal-body"><input type="hidden" id="assignMountainId"><div class="form-group"><label>Select Manager</label><div class="manager-select-list" id="managerSelectList"><?php foreach ($allManagers as $manager): ?><div class="manager-option" data-id="<?= $manager['id'] ?>" data-name="<?= htmlspecialchars($manager['name']) ?>" data-email="<?= htmlspecialchars($manager['email']) ?>"><div><strong><?= htmlspecialchars($manager['name']) ?></strong><br><small><?= htmlspecialchars($manager['email']) ?></small></div><input type="radio" name="selected_manager" value="<?= $manager['id'] ?>"></div><?php endforeach; ?></div></div><div class="form-group"><label><input type="checkbox" id="sendEmailCheckbox" checked> Send email notification</label></div><hr><div class="form-group"><button class="btn btn-primary" style="width:100%;" onclick="openCreateManagerModal()">Create New Manager</button></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="closeAssignModal()">Cancel</button><button class="btn btn-primary" onclick="confirmAssignManager()">Assign</button></div></div></div>
 
-<!-- Create Manager Modal -->
-<div class="modal-overlay" id="createManagerModal"><div class="modal-box" style="max-width: 500px;"><div class="modal-header"><div class="modal-title">Create New Manager</div><button class="modal-close" onclick="closeCreateManagerModal()"><i class="fas fa-times"></i></button></div><div class="modal-body"><div class="form-group"><label class="form-label">Full Name *</label><input type="text" class="form-control" id="newManagerName" placeholder="e.g., Juan Dela Cruz"></div><div class="form-group"><label class="form-label">Email Address *</label><input type="email" class="form-control" id="newManagerEmail" placeholder="manager@example.com"></div><div class="form-group"><label class="form-label">Phone Number (Optional)</label><input type="text" class="form-control" id="newManagerPhone" placeholder="+63 XXX XXX XXXX"></div><div class="form-group" style="background:#F0FDF4; padding:12px; border-radius:12px;"><small><i class="fas fa-info-circle"></i> Default password: <strong>Password123!</strong><br>Manager can change after first login.</small></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="closeCreateManagerModal()">Cancel</button><button class="btn btn-primary" onclick="createNewManager()">Create & Continue</button></div></div></div>
+<!-- CREATE MANAGER MODAL -->
+<div class="modal-overlay" id="createManagerModal"><div class="modal-box" style="max-width: 500px;"><div class="modal-header"><div class="modal-title">Create Manager</div><button class="modal-close" onclick="closeCreateManagerModal()"><i class="fas fa-times"></i></button></div><div class="modal-body"><div class="form-group"><label>Full Name *</label><input type="text" class="form-control" id="newManagerName"></div><div class="form-group"><label>Email *</label><input type="email" class="form-control" id="newManagerEmail"></div><div class="form-group"><label>Phone</label><input type="text" class="form-control" id="newManagerPhone"></div><div class="form-group" style="background:#F0FDF4; padding:12px; border-radius:12px;"><small>Default password: <strong>Password123!</strong><br>Manager can change after login.</small></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="closeCreateManagerModal()">Cancel</button><button class="btn btn-primary" onclick="createNewManager()">Create</button></div></div></div>
 
 <script>
 let currentMountainId = null;
@@ -520,18 +924,114 @@ let currentMountainName = '';
 let heatmapMap = null;
 let heatLayer = null;
 let trailLayer = null;
-let waypointMarkers = [];
-let currentHeatmapPoints = [];
 
-function updateDate() {
-  const d = new Date();
-  const dateElem = document.getElementById('liveDate');
-  if (dateElem) dateElem.textContent = d.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase() + '  ' + d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+// ========== EDIT MOUNTAIN FUNCTIONS ==========
+function openEditModal(mountainId, mountainName) {
+  currentMountainId = mountainId;
+  document.getElementById('editModalTitle').innerHTML = `Edit ${mountainName}`;
+  document.getElementById('editMountainModal').classList.add('open');
+  
+  const formData = new FormData();
+  formData.append('action', 'get_mountain');
+  formData.append('id', mountainId);
+  
+  fetch(window.location.href, {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    body: formData
+  })
+  .then(response => response.json())
+  .then(result => {
+    if (result.success) {
+      const m = result.mountain;
+      document.getElementById('editMountainId').value = m.id;
+      document.getElementById('editName').value = m.name || '';
+      document.getElementById('editLocation').value = m.location || '';
+      document.getElementById('editElevation').value = m.elevation || '';
+      document.getElementById('editDifficulty').value = m.difficulty || 'Moderate';
+      document.getElementById('editCrowdLevel').value = m.crowdLevel || 'Moderate';
+      document.getElementById('editDuration').value = m.duration || '';
+      document.getElementById('editRegistrationFee').value = m.registration_fee || 0;
+      document.getElementById('editEnvironmentalFee').value = m.environmental_fee || 0;
+      document.getElementById('editTrailLength').value = m.trail_length_km || '';
+      document.getElementById('editEstimatedDuration').value = m.estimated_duration || '';
+      document.getElementById('editJumpOff').value = m.jumpOff || '';
+      document.getElementById('editRating').value = m.rating || '';
+      document.getElementById('editStatus').value = m.status || 'Open';
+      document.getElementById('editStartPointLat').value = m.start_point_lat || '';
+      document.getElementById('editStartPointLng').value = m.start_point_lng || '';
+      document.getElementById('editDescription').value = m.description || '';
+      document.getElementById('editWeatherAdvisory').value = m.weatherAdvisory || '';
+      document.getElementById('editPeakTimes').value = m.peakTimes || '';
+      
+      let rules = typeof m.rules === 'string' ? JSON.parse(m.rules || '[]') : (m.rules || []);
+      let envReminders = typeof m.envReminders === 'string' ? JSON.parse(m.envReminders || '[]') : (m.envReminders || []);
+      let hazards = typeof m.hazards === 'string' ? JSON.parse(m.hazards || '[]') : (m.hazards || []);
+      
+      document.getElementById('editRules').value = Array.isArray(rules) ? rules.join('\n') : '';
+      document.getElementById('editEnvReminders').value = Array.isArray(envReminders) ? envReminders.join('\n') : '';
+      document.getElementById('editHazards').value = Array.isArray(hazards) ? hazards.join('\n') : '';
+    } else {
+      alert('Error loading mountain data: ' + result.message);
+      closeEditModal();
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Failed to load mountain data');
+  });
 }
-updateDate();
-setInterval(updateDate, 1000);
 
-document.querySelectorAll('.nav-item').forEach(item => { item.addEventListener('click', () => { if(item.dataset.href) window.location.href = item.dataset.href; }); });
+function closeEditModal() {
+  document.getElementById('editMountainModal').classList.remove('open');
+}
+
+function saveMountain() {
+  const formData = new FormData();
+  formData.append('action', 'update_mountain');
+  formData.append('id', document.getElementById('editMountainId').value);
+  formData.append('name', document.getElementById('editName').value);
+  formData.append('location', document.getElementById('editLocation').value);
+  formData.append('elevation', document.getElementById('editElevation').value);
+  formData.append('difficulty', document.getElementById('editDifficulty').value);
+  formData.append('crowdLevel', document.getElementById('editCrowdLevel').value);
+  formData.append('duration', document.getElementById('editDuration').value);
+  formData.append('registration_fee', document.getElementById('editRegistrationFee').value);
+  formData.append('environmental_fee', document.getElementById('editEnvironmentalFee').value);
+  formData.append('trail_length_km', document.getElementById('editTrailLength').value);
+  formData.append('estimated_duration', document.getElementById('editEstimatedDuration').value);
+  formData.append('jumpOff', document.getElementById('editJumpOff').value);
+  formData.append('rating', document.getElementById('editRating').value);
+  formData.append('status', document.getElementById('editStatus').value);
+  formData.append('start_point_lat', document.getElementById('editStartPointLat').value);
+  formData.append('start_point_lng', document.getElementById('editStartPointLng').value);
+  formData.append('description', document.getElementById('editDescription').value);
+  formData.append('weatherAdvisory', document.getElementById('editWeatherAdvisory').value);
+  formData.append('peakTimes', document.getElementById('editPeakTimes').value);
+  formData.append('rules', document.getElementById('editRules').value);
+  formData.append('envReminders', document.getElementById('editEnvReminders').value);
+  formData.append('hazards', document.getElementById('editHazards').value);
+  
+  fetch(window.location.href, {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    body: formData
+  })
+  .then(response => response.json())
+  .then(result => {
+    if (result.success) {
+      alert('Mountain updated successfully!');
+      closeEditModal();
+      location.reload();
+    } else {
+      alert('Error: ' + result.message);
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Failed to save mountain');
+  });
+}
 
 // ========== HEATMAP MODAL FUNCTIONS ==========
 function openHeatmapModal(mountainId, mountainName) {
@@ -661,11 +1161,15 @@ function renderCrowdReports(reports) {
 function refreshHeatmap() { if (currentMountainId) { loadHeatmapData(currentMountainId); loadCrowdReports(currentMountainId); } }
 function zoomToReportLocation(lat, lng) { if (heatmapMap) heatmapMap.setView([lat, lng], 16); }
 function escapeHtml(text) { if (!text) return ''; const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
+// ========== MANAGER FUNCTIONS ==========
+function openAssignModal(mountainId, mountainName) {
+  currentMountainId = mountainId;
+  currentMountainName = mountainName;
+  document.getElementById('assignModalTitle').innerHTML = `Assign Manager to ${mountainName}`;
+  document.getElementById('assignMountainId').value = mountainId;
+  document.getElementById('assignModal').classList.add('open');
+}
 
-// ========== MANAGER ASSIGNMENT FUNCTIONS ==========
-document.querySelectorAll('.manager-option').forEach(opt => { opt.addEventListener('click', function() { const radio = this.querySelector('input[type="radio"]'); if (radio) { radio.checked = true; document.querySelectorAll('.manager-option').forEach(o => o.classList.remove('selected')); this.classList.add('selected'); } }); });
-
-function openAssignModal(mountainId, mountainName) { currentMountainId = mountainId; currentMountainName = mountainName; document.getElementById('assignModalTitle').innerHTML = `Assign Manager to ${mountainName}`; document.getElementById('assignMountainId').value = mountainId; document.querySelectorAll('.manager-option input[type="radio"]').forEach(radio => radio.checked = false); document.querySelectorAll('.manager-option').forEach(o => o.classList.remove('selected')); document.getElementById('assignModal').classList.add('open'); }
 function closeAssignModal() { document.getElementById('assignModal').classList.remove('open'); }
 function openCreateManagerModal() { closeAssignModal(); document.getElementById('createManagerModal').classList.add('open'); }
 function closeCreateManagerModal() { document.getElementById('createManagerModal').classList.remove('open'); if (currentMountainId) openAssignModal(currentMountainId, currentMountainName); }
@@ -676,9 +1180,19 @@ function createNewManager() {
   const phone = document.getElementById('newManagerPhone').value.trim();
   if (!name || !email) { alert('Please fill in Name and Email'); return; }
   const formData = new FormData();
-  formData.append('action', 'create_manager'); formData.append('name', name); formData.append('email', email); formData.append('phone', phone);
+  formData.append('action', 'create_manager');
+  formData.append('name', name);
+  formData.append('email', email);
+  formData.append('phone', phone);
   fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData })
-    .then(response => response.json()).then(result => { if (result.success) { alert(`✅ ${result.manager_name} created!\nEmail: ${result.manager_email}\nPassword: Password123!`); closeCreateManagerModal(); location.reload(); } else { alert('Error: ' + result.message); } })
+    .then(response => response.json())
+    .then(result => {
+      if (result.success) {
+        alert(`${result.manager_name} created!\nEmail: ${result.manager_email}\nPassword: Password123!`);
+        closeCreateManagerModal();
+        location.reload();
+      } else { alert('Error: ' + result.message); }
+    })
     .catch(error => { alert('Failed to create manager'); });
 }
 
@@ -688,19 +1202,65 @@ function confirmAssignManager() {
   const managerId = selectedRadio.value;
   const sendEmail = document.getElementById('sendEmailCheckbox').checked;
   const formData = new FormData();
-  formData.append('action', 'assign_manager'); formData.append('mountain_id', currentMountainId); formData.append('manager_id', managerId); if (sendEmail) formData.append('send_email', '1');
+  formData.append('action', 'assign_manager');
+  formData.append('mountain_id', currentMountainId);
+  formData.append('manager_id', managerId);
+  if (sendEmail) formData.append('send_email', '1');
   fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData })
-    .then(response => response.json()).then(result => { if (result.success) { alert('✅ ' + result.message); location.reload(); } else { alert('Error: ' + result.message); } })
+    .then(response => response.json())
+    .then(result => {
+      if (result.success) { alert(result.message); location.reload(); }
+      else { alert('Error: ' + result.message); }
+    })
     .catch(error => { alert('Failed to assign manager'); });
 }
 
-function removeManager(assignmentId, mountainName) { if (confirm(`Remove this manager from ${mountainName}?`)) { const formData = new FormData(); formData.append('action', 'remove_manager'); formData.append('assignment_id', assignmentId); fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData }).then(response => response.json()).then(result => { if (result.success) location.reload(); else alert('Error: ' + result.message); }); } }
+function removeManager(assignmentId, mountainName) {
+  if (confirm(`Remove this manager from ${mountainName}?`)) {
+    const formData = new FormData();
+    formData.append('action', 'remove_manager');
+    formData.append('assignment_id', assignmentId);
+    fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData })
+      .then(response => response.json())
+      .then(result => { if (result.success) location.reload(); else alert('Error: ' + result.message); });
+  }
+}
 
-document.querySelectorAll('.edit-mtn-btn').forEach(btn => { btn.addEventListener('click', () => { alert('Edit mountain - ID: ' + btn.dataset.id + ' (Edit modal from your existing code)'); }); });
-document.querySelectorAll('.crowd-heatmap-btn').forEach(btn => { btn.addEventListener('click', () => { openHeatmapModal(parseInt(btn.dataset.id), btn.dataset.name); }); });
+// ========== UTILITIES ==========
+function updateDate() {
+  const d = new Date();
+  const dateElem = document.getElementById('liveDate');
+  if (dateElem) dateElem.textContent = d.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase() + '  ' + d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+}
+updateDate();
+setInterval(updateDate, 1000);
 
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => { if(item.dataset.href) window.location.href = item.dataset.href; });
+});
+
+document.querySelectorAll('.edit-mtn-btn').forEach(btn => {
+  btn.addEventListener('click', () => { openEditModal(parseInt(btn.dataset.id), btn.dataset.name); });
+});
+
+document.querySelectorAll('.crowd-heatmap-btn').forEach(btn => {
+  btn.addEventListener('click', () => { openHeatmapModal(parseInt(btn.dataset.id), btn.dataset.name); });
+});
+
+function escapeHtml(text) { if (!text) return ''; const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
 function openProfileModal() { alert('Profile modal'); }
 function showLogoutModal() { alert('Logout modal'); }
+
+// Manager option click handler
+document.querySelectorAll('.manager-option').forEach(opt => {
+  opt.addEventListener('click', function() {
+    const radio = this.querySelector('input[type="radio"]');
+    if (radio) { radio.checked = true;
+      document.querySelectorAll('.manager-option').forEach(o => o.classList.remove('selected'));
+      this.classList.add('selected');
+    }
+  });
+});
 </script>
 
 <?php include_once __DIR__ . '/profile-modal.php'; include_once __DIR__ . '/../../includes/logout-modal.php'; ?>

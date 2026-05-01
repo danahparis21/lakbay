@@ -3,24 +3,38 @@
 // Usage: set $activePage before including: e.g. $activePage = 'payments';
 
 // Make sure we have mountain data (in case parent didn't define it)
-if (!isset($assigned_mountains) && isset($manager_id)) {
-    if (!isset($pdo)) {
-        require_once __DIR__ . '/../config/db.php';
+// Safely check if $assigned_mountains exists and is an array
+if (!isset($assigned_mountains) || !is_array($assigned_mountains)) {
+    $assigned_mountains = [];
+    
+    // Only query if we have a valid manager_id
+    if (isset($manager_id) && $manager_id > 0) {
+        if (!isset($pdo)) {
+            require_once __DIR__ . '/../config/db.php';
+        }
+        if (isset($pdo)) {
+            $stmt = $pdo->prepare("
+                SELECT m.* 
+                FROM mountains m
+                INNER JOIN manager_mountains mm ON m.id = mm.mountain_id
+                WHERE mm.manager_id = ?
+                ORDER BY m.name
+            ");
+            $stmt->execute([$manager_id]);
+            $assigned_mountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Ensure it's an array
+            if (!is_array($assigned_mountains)) {
+                $assigned_mountains = [];
+            }
+        }
     }
-    $stmt = $pdo->prepare("
-        SELECT m.* 
-        FROM mountains m
-        INNER JOIN manager_mountains mm ON m.id = mm.mountain_id
-        WHERE mm.manager_id = ?
-        ORDER BY m.name
-    ");
-    $stmt->execute([$manager_id]);
-    $assigned_mountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-$mtn_names = array_column($assigned_mountains ?? [], 'name');
+// Safely get mountain names - ensure $assigned_mountains is an array
+$mtn_names = (is_array($assigned_mountains) && !empty($assigned_mountains)) ? array_column($assigned_mountains, 'name') : [];
 $mtn_display = !empty($mtn_names) ? implode(' & ', $mtn_names) : 'No Mountain';
-$mtn_count = count($assigned_mountains ?? []);
+$mtn_count = is_array($assigned_mountains) ? count($assigned_mountains) : 0;
 ?>
 
 <aside class="sidebar" id="sidebar">
@@ -99,6 +113,15 @@ $mtn_count = count($assigned_mountains ?? []);
 
     <div class="nav-divider"></div>
 
+    <!-- Profile link added before logout -->
+    <a href="profile-manager.php" class="nav-item <?= ($activePage??'')==='profile' ? 'active':'' ?>">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+      <span class="nav-text">Profile</span>
+    </a>
+    
     <a href="#" class="nav-item logout" onclick="event.preventDefault(); confirmLogout()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -140,6 +163,16 @@ $mtn_count = count($assigned_mountains ?? []);
   </div>
 </div>
 
+<style>
+/* Additional style for profile nav item active state */
+.nav-item.profile-active,
+.nav-item.active[href="profile-manager.php"] {
+  background: rgba(201,168,76,0.1);
+  border-left-color: #c9a84c;
+  color: #100600;
+}
+</style>
+
 <script>
 function confirmLogout() {
   document.getElementById('logoutModal').style.display = 'flex';
@@ -153,30 +186,33 @@ function doLogout() {
   window.location.href = '../login-and-signup/login.php';
 }
 
-// Unified click listener for sidebar toggle and outside clicks
-document.addEventListener('click', function(e) {
+function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   const mainArea = document.getElementById('mainArea');
-  const isToggleBtn = e.target.closest('.sidebar-toggle');
-  
-  if (isToggleBtn) {
-    // Handle toggle button click
-    if (sidebar) {
-      if (window.innerWidth <= 768) {
-        sidebar.classList.toggle('mobile-open');
-      } else {
-        sidebar.classList.toggle('collapsed');
-        if (mainArea) mainArea.classList.toggle('expanded');
-      }
+  if (sidebar && mainArea) {
+    if (window.innerWidth <= 768) {
+      sidebar.classList.toggle('mobile-open');
+    } else {
+      sidebar.classList.toggle('collapsed');
+      mainArea.classList.toggle('expanded');
     }
-  } else if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('mobile-open')) {
-    // Handle click outside open sidebar on mobile
-    if (!sidebar.contains(e.target)) {
+  }
+}
+
+// Close sidebar when clicking outside on mobile
+document.addEventListener('click', function(e) {
+  const sidebar = document.getElementById('sidebar');
+  const toggleButton = document.querySelector('.sidebar-toggle');
+  
+  // Only apply on mobile
+  if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('mobile-open')) {
+    // Check if click is outside the sidebar AND not on the toggle button
+    if (!sidebar.contains(e.target) && !toggleButton?.contains(e.target)) {
       sidebar.classList.remove('mobile-open');
     }
   }
   
-  // Logout modal click outside
+  // Close logout modal when clicking outside
   const logoutModal = document.getElementById('logoutModal');
   if (e.target === logoutModal) {
     closeLogoutModal();
@@ -190,5 +226,16 @@ document.querySelectorAll('.nav-item').forEach(link => {
       document.getElementById('sidebar')?.classList.remove('mobile-open');
     }
   });
+});
+
+// Also close sidebar when Escape key is pressed
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const sidebar = document.getElementById('sidebar');
+    if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('mobile-open')) {
+      sidebar.classList.remove('mobile-open');
+    }
+    closeLogoutModal();
+  }
 });
 </script>

@@ -892,9 +892,9 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
     <div class="sidebar-profile-name"><?= htmlspecialchars($guide['name']) ?></div>
     <div class="sidebar-profile-role"><?= htmlspecialchars($guide['specialization'] ?? 'Trail Guide') ?></div>
   </div>
-  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+  <button onclick="confirmLogout()" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--ink-5)'">
     <i class="fas fa-sign-out-alt"></i>
-  </a>
+  </button>
 </div>
   </aside>
 
@@ -981,9 +981,287 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
   </nav>
 </div>
 
+
+<style>
+@keyframes slideUpIn {
+    from { opacity:0; transform:translateX(-50%) translateY(20px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+</style>
+
 <div class="toast" id="toast"></div>
 
 <script>
+
+// ============================================
+// WORKING LOGOUT MODAL - USED IN profile & map
+// ============================================
+function confirmLogout() {
+    // Remove any existing modal
+    const existingModal = document.getElementById('standaloneLogoutModal');
+    if (existingModal) existingModal.remove();
+    
+    // Create modal container
+    const modal = document.createElement('div');
+    modal.id = 'standaloneLogoutModal';
+    
+    // Apply styles directly
+    modal.style.cssText = `
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        background: rgba(0, 0, 0, 0.6) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        z-index: 9999999 !important;
+    `;
+    
+    modal.innerHTML = `
+        <div style="
+            background: white;
+            border-radius: 20px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            margin: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            font-family: 'DM Sans', sans-serif;
+        ">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 50%;
+                    background: #fef2f2;
+                    color: #dc2626;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 1.2rem;
+                ">
+                    <i class="fas fa-sign-out-alt"></i>
+                </div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: #1a1a18; margin: 0;">Log out of Guide Portal?</h3>
+            </div>
+            <div style="margin-bottom: 24px; color: #666; font-size: 0.85rem; line-height: 1.5;">
+                You will be redirected to the login page.
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button id="logoutCancelBtn" style="
+                    padding: 10px 20px;
+                    border-radius: 10px;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    border: 1px solid #ddd;
+                    background: #f0f0f0;
+                    color: #666;
+                    font-family: inherit;
+                ">Cancel</button>
+                <button id="logoutConfirmBtn" style="
+                    padding: 10px 20px;
+                    border-radius: 10px;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    border: none;
+                    background: #dc2626;
+                    color: white;
+                    font-family: inherit;
+                ">Log Out</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Event listeners
+    document.getElementById('logoutCancelBtn').onclick = function() { modal.remove(); };
+    document.getElementById('logoutConfirmBtn').onclick = function() {
+        window.location.href = '../login-and-signup/login.php';
+    };
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+// ============================================
+// BEAUTIFUL DYNAMIC CONFIRM MODAL (with input support)
+// ============================================
+function showConfirmModal(options) {
+    const { title, message, confirmText, confirmColor, onConfirm, cancelText = 'Cancel', showInput = false, inputLabel = '', inputPlaceholder = '', inputType = 'text' } = options;
+    
+    const existingModal = document.getElementById('dynamicConfirmModal');
+    if (existingModal) existingModal.remove();
+    
+    const modalDiv = document.createElement('div');
+    modalDiv.id = 'dynamicConfirmModal';
+    
+    let inputHtml = '';
+    if (showInput) {
+        inputHtml = `
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 8px;">${inputLabel}</label>
+                <input type="${inputType}" id="modalInput" placeholder="${inputPlaceholder}" style="width: 100%; padding: 12px; border: 1.5px solid #e5e7eb; border-radius: 12px; font-size: 14px; outline: none; transition: border-color 0.2s;">
+            </div>
+        `;
+    }
+    
+    modalDiv.innerHTML = `
+        <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999999;">
+            <div style="background:white;border-radius:20px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:${confirmColor === '#dc2626' ? '#fef2f2' : (confirmColor === '#059669' ? '#d1fae5' : '#fef3c7')};color:${confirmColor};display:flex;align-items:center;justify-content:center;font-size:1.2rem;">
+                        <i class="fas ${confirmColor === '#dc2626' ? 'fa-exclamation-triangle' : (confirmColor === '#059669' ? 'fa-check-circle' : 'fa-question-circle')}"></i>
+                    </div>
+                    <h3 style="font-size:1.1rem;font-weight:700;color:#1a1a18;margin:0;">${title}</h3>
+                </div>
+                <div style="margin-bottom:24px;color:#666;font-size:0.85rem;line-height:1.5;">
+                    <p>${message}</p>
+                </div>
+                ${inputHtml}
+                <div style="display:flex;gap:12px;justify-content:flex-end;">
+                    <button id="modalCancelBtn" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #ddd;background:#f0f0f0;color:#666;font-family:inherit;">${cancelText}</button>
+                    <button id="modalConfirmBtn" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:none;background:${confirmColor};color:white;font-family:inherit;">${confirmText}</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modalDiv);
+    
+    // Focus input if exists
+    if (showInput) {
+        const input = document.getElementById('modalInput');
+        if (input) setTimeout(() => input.focus(), 100);
+    }
+    
+    document.getElementById('modalCancelBtn').onclick = function() {
+        modalDiv.remove();
+    };
+    
+    document.getElementById('modalConfirmBtn').onclick = function() {
+        const inputValue = showInput ? document.getElementById('modalInput')?.value : null;
+        modalDiv.remove();
+        if (onConfirm) onConfirm(inputValue);
+    };
+    
+    // Close when clicking outside
+    modalDiv.onclick = function(e) {
+        if (e.target === modalDiv) {
+            modalDiv.remove();
+        }
+    };
+}
+
+// ============================================
+// IMPROVED REJECT PAYMENT PROOF (with modal)
+// ============================================
+function rejectPaymentProof(bookingNumber, messageId) {
+    showConfirmModal({
+        title: 'Reject Payment Proof?',
+        message: `Are you sure you want to reject the payment proof for booking #${bookingNumber}? The hiker will be notified to resubmit.`,
+        confirmText: 'Yes, Reject',
+        confirmColor: '#dc2626',
+        onConfirm: () => {
+            showToast('Rejecting payment proof...');
+            
+            const fd = new FormData();
+            fd.append('action', 'reject_payment');
+            fd.append('booking_number', bookingNumber);
+            fd.append('message_id', messageId);
+            
+            fetch('../api/guide_messages.php', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('❌ Payment rejected. Hiker has been notified.');
+                        if (activeThread) loadMessages(activeThread, true);
+                    } else {
+                        showToast('❌ Error: ' + (data.message || 'Unknown error'));
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    showToast('❌ Network error');
+                });
+        }
+    });
+}
+
+// ============================================
+// IMPROVED DECLINE BOOKING (with reason input)
+// ============================================
+function declineBookingWithReason(messageId, action, bookingId, hikerName, hikerUserId) {
+    showConfirmModal({
+        title: `Decline ${hikerName}'s Booking?`,
+        message: `Please provide a reason for declining this booking request.`,
+        confirmText: 'Decline Booking',
+        confirmColor: '#dc2626',
+        showInput: true,
+        inputLabel: 'Reason for declining',
+        inputPlaceholder: 'e.g., Guide not available for this date',
+        onConfirm: (reason) => {
+            if (!reason || reason.trim() === '') {
+                showToast('Please provide a reason for declining');
+                return;
+            }
+            _proceedHandleBookingRequest(messageId, action, bookingId, hikerName, hikerUserId, reason);
+        }
+    });
+}
+
+// ============================================
+// IMPROVED HANDLE BOOKING REQUEST
+// ============================================
+let isProcessing = false;
+
+async function handleBookingRequest(messageId, action, bookingId, hikerName, hikerUserId) {
+    if (isProcessing) {
+        showToast('Please wait, processing...');
+        return;
+    }
+    
+    if (action === 'accept') {
+        showConfirmModal({
+            title: 'Accept Booking Request?',
+            message: `Payment instructions will be sent to ${hikerName}. The hiker will need to pay a downpayment to confirm.`,
+            confirmText: 'Accept & Confirm',
+            confirmColor: '#059669',
+            onConfirm: () => _proceedHandleBookingRequest(messageId, action, bookingId, hikerName, hikerUserId, '')
+        });
+    } else {
+        declineBookingWithReason(messageId, action, bookingId, hikerName, hikerUserId);
+    }
+}
+
+function initUnreadBadgePoller() {
+    function fetchAndUpdateBadge() {
+        fetch('../api/guide_messages.php?action=get_conversations')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) return;
+                var total = (data.conversations || []).reduce(function(s, c) { return s + (c.unread_count || 0); }, 0);
+                ['.sidebar-nav a[href="guide-communication.php"]', '.guide-bottom-nav a[href="guide-communication.php"]'].forEach(function(sel, i) {
+                    var link = document.querySelector(sel);
+                    if (!link) return;
+                    link.style.position = 'relative';
+                    var badge = link.querySelector('.notif-badge');
+                    if (total > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'notif-badge'; link.appendChild(badge); }
+                        badge.textContent = total > 9 ? '9+' : total;
+                        badge.style.cssText = i === 0
+                            ? 'position:absolute;right:12px;top:8px;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px;min-width:18px;text-align:center;'
+                            : 'position:absolute;top:-5px;right:5px;background:#dc2626;color:white;font-size:9px;font-weight:700;padding:2px 5px;border-radius:20px;min-width:16px;text-align:center;';
+                    } else if (badge) { badge.remove(); }
+                });
+            }).catch(function() {});
+    }
+    fetchAndUpdateBadge();
+    setInterval(fetchAndUpdateBadge, 30000);
+}
+initUnreadBadgePoller();
 const CURRENT_USER_ID = <?= json_encode($user_id) ?>;
 const CURRENT_GUIDE_NAME = <?= json_encode($guide['name']) ?>;
 
@@ -1933,18 +2211,21 @@ function copyGCashNumber(number) {
 }
 
 function markPaymentAsSent(messageId, bookingNumber) {
-    if (confirm(`📱 Have you sent the downpayment for booking #${bookingNumber}?\n\nAfter confirming, the hiker will be notified and can upload their payment receipt.`)) {
-        showToast('✅ Notifying hiker to upload payment receipt...');
-        
-        // Here you would call an API to:
-        // 1. Update the booking payment status to 'awaiting_confirmation'
-        // 2. Send a message to the hiker asking for receipt upload
-        // 3. Update the payment card status
-        
-        setTimeout(() => {
-            showToast('✅ Reminder sent to hiker. Please wait for receipt upload.');
-        }, 1000);
-    }
+    showConfirmToast({
+        title: 'Confirm Payment Sent?',
+        message: `Have you sent the downpayment for booking #${bookingNumber}? The hiker will be notified to upload their receipt.`,
+        icon: 'fa-mobile-alt',
+        iconBg: 'rgba(37,99,235,0.1)',
+        iconColor: '#2563eb',
+        confirmLabel: 'Yes, I Sent It',
+        confirmBg: '#2563eb',
+        onConfirm: () => {
+            showToast('✅ Notifying hiker to upload payment receipt...');
+            setTimeout(() => {
+                showToast('✅ Reminder sent to hiker. Please wait for receipt upload.');
+            }, 1000);
+        }
+    });
 }
 
 async function sendMessage() {
@@ -2035,31 +2316,10 @@ function updateSidebarNotificationBadge() {
         }
     }
 }
-let isProcessing = false;
 
-async function handleBookingRequest(messageId, action, bookingId, hikerName, hikerUserId) {
-    if (isProcessing) {
-        showToast('Please wait, processing...');
-        return;
-    }
-    
-    let confirmMessage = action === 'accept' 
-        ? `Accept booking request from ${hikerName}? This will send payment instructions.` 
-        : `Decline booking request from ${hikerName}?`;
-    
-    if (!confirm(confirmMessage)) return;
-    
-    isProcessing = true;
-    showToast('Processing...');
-    
-    let cancelReason = '';
-    if (action === 'decline') {
-        cancelReason = prompt('Please provide a reason for declining this booking:', 'Guide not available for this date');
-        if (!cancelReason) {
-            isProcessing = false;
-            return;
-        }
-    }
+
+async function _proceedHandleBookingRequest(messageId, action, bookingId, hikerName, hikerUserId, cancelReason) {
+    if (!isProcessing) isProcessing = true;
     
     const fd = new FormData();
     fd.append('action', `${action}_booking_request`);
@@ -2263,31 +2523,6 @@ function submitVerification() {
         });
 }
 
-function rejectPaymentProof(bookingNumber, messageId) {
-    if (confirm(`❌ REJECT PAYMENT PROOF for booking #${bookingNumber}?\n\nAre you sure you want to reject this payment proof? The hiker will be notified to resubmit.`)) {
-        showToast('Rejecting payment proof...');
-        
-        const fd = new FormData();
-        fd.append('action', 'reject_payment');
-        fd.append('booking_number', bookingNumber);
-        fd.append('message_id', messageId);
-        
-        fetch('../api/guide_messages.php', { method: 'POST', body: fd })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    showToast('❌ Payment rejected. Hiker has been notified.');
-                    if (activeThread) loadMessages(activeThread, true);
-                } else {
-                    showToast('❌ Error: ' + (data.message || 'Unknown error'));
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                showToast('❌ Network error');
-            });
-    }
-}
 </script>
 </body>
 </html>

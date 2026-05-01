@@ -11,7 +11,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'guide') {
 $user_id = $_SESSION['user_id'];
 
 $stmt = $pdo->prepare("
-    SELECT u.name, u.email, u.phone, u.avatar,
+    SELECT u.name, u.email, u.phone, u.avatar, u.password,
            g.id as guide_id, g.specialization, g.years_experience, g.bio,
            g.gcash_name, g.gcash_number, g.gcash_qr_code
     FROM users u
@@ -26,6 +26,9 @@ if (!$guide_data) {
 }
 
 $guide_id = $guide_data['guide_id'];
+
+// Check if password is still default
+$isDefaultPassword = password_verify('Password123!', $guide_data['password']);
 
 // ── Fetch assigned mountains ──────────────────────────────────────────────
 $stmt = $pdo->prepare("
@@ -170,6 +173,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
             
             $pdo->commit();
             echo json_encode(['success' => true, 'message' => 'Fees updated successfully']);
+            exit;
+        }
+        
+        // ACTION 4: Change password
+        if ($action === 'change_password') {
+            $current_password = $_POST['current_password'] ?? '';
+            $new_password = $_POST['new_password'] ?? '';
+            
+            if (empty($current_password) || empty($new_password)) {
+                echo json_encode(['success' => false, 'message' => 'All fields are required']);
+                exit;
+            }
+            
+            if (strlen($new_password) < 8) {
+                echo json_encode(['success' => false, 'message' => 'Password must be at least 8 characters']);
+                exit;
+            }
+            
+            if (!preg_match('/[A-Z]/', $new_password)) {
+                echo json_encode(['success' => false, 'message' => 'Password must contain at least one uppercase letter']);
+                exit;
+            }
+            
+            if (!preg_match('/[a-z]/', $new_password)) {
+                echo json_encode(['success' => false, 'message' => 'Password must contain at least one lowercase letter']);
+                exit;
+            }
+            
+            if (!preg_match('/[0-9]/', $new_password)) {
+                echo json_encode(['success' => false, 'message' => 'Password must contain at least one number']);
+                exit;
+            }
+            
+            // Verify current password
+            $stmt = $pdo->prepare("SELECT password FROM users WHERE id = ?");
+            $stmt->execute([$user_id]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$user || !password_verify($current_password, $user['password'])) {
+                echo json_encode(['success' => false, 'message' => 'Current password is incorrect']);
+                exit;
+            }
+            
+            // Update password
+            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+            $stmt->execute([$hashed_password, $user_id]);
+            
+            $pdo->commit();
+            echo json_encode(['success' => true, 'message' => 'Password changed successfully']);
             exit;
         }
         
@@ -456,6 +509,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
       color: #1a1a18; 
     }
     
+    /* Security row in profile card */
+    .security-row {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btn-change-password {
+      background: #1a1a18;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      margin-top: 8px;
+    }
+    .btn-change-password:hover {
+      background: #3a3a35;
+      transform: translateY(-1px);
+    }
+    .password-status {
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      display: inline-block;
+    }
+    .password-status.default {
+      background: #fef2f2;
+      color: #dc2626;
+    }
+    .password-status.changed {
+      background: #d4edda;
+      color: #155724;
+    }
+    
     /* Mountain chips */
     .mountain-chips {
       display: flex;
@@ -722,6 +816,259 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
       .profile-layout-3col { gap: 16px; }
     }
 
+    /* Password Change Modal */
+    .password-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999999;
+      backdrop-filter: blur(4px);
+    }
+    .password-modal-overlay.open {
+      display: flex;
+    }
+    .password-modal-container {
+      background: white;
+      border-radius: 20px;
+      width: 90%;
+      max-width: 450px;
+      overflow: hidden;
+      animation: modalSlideIn 0.2s ease-out;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    .password-modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .password-modal-header h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1a1a18;
+      margin: 0;
+    }
+    .password-modal-close {
+      background: none;
+      border: none;
+      font-size: 1.2rem;
+      cursor: pointer;
+      color: #999;
+      transition: color 0.15s;
+    }
+    .password-modal-close:hover {
+      color: #1a1a18;
+    }
+    .password-modal-body {
+      padding: 24px;
+    }
+    .password-modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+    .password-requirements {
+      background: #f8f9fa;
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 12px;
+      font-size: 0.7rem;
+      color: #666;
+    }
+    .password-requirements ul {
+      margin: 6px 0 0 18px;
+      padding: 0;
+    }
+    .password-requirements li {
+      margin: 3px 0;
+    }
+    .password-requirements .valid {
+      color: #2e7d32;
+    }
+    .password-requirements .invalid {
+      color: #dc2626;
+    }
+    .password-field {
+      position: relative;
+    }
+    .password-toggle {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #999;
+      font-size: 0.85rem;
+    }
+    
+    @keyframes modalSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+.toast-backdrop {
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(4px);
+}
+
+.modal-container {
+    background: white;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 400px;
+    padding: 24px;
+    animation: modalSlideIn 0.2s ease-out;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.modal-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+.modal-icon.warning {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.modal-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1a1a18;
+    margin: 0;
+}
+
+.modal-body {
+    margin-bottom: 24px;
+    color: #666;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.modal-btn {
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.modal-btn-secondary {
+    background: #f0f0f0;
+    color: #666;
+}
+
+.modal-btn-secondary:hover {
+    background: #e0e0e0;
+    transform: translateY(-1px);
+}
+
+.modal-btn-danger {
+    background: #dc2626;
+    color: white;
+}
+
+.modal-btn-danger:hover {
+    background: #b91c1c;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.modal-btn:active {
+    transform: translateY(0);
+}
+
+/* Force modal to be visible - ADD THIS */
+.modal-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    display: none;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 999999 !important;
+    backdrop-filter: blur(4px);
+}
+
+.modal-overlay[style*="display: flex"] {
+    display: flex !important;
+}
+
+.modal-container {
+    position: relative !important;
+    z-index: 1000000 !important;
+    background: white !important;
+}
+
   </style>
 </head>
 <body>
@@ -752,9 +1099,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
     <div class="sidebar-profile-name"><?= htmlspecialchars($guide_data['name']) ?></div>
     <div class="sidebar-profile-role"><?= htmlspecialchars($guide_data['specialization'] ?? 'Trail Guide') ?></div>
   </div>
-  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+  <button onclick="confirmLogout()" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--ink-5)'">
     <i class="fas fa-sign-out-alt"></i>
-  </a>
+  </button>
 </div>
   </aside>
 
@@ -762,7 +1109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
     <div class="guide-topbar">
       <div class="topbar-title">My Profile</div>
       <div class="topbar-right">
-        <button class="topbar-icon-btn" onclick="showToast('Logging out…')"><i class="fas fa-right-from-bracket"></i></button>
+        <button class="topbar-icon-btn" onclick="confirmLogout()" title="Logout"><i class="fas fa-right-from-bracket"></i></button>
       </div>
     </div>
 
@@ -828,6 +1175,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
                     <span style="font-size:0.72rem;color:var(--ink-4);">None assigned</span>
                   <?php endif; ?>
                 </div>
+              </div>
+              
+              <!-- Security Section with Change Password Button -->
+              <div style="margin-top: 12px;">
+                <div class="profile-info-row" style="background: transparent; padding: 4px 10px;">
+                  <div class="profile-info-icon"><i class="fas fa-lock"></i></div>
+                  <div>
+                    <div class="profile-info-label">Password Status</div>
+                    <div class="profile-info-val">
+                      <span class="password-status <?= $isDefaultPassword ? 'default' : 'changed' ?>">
+                        <?php if ($isDefaultPassword): ?>
+                          <i class="fas fa-exclamation-triangle"></i> Not yet changed
+                        <?php else: ?>
+                          <i class="fas fa-check-circle"></i> Changed
+                        <?php endif; ?>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button class="btn-change-password" onclick="openChangePasswordModal()">
+                  <i class="fas fa-key"></i> Change Password
+                </button>
               </div>
             </div>
           </div>
@@ -1011,9 +1380,306 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
   </nav>
 </div>
 
+<!-- Change Password Modal -->
+<div id="changePasswordModal" class="password-modal-overlay">
+  <div class="password-modal-container">
+    <div class="password-modal-header">
+      <h3><i class="fas fa-key"></i> Change Password</h3>
+      <button class="password-modal-close" onclick="closeChangePasswordModal()">&times;</button>
+    </div>
+    <div class="password-modal-body">
+      <div class="form-group">
+        <label class="form-label">Current Password</label>
+        <div class="password-field">
+          <input type="password" id="currentPwd" class="form-control" placeholder="Enter your current password">
+          <span class="password-toggle" onclick="togglePassword('currentPwd')">
+            <i class="fas fa-eye"></i>
+          </span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">New Password</label>
+        <div class="password-field">
+          <input type="password" id="newPwd" class="form-control" placeholder="Enter new password">
+          <span class="password-toggle" onclick="togglePassword('newPwd')">
+            <i class="fas fa-eye"></i>
+          </span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm New Password</label>
+        <div class="password-field">
+          <input type="password" id="confirmPwd" class="form-control" placeholder="Confirm new password">
+          <span class="password-toggle" onclick="togglePassword('confirmPwd')">
+            <i class="fas fa-eye"></i>
+          </span>
+        </div>
+      </div>
+      <div class="password-requirements" id="pwdRequirements">
+        <i class="fas fa-info-circle"></i> Password must contain:
+        <ul id="reqList">
+          <li id="reqLength">✗ At least 8 characters</li>
+          <li id="reqUpper">✗ At least one uppercase letter</li>
+          <li id="reqLower">✗ At least one lowercase letter</li>
+          <li id="reqNumber">✗ At least one number</li>
+        </ul>
+      </div>
+    </div>
+    <div class="password-modal-footer">
+      <button class="modal-btn modal-btn-secondary" onclick="closeChangePasswordModal()">Cancel</button>
+      <button class="modal-btn" style="background:#1a1a18; color:white;" onclick="submitPasswordChange()">Update Password</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
+<!-- LOGOUT CONFIRMATION MODAL -->
+<div id="logoutModal" class="modal-overlay" style="display: none;">
+    <div class="modal-container">
+        <div class="modal-header">
+            <div class="modal-icon warning">
+                <i class="fas fa-sign-out-alt"></i>
+            </div>
+            <h3 class="modal-title">Log out of Guide Portal?</h3>
+        </div>
+        <div class="modal-body">
+            <p>You will be redirected to the login page.</p>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn modal-btn-secondary" onclick="closeLogoutModal()">Cancel</button>
+            <button class="modal-btn modal-btn-danger" onclick="confirmLogoutAction()">Log Out</button>
+        </div>
+    </div>
+</div>
+
 <script>
+console.log('Script loaded - testing');
+
+// Password validation
+function validatePassword(password) {
+    const requirements = {
+        length: password.length >= 8,
+        upper: /[A-Z]/.test(password),
+        lower: /[a-z]/.test(password),
+        number: /[0-9]/.test(password)
+    };
+    
+    updateRequirementsUI(requirements);
+    return requirements.length && requirements.upper && requirements.lower && requirements.number;
+}
+
+function updateRequirementsUI(requirements) {
+    const lengthReq = document.getElementById('reqLength');
+    const upperReq = document.getElementById('reqUpper');
+    const lowerReq = document.getElementById('reqLower');
+    const numberReq = document.getElementById('reqNumber');
+    
+    if (lengthReq) {
+        lengthReq.innerHTML = (requirements.length ? '✓' : '✗') + ' At least 8 characters';
+        lengthReq.className = requirements.length ? 'valid' : 'invalid';
+    }
+    if (upperReq) {
+        upperReq.innerHTML = (requirements.upper ? '✓' : '✗') + ' At least one uppercase letter';
+        upperReq.className = requirements.upper ? 'valid' : 'invalid';
+    }
+    if (lowerReq) {
+        lowerReq.innerHTML = (requirements.lower ? '✓' : '✗') + ' At least one lowercase letter';
+        lowerReq.className = requirements.lower ? 'valid' : 'invalid';
+    }
+    if (numberReq) {
+        numberReq.innerHTML = (requirements.number ? '✓' : '✗') + ' At least one number';
+        numberReq.className = requirements.number ? 'valid' : 'invalid';
+    }
+}
+
+function togglePassword(fieldId) {
+    const field = document.getElementById(fieldId);
+    const toggle = field.nextElementSibling;
+    if (field.type === 'password') {
+        field.type = 'text';
+        toggle.innerHTML = '<i class="fas fa-eye-slash"></i>';
+    } else {
+        field.type = 'password';
+        toggle.innerHTML = '<i class="fas fa-eye"></i>';
+    }
+}
+
+// Listen to new password input
+document.addEventListener('DOMContentLoaded', function() {
+    const newPasswordInput = document.getElementById('newPwd');
+    if (newPasswordInput) {
+        newPasswordInput.addEventListener('input', function() {
+            validatePassword(this.value);
+        });
+    }
+});
+
+function openChangePasswordModal() {
+    document.getElementById('changePasswordModal').classList.add('open');
+    document.getElementById('currentPwd').value = '';
+    document.getElementById('newPwd').value = '';
+    document.getElementById('confirmPwd').value = '';
+    // Reset requirements
+    const reqs = ['reqLength', 'reqUpper', 'reqLower', 'reqNumber'];
+    reqs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.innerHTML = el.innerHTML.replace('✓', '✗');
+            el.className = '';
+        }
+    });
+}
+
+function closeChangePasswordModal() {
+    document.getElementById('changePasswordModal').classList.remove('open');
+}
+
+async function submitPasswordChange() {
+    const currentPassword = document.getElementById('currentPwd').value;
+    const newPassword = document.getElementById('newPwd').value;
+    const confirmPassword = document.getElementById('confirmPwd').value;
+    
+    if (!currentPassword) {
+        showToast('Please enter your current password', true);
+        return;
+    }
+    
+    if (!validatePassword(newPassword)) {
+        showToast('Please meet all password requirements', true);
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        showToast('New passwords do not match', true);
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('action', 'change_password');
+    formData.append('current_password', currentPassword);
+    formData.append('new_password', newPassword);
+    
+    try {
+        const res = await fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('✅ Password changed successfully! Please login again.');
+            setTimeout(() => {
+                window.location.href = '../login-and-signup/login.php';
+            }, 2000);
+        } else {
+            showToast('❌ ' + (data.message || 'Error changing password'), true);
+        }
+    } catch (err) {
+        showToast('❌ Network error. Please try again.', true);
+    }
+}
+
+// Simple direct logout for testing
+function simpleLogout() {
+    if (confirm('Logout now? (Test)')) {
+        window.location.href = '../login-and-signup/login.php';
+    }
+}
+
+function confirmLogout() {
+    // Create modal directly
+    const existingModal = document.getElementById('dynamicLogoutModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const modalDiv = document.createElement('div');
+    modalDiv.id = 'dynamicLogoutModal';
+    modalDiv.innerHTML = `
+        <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999999;">
+            <div style="background:white;border-radius:20px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:#fef2f2;color:#dc2626;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </div>
+                    <h3 style="font-size:1.1rem;font-weight:700;color:#1a1a18;margin:0;">Log out of Guide Portal?</h3>
+                </div>
+                <div style="margin-bottom:24px;color:#666;font-size:0.85rem;">
+                    <p>You will be redirected to the login page.</p>
+                </div>
+                <div style="display:flex;gap:12px;justify-content:flex-end;">
+                    <button onclick="this.closest('#dynamicLogoutModal').remove()" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #ddd;background:#f0f0f0;color:#666;">Cancel</button>
+                    <button onclick="window.location.href='../login-and-signup/login.php'" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:none;background:#dc2626;color:white;">Log Out</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modalDiv);
+}
+function showLogoutModal() {
+    console.log('showLogoutModal called');
+    const modal = document.getElementById('logoutModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function closeLogoutModal() {
+    console.log('closeLogoutModal called');
+    const modal = document.getElementById('logoutModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function confirmLogoutAction() {
+    console.log('confirmLogoutAction called - redirecting');
+    window.location.href = '../login-and-signup/login.php';
+}
+
+// Check if modal exists on page load
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded');
+    const modal = document.getElementById('logoutModal');
+    console.log('Logout modal found:', modal ? 'YES' : 'NO');
+    
+    // Test if we can find the logout buttons
+    const buttons = document.querySelectorAll('[onclick="confirmLogout()"]');
+    console.log('Logout buttons found:', buttons.length);
+});
+
+// Rest of your existing functions...
+function initUnreadBadgePoller() {
+    function fetchAndUpdateBadge() {
+        fetch('../api/guide_messages.php?action=get_conversations')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) return;
+                var total = (data.conversations || []).reduce(function(s, c) { return s + (c.unread_count || 0); }, 0);
+                ['.sidebar-nav a[href="guide-communication.php"]', '.guide-bottom-nav a[href="guide-communication.php"]'].forEach(function(sel, i) {
+                    var link = document.querySelector(sel);
+                    if (!link) return;
+                    link.style.position = 'relative';
+                    var badge = link.querySelector('.notif-badge');
+                    if (total > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'notif-badge'; link.appendChild(badge); }
+                        badge.textContent = total > 9 ? '9+' : total;
+                        badge.style.cssText = i === 0
+                            ? 'position:absolute;right:12px;top:8px;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px;min-width:18px;text-align:center;'
+                            : 'position:absolute;top:-5px;right:5px;background:#dc2626;color:white;font-size:9px;font-weight:700;padding:2px 5px;border-radius:20px;min-width:16px;text-align:center;';
+                    } else if (badge) { badge.remove(); }
+                });
+            }).catch(function() {});
+    }
+    fetchAndUpdateBadge();
+    setInterval(fetchAndUpdateBadge, 30000);
+}
+
+initUnreadBadgePoller();
+
 const allMountains = <?= json_encode($all_mountains) ?>;
 let selectedMtns = new Set(<?= json_encode($assigned_mtn_ids) ?>);
 
@@ -1054,7 +1720,6 @@ function renderProfileChips() {
   });
 }
 
-// Save Mountains (AJAX, then refresh fee section)
 async function saveMountains() {
   const btn = document.getElementById('saveMountainsBtn');
   const originalHtml = btn.innerHTML;
@@ -1075,21 +1740,19 @@ async function saveMountains() {
     
     if (data.success) {
       showToast('✅ Mountains updated!');
-      // Reload the page to refresh fee cards
       setTimeout(() => location.reload(), 1000);
     } else {
-      showToast('❌ ' + (data.message || 'Error saving mountains'));
+      showToast('❌ ' + (data.message || 'Error saving mountains'), true);
       btn.disabled = false;
       btn.innerHTML = originalHtml;
     }
   } catch (err) {
-    showToast('❌ Network error');
+    showToast('❌ Network error', true);
     btn.disabled = false;
     btn.innerHTML = originalHtml;
   }
 }
 
-// Save Profile (basic info + GCash)
 async function saveProfile() {
   const email = document.getElementById('editEmail').value.trim();
   const phone = document.getElementById('editPhone').value.trim();
@@ -1101,8 +1764,8 @@ async function saveProfile() {
   const avatarInput = document.getElementById('avatarFileInput');
   const qrInput = document.getElementById('qrFileInput');
 
-  if (!email || !email.includes('@')) { showToast('Please enter a valid email.'); return; }
-  if (!phone) { showToast('Please enter your mobile number.'); return; }
+  if (!email || !email.includes('@')) { showToast('Please enter a valid email.', true); return; }
+  if (!phone) { showToast('Please enter your mobile number.', true); return; }
 
   const btn = document.getElementById('saveProfileBtn');
   btn.disabled = true;
@@ -1133,18 +1796,17 @@ async function saveProfile() {
       showToast('✅ Profile updated successfully!');
       setTimeout(() => location.reload(), 1500);
     } else {
-      showToast('❌ ' + (data.message || 'Error saving profile'));
+      showToast('❌ ' + (data.message || 'Error saving profile'), true);
       btn.disabled = false;
       btn.innerHTML = '<i class="fas fa-check"></i> Save Profile';
     }
   } catch (err) {
-    showToast('❌ Network error. Please try again.');
+    showToast('❌ Network error. Please try again.', true);
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-check"></i> Save Profile';
   }
 }
 
-// Save fees for a specific mountain
 async function saveFeeForMountain(button, mountainId) {
   const card = button.closest('.fee-card');
   const dayFee = card.querySelector('.day-fee').value;
@@ -1176,17 +1838,16 @@ async function saveFeeForMountain(button, mountainId) {
       statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> Saved';
       showToast('✅ Fees saved for ' + card.dataset.mountainName);
     } else {
-      showToast('❌ ' + (data.message || 'Error saving fees'));
+      showToast('❌ ' + (data.message || 'Error saving fees'), true);
     }
   } catch (err) {
-    showToast('❌ Network error');
+    showToast('❌ Network error', true);
   } finally {
     button.disabled = false;
     button.innerHTML = '<i class="fas fa-save"></i> Save Fees for ' + card.dataset.mountainName;
   }
 }
 
-// Photo handlers
 function handlePhotoUpload(input) {
   const file = input.files[0];
   const errEl = document.getElementById('photoError');
@@ -1212,7 +1873,7 @@ function handleQRUpload(input) {
   const file = input.files[0];
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) {
-    showToast('QR code image must be less than 2MB');
+    showToast('QR code image must be less than 2MB', true);
     input.value = '';
     return;
   }
@@ -1232,16 +1893,30 @@ function removeQRCode() {
   document.getElementById('qrPreviewImg').src = '';
 }
 
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2800);
+function showToast(message, isError = false) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.style.background = isError ? '#dc2626' : '#1a1a18';
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.style.background = '#1a1a18';
+    }, 2800);
 }
 
-// Initialize
 renderMtnSelector();
 renderProfileChips();
+
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('logoutModal');
+    if (event.target === modal) {
+        closeLogoutModal();
+    }
+    const pwdModal = document.getElementById('changePasswordModal');
+    if (event.target === pwdModal) {
+        closeChangePasswordModal();
+    }
+});
 </script>
 </body>
 </html>

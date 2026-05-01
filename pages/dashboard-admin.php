@@ -290,6 +290,7 @@ for ($i = 3; $i >= 0; $i--) {
 <body data-page="dashboard">
 <div class="app">
 
+    <!-- SIDEBAR -->
   <aside class="sidebar">
     <div>
       <div class="logo">
@@ -308,14 +309,15 @@ for ($i = 3; $i >= 0; $i--) {
         <div class="nav-section-label">Navigation</div>
       </div>
       <ul class="nav-list">
-        <li class="nav-item active" data-href="/pages/dashboard-admin.php"><i class="fas fa-chart-line"></i> Dashboard</li>
-        <li class="nav-item" data-href="/pages/admin/mountains.php"><i class="fas fa-mountain"></i> Mountains</li>
-        <li class="nav-item" data-href="/pages/admin/hikers.php"><i class="fas fa-person-hiking"></i> Hikers</li>
-        <li class="nav-item" data-href="/pages/admin/guides.php"><i class="fas fa-chalkboard-user"></i> Guides</li>
+        <li class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'dashboard-admin.php' ? 'active' : '' ?>" data-href="/pages/dashboard-admin.php"><i class="fas fa-chart-line"></i> Dashboard</li>
+        <li class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'mountains.php' ? 'active' : '' ?>" data-href="/pages/admin/mountains.php"><i class="fas fa-mountain"></i> Mountains</li>
+        <li class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'hikers.php' ? 'active' : '' ?>" data-href="/pages/admin/hikers.php"><i class="fas fa-person-hiking"></i> Hikers</li>
+        <li class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'guides.php' ? 'active' : '' ?>" data-href="/pages/admin/guides.php"><i class="fas fa-chalkboard-user"></i> Guides</li>
         <div class="nav-divider"></div>
-        <li class="nav-item" data-href="/pages/admin/payments.php"><i class="fas fa-coins"></i> Revenue</li>
-        <li class="nav-item" data-href="/pages/admin/alerts.php"><i class="fas fa-bell"></i> Alerts</li>
-        <li class="nav-item" data-href="/pages/admin/analytics.php"><i class="fas fa-chart-simple"></i> Analytics</li>
+        <li class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'payments.php' ? 'active' : '' ?>" data-href="/pages/admin/payments.php"><i class="fas fa-coins"></i> Revenue</li>
+        <li class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'reviews.php' ? 'active' : '' ?>" data-href="/pages/admin/reviews.php"><i class="fas fa-star"></i> Reviews</li>
+        <li class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'alerts.php' ? 'active' : '' ?>" data-href="/pages/admin/alerts.php"><i class="fas fa-bell"></i> Alerts</li>
+        <li class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'analytics.php' ? 'active' : '' ?>" data-href="/pages/admin/analytics.php"><i class="fas fa-chart-simple"></i> Analytics</li>
       </ul>
     </div>
     <div>
@@ -330,41 +332,45 @@ for ($i = 3; $i >= 0; $i--) {
     </div>
   </aside>
 
+  <!-- MAIN -->
   <div class="main">
     <div class="topbar">
       <div class="page-heading"><i class="fas fa-chart-line"></i> Dashboard</div>
       <div class="topbar-right">
         <div class="topbar-date" id="liveDate"></div>
         <div class="topbar-user" style="cursor: pointer;">
-          <div class="avatar" id="topbarAvatar"><?= htmlspecialchars($adminInitial) ?></div>
+          <div class="avatar" id="topbarAvatar">
+            <?php if (!empty($_SESSION['user_avatar'])): ?>
+              <img src="<?= htmlspecialchars($_SESSION['user_avatar']) ?>" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+            <?php else: ?>
+              <?= htmlspecialchars($adminInitial) ?>
+            <?php endif; ?>
+          </div>
           <?= htmlspecialchars($adminName) ?>
           <i class="fas fa-chevron-down" style="font-size:0.5rem;color:var(--ink-4);"></i>
         </div>
       </div>
     </div>
 
+
     <div class="content">
 
-      <!-- ALERT BANNER -->
-      <?php if (!empty($activeAlerts)): ?>
-      <div class="panel" style="background:var(--ink);border-color:var(--ink);color:var(--paper);padding:18px 22px;margin-bottom:24px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">
-          <div>
-            <div style="font-size:0.65rem;font-weight:600;color:var(--ink-5);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">
-              ⚠️ ACTIVE EMERGENCY ALERTS
-            </div>
-            <div style="font-size:0.88rem;font-weight:500;">
-              <?php foreach ($activeAlerts as $alert): ?>
-                • <?= htmlspecialchars($alert['title']) ?> · <?= htmlspecialchars($alert['location']) ?> (<?= ucfirst($alert['severity']) ?>)<br>
-              <?php endforeach; ?>
-            </div>
-          </div>
-          <button class="btn" style="border-color:rgba(255,255,255,0.2);color:var(--paper);background:rgba(255,255,255,0.1);" onclick="window.location.href='/pages/admin/alerts.php'">
-            Manage Alerts →
-          </button>
-        </div>
-      </div>
-      <?php endif; ?>
+    <!-- ALERT BANNER - COMPACT VERSION -->
+<?php if (!empty($activeAlerts)): ?>
+<div style="background:var(--ink);color:var(--paper);padding:12px 20px;margin-bottom:24px;border-radius:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <span style="background:#dc2626;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;">⚠️ CRITICAL</span>
+    <span style="font-size:13px;">
+      <?php foreach ($activeAlerts as $idx => $alert): ?>
+        <?= $idx > 0 ? ' · ' : '' ?><?= htmlspecialchars($alert['title']) ?> (<?= htmlspecialchars($alert['location']) ?>)
+      <?php endforeach; ?>
+    </span>
+  </div>
+  <button class="btn" style="border-color:rgba(255,255,255,0.2);color:var(--paper);background:rgba(255,255,255,0.1);padding:6px 12px;font-size:12px;" onclick="window.location.href='/pages/admin/alerts.php'">
+    Manage →
+  </button>
+</div>
+<?php endif; ?>
 
       <!-- STAT CARDS (Expanded to 6 for comprehensive view) -->
       <div class="stat-grid" style="grid-template-columns: repeat(3, 1fr);">
@@ -413,40 +419,42 @@ for ($i = 3; $i >= 0; $i--) {
         </div>
       </div>
 
-      <!-- CHARTS ROW -->
-      <div class="two-col">
-        <div class="panel">
-          <div class="panel-header">
-            <span class="panel-title">Revenue Analytics (This Week)</span>
-            <div>
-              <select id="revenueViewFilter" class="revenue-filter-select" style="font-size:0.7rem; padding:4px 8px;">
-                <option value="daily">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
-              <select id="revenueYearFilter" style="display:none; font-size:0.7rem; padding:4px 8px;">
-                <?php for ($y = date('Y')-4; $y <= date('Y'); $y++): ?>
-                  <option value="<?= $y ?>"><?= $y ?></option>
-                <?php endfor; ?>
-              </select>
-            </div>
-          </div>
-          <div class="chart-wrap">
-            <canvas id="chartRevenue"></canvas>
-          </div>
-          <div id="revenueInsights" style="margin-top:12px; padding:8px 12px; background:var(--paper); border-radius:8px; font-size:0.7rem;">
-            <i class="fas fa-info-circle"></i> Hover over bars for details
-          </div>
-        </div>
-        
-        <div class="panel">
-          <div class="panel-header">
-            <span class="panel-title">Bookings Trend (Last 4 Weeks)</span>
-            <button class="btn btn-ghost" id="refreshStatsBtn"><i class="fas fa-rotate-right"></i></button>
-          </div>
-          <div class="chart-wrap"><canvas id="chartActivity"></canvas></div>
-        </div>
+<!-- CHARTS ROW -->
+<div class="two-col">
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Revenue Analytics</span>
+      <div class="revenue-filter-group">
+        <select id="revenueViewFilter" class="revenue-filter-select">
+          <option value="daily">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+        <select id="revenueYearFilter" class="revenue-filter-select">
+          <?php for ($y = date('Y')-4; $y <= date('Y'); $y++): ?>
+            <option value="<?= $y ?>" <?= $y == date('Y') ? 'selected' : '' ?>><?= $y ?></option>
+          <?php endfor; ?>
+        </select>
       </div>
+    </div>
+    <div class="chart-wrap">
+  <canvas id="chartRevenue" width="100%" height="280" style="height: 280px; width: 100%;"></canvas>
+</div>
+    <div id="revenueInsights" style="margin-top:12px; padding:8px 12px; background:var(--paper); border-radius:8px; font-size:0.7rem;">
+      <i class="fas fa-info-circle"></i> Total: ₱<?= number_format($totalWeekRevenue, 0) ?> · Peak: <?= $weekdays[array_search(max($dailyRevenue), $dailyRevenue)] ?>
+    </div>
+  </div>
+  
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Bookings Trend (Last 4 Weeks)</span>
+      <button class="btn btn-ghost" id="refreshStatsBtn"><i class="fas fa-rotate-right"></i></button>
+    </div>
+    <div class="chart-wrap">
+  <canvas id="chartActivity" width="100%" height="280" style="height: 280px; width: 100%;"></canvas>
+</div>
+  </div>
+</div>
 
       <!-- MOUNTAIN POPULARITY & HOURLY CHECKINS ROW -->
       <div class="two-col">
@@ -630,30 +638,42 @@ buildChart('chartActivity', 'line', { labels: weekLabels, datasets: [{ data: wee
 buildChart('popularityChart', 'bar', { labels: mountainNames, datasets: [{ data: mountainBookings, backgroundColor: '#d4af37', borderRadius: 6 }] });
 buildChart('hourlyChart', 'bar', { labels: Array.from({length:24}, (_,i)=>`${i}:00`), datasets: [{ data: hourlyData, backgroundColor: (ctx) => ctx.raw === Math.max(...hourlyData) ? '#c0392b' : '#adb5bd', borderRadius: 4 }] });
 
-// Revenue filter handlers
+// Revenue filter handlers - FIXED to prevent layout shift
 document.getElementById('revenueViewFilter')?.addEventListener('change', async (e) => {
   const view = e.target.value;
   const yearFilter = document.getElementById('revenueYearFilter');
+  
+  // Enable/disable year filter (not hide/show)
   if (view === 'yearly' || view === 'monthly') {
-    yearFilter.style.display = 'inline-block';
-    const year = yearFilter.value;
-    const formData = new URLSearchParams();
-    formData.append('action', 'get_revenue_data');
-    formData.append('view', view);
-    formData.append('year', year);
-    const response = await fetch(window.location.href, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' }, body: formData });
-    const data = await response.json();
-    if (data) updateRevenueChart(data.labels, data.data, data.total, view);
+    yearFilter.disabled = false;
+    yearFilter.style.opacity = '1';
   } else {
-    yearFilter.style.display = 'none';
-    const formData = new URLSearchParams();
-    formData.append('action', 'get_revenue_data');
-    formData.append('view', 'daily');
-    const response = await fetch(window.location.href, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' }, body: formData });
-    const data = await response.json();
-    if (data) updateRevenueChart(data.labels, data.data, data.total, view);
+    yearFilter.disabled = true;
+    yearFilter.style.opacity = '0.5';
+  }
+  
+  const year = yearFilter.value;
+  const formData = new URLSearchParams();
+  formData.append('action', 'get_revenue_data');
+  formData.append('view', view);
+  if (view === 'monthly' || view === 'yearly') {
+    formData.append('year', year);
+  }
+  
+  const response = await fetch(window.location.href, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' }, 
+    body: formData 
+  });
+  const data = await response.json();
+  if (data) {
+    updateRevenueChart(data.labels, data.data, data.total, view);
   }
 });
+
+// Initial state - disable year filter for daily view
+document.getElementById('revenueYearFilter').disabled = true;
+document.getElementById('revenueYearFilter').style.opacity = '0.5';
 
 document.getElementById('revenueYearFilter')?.addEventListener('change', async (e) => {
   const view = document.getElementById('revenueViewFilter').value;
@@ -677,12 +697,51 @@ function acknowledgeAlert(alertId) {
     body: new URLSearchParams({ action: 'acknowledge_alert', alert_id: alertId })
   }).then(() => location.reload()).catch(() => alert('Alert acknowledged'));
 }
+
+
+</script>
+
+<!-- Simple working logout modal fallback -->
+<div id="simpleLogoutModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 999999; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 20px; width: 90%; max-width: 400px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+        <div style="padding: 24px; text-align: center;">
+            <div style="width: 52px; height: 52px; background: #fee2e2; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+                <i class="fas fa-right-from-bracket" style="font-size: 22px; color: #dc2626;"></i>
+            </div>
+            <h3 style="font-family: 'Inter', sans-serif; font-size: 1.15rem; font-weight: 600; margin: 0 0 8px;">Confirm Logout</h3>
+            <p style="color: #5B6A7E; font-size: 0.83rem; margin: 0 0 20px;">Are you sure you want to log out?</p>
+            <div style="display: flex; gap: 12px;">
+                <button onclick="document.getElementById('simpleLogoutModal').style.display='none'" style="flex: 1; padding: 10px; border: 1.5px solid #E5E9EF; background: white; border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer;">Cancel</button>
+                <a href="../login-and-signup/login.php" style="flex: 1; padding: 10px; background: #dc2626; color: white; border: none; border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; text-decoration: none; text-align: center; display: block;">
+                    <i class="fas fa-right-from-bracket"></i> Log Out
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Override the showLogoutModal function to use our simple modal
+function showLogoutModal() {
+    const modal = document.getElementById('simpleLogoutModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+// Also handle the existing modal if it has issues
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if the original modal exists but isn't working
+    const originalModal = document.getElementById('logoutModal');
+    if (originalModal && originalModal.style.display === 'none') {
+        console.log('Original logout modal found');
+    }
+});
 </script>
 
 <!-- Include Modals -->
 <?php include_once __DIR__ . '/admin/profile-modal.php'; ?>
 <?php include_once __DIR__ . '/includes/logout-modal.php'; ?>
-
 <style>
   .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 32px; }
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 32px; }
@@ -690,13 +749,37 @@ function acknowledgeAlert(alertId) {
   .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
   .section-title { font-weight: 600; font-size: 0.9rem; }
   .section-action { font-size: 0.7rem; color: var(--ink-4); cursor: pointer; background: none; border: none; }
+  .revenue-filter-group { display: flex; gap: 8px; align-items: center; }
   .revenue-filter-select { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 0.7rem; }
   .mini-stats { display: flex; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
   .mini-stat { flex: 1; text-align: center; }
   .mini-stat-value { font-size: 1rem; font-weight: 700; }
   .mini-stat-label { font-size: 0.6rem; color: var(--ink-4); }
-  @media (max-width: 1000px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } .two-col { grid-template-columns: 1fr; } }
-  @media (max-width: 600px) { .stat-grid { grid-template-columns: 1fr; } }
+  
+  /* FIX: Force fixed canvas sizes */
+  .chart-wrap {
+    position: relative;
+    height: 280px !important;
+    width: 100% !important;
+  }
+  
+  .chart-wrap canvas {
+    max-height: 280px !important;
+    height: 280px !important;
+    width: 100% !important;
+  }
+  
+  .two-col .panel {
+    min-height: auto;
+  }
+  
+  @media (max-width: 1000px) { 
+    .stat-grid { grid-template-columns: repeat(2, 1fr); } 
+    .two-col { grid-template-columns: 1fr; } 
+  }
+  @media (max-width: 600px) { 
+    .stat-grid { grid-template-columns: 1fr; } 
+  }
 </style>
 </body>
 </html>

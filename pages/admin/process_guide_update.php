@@ -114,3 +114,13 @@ try {
     // Show actual error in development — replace with a generic message in production
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
+
+// Add this to your existing process_guide_update.php
+if ($_POST['action'] === 'approve_registration') {
+    $guideId = $_POST['guide_id'];
+    $stmt = $pdo->prepare("UPDATE guides SET is_approved = 1, is_available = 1, submitted_at = NULL WHERE id = ?");
+    $stmt->execute([$guideId]);
+    echo json_encode(['success' => true]);
+    exit;
+}
+

@@ -762,42 +762,74 @@ if (count($recentHikers) >= 3) {
       color: rgba(255, 255, 245, 0.5);
     }
 
-    /* Testimonial Section - New Element */
-    .testimonial-grid {
+    /* Testimonial Section - Compact Responsive */
+    .testimonials { padding: 60px 40px; }
+    .testimonials .section-header { margin-bottom: 32px; }
+    .testimonials .section-header h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .testimonials .section-header p { color: var(--stone); font-size: 15px; }
+    .testimonials-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 30px;
-      margin-top: 40px;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
     }
     .testimonial-card {
-      background: rgba(255, 255, 245, 0.6);
+      background: rgba(255, 255, 245, 0.65);
       backdrop-filter: blur(12px);
-      border-radius: var(--radius-sm);
-      padding: 28px;
+      border-radius: 16px;
+      padding: 18px 20px;
       border: 1px solid rgba(255, 255, 245, 0.5);
       transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
     .testimonial-card:hover {
-      transform: translateY(-5px);
-      background: rgba(255, 255, 245, 0.8);
-      backdrop-filter: blur(16px);
+      transform: translateY(-4px);
+      background: rgba(255, 255, 245, 0.85);
       border-color: var(--gold);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+    }
+    .testimonial-rating { font-size: 13px; color: var(--gold); letter-spacing: 1px; }
+    .testimonial-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--espresso);
+      margin: 0;
     }
     .testimonial-text {
       font-style: italic;
-      font-size: 14px;
-      line-height: 1.7;
-      color: var(--espresso);
-      margin-bottom: 20px;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: var(--stone);
+      margin: 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .testimonial-author {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+      margin-top: 4px;
+      border-top: 1px solid rgba(16,6,0,0.06);
+      padding-top: 10px;
+    }
+    .testimonial-author img {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      object-fit: cover;
     }
     .author-avatar {
-      width: 40px;
-      height: 40px;
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
       background: var(--gold);
       border-radius: 50%;
       display: flex;
@@ -805,9 +837,54 @@ if (count($recentHikers) >= 3) {
       justify-content: center;
       color: var(--espresso);
       font-weight: 700;
+      font-size: 13px;
     }
-    .author-info h4 { font-size: 14px; font-weight: 700; }
-    .author-info p { font-size: 11px; color: var(--stone); }
+    .author-name { font-size: 12px; font-weight: 700; color: var(--espresso); }
+    .author-verified { font-size: 10px; color: var(--sage); font-weight: 600; }
+
+    /* Guide Register Banner */
+    .guide-register-banner {
+      background: linear-gradient(135deg, rgba(198,164,59,0.12), rgba(106,142,106,0.1));
+      border: 1.5px solid rgba(198,164,59,0.35);
+      border-radius: 16px;
+      padding: 20px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+    .guide-register-banner .banner-text h4 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--espresso);
+      margin-bottom: 4px;
+    }
+    .guide-register-banner .banner-text p {
+      font-size: 13px;
+      color: var(--stone);
+    }
+    .btn-register-guide {
+      background: var(--espresso);
+      color: var(--cream);
+      padding: 11px 26px;
+      border-radius: 50px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: var(--transition);
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-register-guide:hover {
+      background: var(--gold);
+      color: var(--espresso);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(198,164,59,0.3);
+    }
 
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(40px); }
@@ -818,12 +895,18 @@ if (count($recentHikers) >= 3) {
       .navbar { padding: 14px 20px; }
       .hero-content { padding: 100px 20px 80px; }
       .section { padding: 60px 20px; }
+      .testimonials { padding: 40px 20px; }
       .hero-stats { gap: 20px; }
       .stat-glass { padding: 8px 20px; }
       .section-title { font-size: 32px; }
       .cta-glass h2 { font-size: 28px; }
       .cta-glass { padding: 40px 24px; }
       .btn-outline-light { margin: 8px; }
+      .testimonials-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+      .guide-register-banner { flex-direction: column; align-items: flex-start; }
+    }
+    @media (max-width: 480px) {
+      .testimonials-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -997,6 +1080,18 @@ $systemReviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
       <a href="javascript:void(0);" onclick="redirectToLogin()" class="btn-outline-light">Browse Verified Guides →</a>
       <a href="javascript:void(0);" onclick="redirectToLogin()" class="btn-outline-light" style="margin-left: 16px;">Book Your Hike Easily</a>
     </div><p style="margin-top: 28px; font-size: 14px; opacity: 0.7;">✓ Verified Guides ✓ Best Rates ✓ 24/7 Support</p></div>
+
+    <!-- Register as a Guide Banner -->
+    <div class="guide-register-banner">
+      <div class="banner-text">
+        <h4>🧭 Are you a local guide?</h4>
+        <p>Share your expertise with hikers. Register as an LAKBAY-verified guide and start earning from your passion for the mountains.</p>
+      </div>
+      <a href="guide-registration.php" class="btn-register-guide">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        Register as a Guide
+      </a>
+    </div>
   </div>
 </section>
 
@@ -1030,18 +1125,18 @@ $systemReviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <script>
   // Redirect to login page for protected content
   function redirectToLogin() {
-    window.location.href = 'login and signup/login.php';
+    window.location.href = 'login-and-signup/login.php';
   }
   
   // Redirect to explore page but check login first (for mountain cards)
   function redirectToExplore() {
-    window.location.href = 'login and signup/login.php?redirect=explore';
+    window.location.href = 'login-and-signup/login.php?redirect=explore';
   }
   
   // Find Trail button
   document.getElementById('findTrailBtn')?.addEventListener('click', (e) => { 
     e.preventDefault(); 
-    window.location.href = 'login and signup/login.php?redirect=quiz'; 
+    window.location.href = 'login-and-signup/login.php?redirect=quiz'; 
   });
   
   // Scroll to mountains section when any Explore Mountains button is clicked

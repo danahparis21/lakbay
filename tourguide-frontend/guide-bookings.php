@@ -46,9 +46,13 @@ $stmt = $pdo->prepare("
     SELECT 
         COALESCE(SUM(
             CASE 
-                WHEN b.hike_type = 'overnight' 
-                THEN COALESCE((SELECT guide_fee_overnight FROM guide_mountain_rates WHERE guide_id = b.guide_id AND mountain_id = b.mountain_id LIMIT 1), 1500)
-                ELSE COALESCE((SELECT guide_fee_day FROM guide_mountain_rates WHERE guide_id = b.guide_id AND mountain_id = b.mountain_id LIMIT 1), 801)
+                WHEN b.guide_payment_status = 'paid' AND b.status = 'finished' THEN
+                    CASE 
+                        WHEN b.hike_type = 'overnight' 
+                        THEN COALESCE((SELECT guide_fee_overnight FROM guide_mountain_rates WHERE guide_id = b.guide_id AND mountain_id = b.mountain_id LIMIT 1), 1500)
+                        ELSE COALESCE((SELECT guide_fee_day FROM guide_mountain_rates WHERE guide_id = b.guide_id AND mountain_id = b.mountain_id LIMIT 1), 801)
+                    END
+                ELSE 0
             END
         ), 0) as total_earnings,
         COUNT(CASE WHEN (b.guide_payment_status != 'paid' AND b.status = 'finished') OR b.status = 'waiting_payment' THEN 1 END) as pending_payments_count,
@@ -1254,9 +1258,9 @@ function render_stars($rating) {
     <div class="sidebar-profile-name"><?= htmlspecialchars($guide['name']) ?></div>
     <div class="sidebar-profile-role"><?= htmlspecialchars($guide['specialization'] ?? 'Trail Guide') ?></div>
   </div>
-  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+  <button onclick="confirmLogout()" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--ink-5)'">
     <i class="fas fa-sign-out-alt"></i>
-  </a>
+  </button>
 </div>
   </aside>
 
@@ -1528,9 +1532,203 @@ function render_stars($rating) {
   </div>
 </div>
 
+<style>
+@keyframes slideUpIn { from{opacity:0;transform:translateX(-50%) translateY(20px);}to{opacity:1;transform:translateX(-50%) translateY(0);} }
+</style>
+
 <div class="toast" id="toast"></div>
 
 <script>
+// ============================================
+// WORKING LOGOUT MODAL
+// ============================================
+function confirmLogout() {
+    const existingModal = document.getElementById('standaloneLogoutModal');
+    if (existingModal) existingModal.remove();
+    
+    const modal = document.createElement('div');
+    modal.id = 'standaloneLogoutModal';
+    modal.style.cssText = `
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        background: rgba(0, 0, 0, 0.6) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        z-index: 9999999 !important;
+    `;
+    
+    modal.innerHTML = `
+        <div style="background: white; border-radius: 20px; padding: 24px; max-width: 400px; width: 90%; margin: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); font-family: 'DM Sans', sans-serif;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="width: 48px; height: 48px; border-radius: 50%; background: #fef2f2; color: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                    <i class="fas fa-sign-out-alt"></i>
+                </div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: #1a1a18; margin: 0;">Log out of Guide Portal?</h3>
+            </div>
+            <div style="margin-bottom: 24px; color: #666; font-size: 0.85rem; line-height: 1.5;">
+                You will be redirected to the login page.
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button id="logoutCancelBtn" style="padding: 10px 20px; border-radius: 10px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: 1px solid #ddd; background: #f0f0f0; color: #666; font-family: inherit;">Cancel</button>
+                <button id="logoutConfirmBtn" style="padding: 10px 20px; border-radius: 10px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: none; background: #dc2626; color: white; font-family: inherit;">Log Out</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    document.getElementById('logoutCancelBtn').onclick = function() { modal.remove(); };
+    document.getElementById('logoutConfirmBtn').onclick = function() {
+        window.location.href = '../login-and-signup/login.php';
+    };
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+// ============================================
+// BEAUTIFUL DYNAMIC CONFIRM MODAL
+// ============================================
+function showConfirmModal(options) {
+    const { title, message, confirmText, confirmColor, onConfirm, cancelText = 'Cancel' } = options;
+    
+    const existingModal = document.getElementById('dynamicConfirmModal');
+    if (existingModal) existingModal.remove();
+    
+    const modalDiv = document.createElement('div');
+    modalDiv.id = 'dynamicConfirmModal';
+    
+    modalDiv.innerHTML = `
+        <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999999;">
+            <div style="background:white;border-radius:20px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:${confirmColor === '#dc2626' ? '#fef2f2' : (confirmColor === '#1E7B48' ? '#d1fae5' : '#fef3c7')};color:${confirmColor};display:flex;align-items:center;justify-content:center;font-size:1.2rem;">
+                        <i class="fas ${confirmColor === '#dc2626' ? 'fa-exclamation-triangle' : (confirmColor === '#1E7B48' ? 'fa-check-circle' : 'fa-question-circle')}"></i>
+                    </div>
+                    <h3 style="font-size:1.1rem;font-weight:700;color:#1a1a18;margin:0;">${title}</h3>
+                </div>
+                <div style="margin-bottom:24px;color:#666;font-size:0.85rem;line-height:1.5;">
+                    <p>${message}</p>
+                </div>
+                <div style="display:flex;gap:12px;justify-content:flex-end;">
+                    <button id="modalCancelBtn" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #ddd;background:#f0f0f0;color:#666;font-family:inherit;">${cancelText}</button>
+                    <button id="modalConfirmBtn" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:none;background:${confirmColor};color:white;font-family:inherit;">${confirmText}</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modalDiv);
+    
+    document.getElementById('modalCancelBtn').onclick = function() { modalDiv.remove(); };
+    document.getElementById('modalConfirmBtn').onclick = function() {
+        modalDiv.remove();
+        if (onConfirm) onConfirm();
+    };
+    modalDiv.onclick = function(e) { if (e.target === modalDiv) modalDiv.remove(); };
+}
+
+// ============================================
+// UPDATED FUNCTIONS USING NEW MODAL
+// ============================================
+
+function confirmBooking(bookingId, bookingNumber) {
+    showConfirmModal({
+        title: 'Confirm Booking?',
+        message: `Booking ${bookingNumber} will be confirmed and payment instructions sent to the hiker.`,
+        confirmText: 'Yes, Confirm',
+        confirmColor: '#1E7B48',
+        onConfirm: () => _doConfirmBooking(bookingId, bookingNumber)
+    });
+}
+
+
+
+function confirmGuideFeePayment(bookingId, bookingNumber, totalAmount, downpaymentAmount, hikeType, mountainId) {
+    let guideFee = hikeType === 'overnight' ? 1500 : 801;
+    let remainingBalance = guideFee - downpaymentAmount;
+    
+    showConfirmModal({
+        title: 'Confirm Guide Fee Payment?',
+        message: `Remaining guide fee of ₱${remainingBalance.toLocaleString()} for booking ${bookingNumber} will be marked as fully paid and completed.`,
+        confirmText: 'Confirm Payment',
+        confirmColor: '#2563eb',
+        onConfirm: () => _doConfirmGuideFeePayment(bookingId, bookingNumber, remainingBalance)
+    });
+}
+
+
+function showCancelModal(bookingId, bookingNumber) {
+    // Create a modal with textarea for reason
+    const existingModal = document.getElementById('cancelReasonModal');
+    if (existingModal) existingModal.remove();
+    
+    const modalDiv = document.createElement('div');
+    modalDiv.id = 'cancelReasonModal';
+    modalDiv.innerHTML = `
+        <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999999;">
+            <div style="background:white;border-radius:20px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:#fef2f2;color:#dc2626;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <h3 style="font-size:1.1rem;font-weight:700;color:#1a1a18;margin:0;">Cancel Booking ${bookingNumber}?</h3>
+                </div>
+                <div style="margin-bottom:20px;">
+                    <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;">Reason for cancellation</label>
+                    <textarea id="cancelReasonInput" class="form-control" rows="3" placeholder="Please provide a reason for cancelling this booking..." style="width:100%;padding:12px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:14px;font-family:inherit;"></textarea>
+                </div>
+                <div style="display:flex;gap:12px;justify-content:flex-end;">
+                    <button id="cancelModalCloseBtn" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #ddd;background:#f0f0f0;color:#666;">Go Back</button>
+                    <button id="cancelModalConfirmBtn" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:none;background:#dc2626;color:white;">Confirm Cancellation</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modalDiv);
+    
+    document.getElementById('cancelModalCloseBtn').onclick = function() { modalDiv.remove(); };
+    document.getElementById('cancelModalConfirmBtn').onclick = function() {
+        const reason = document.getElementById('cancelReasonInput').value;
+        if (!reason.trim()) {
+            showToast('Please provide a reason for cancellation');
+            return;
+        }
+        modalDiv.remove();
+        _doCancelBooking(bookingId, bookingNumber, reason);
+    };
+    modalDiv.onclick = function(e) { if (e.target === modalDiv) modalDiv.remove(); };
+}
+
+function initUnreadBadgePoller() {
+    function fetchAndUpdateBadge() {
+        fetch('../api/guide_messages.php?action=get_conversations')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) return;
+                var total = (data.conversations || []).reduce(function(s, c) { return s + (c.unread_count || 0); }, 0);
+                ['.sidebar-nav a[href="guide-communication.php"]', '.guide-bottom-nav a[href="guide-communication.php"]'].forEach(function(sel, i) {
+                    var link = document.querySelector(sel);
+                    if (!link) return;
+                    link.style.position = 'relative';
+                    var badge = link.querySelector('.notif-badge');
+                    if (total > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'notif-badge'; link.appendChild(badge); }
+                        badge.textContent = total > 9 ? '9+' : total;
+                        badge.style.cssText = i === 0
+                            ? 'position:absolute;right:12px;top:8px;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px;min-width:18px;text-align:center;'
+                            : 'position:absolute;top:-5px;right:5px;background:#dc2626;color:white;font-size:9px;font-weight:700;padding:2px 5px;border-radius:20px;min-width:16px;text-align:center;';
+                    } else if (badge) { badge.remove(); }
+                });
+            }).catch(function() {});
+    }
+    fetchAndUpdateBadge();
+    setInterval(fetchAndUpdateBadge, 30000);
+}
+initUnreadBadgePoller();
 const CURRENT_USER_ID = <?= json_encode($user_id) ?>;
 
 function filterBookings(status) {
@@ -1848,9 +2046,8 @@ let guideFee = booking.guide_fee || (booking.hike_type === 'overnight' ? 1500 : 
         showToast('Error loading booking details');
     });
 }
-// Update the confirmBooking function
-function confirmBooking(bookingId, bookingNumber) {
-    if (confirm(`Confirm booking ${bookingNumber}? This will send payment instructions to the hiker.`)) {
+
+function _doConfirmBooking(bookingId, bookingNumber) {
         showToast('Confirming booking and sending payment details...');
         
         fetch(window.location.href, {
@@ -1878,8 +2075,37 @@ function confirmBooking(bookingId, bookingNumber) {
             console.error(err);
             showToast('Error confirming booking');
         });
-    }
 }
+function _doCancelBooking(bookingId, bookingNumber, cancelReason) {
+    showToast('Cancelling booking...');
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: new URLSearchParams({
+            action: 'cancel_booking',
+            booking_id: bookingId,
+            cancel_reason: cancelReason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`✗ Booking ${bookingNumber} cancelled`);
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            showToast(data.message || 'Failed to cancel booking');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('Error cancelling booking');
+    });
+}
+
 
 // Remove the old confirmBookingWithPayment function if it exists (or keep it as alias)
 function confirmBookingWithPayment(bookingId, bookingNumber) {
@@ -1942,9 +2168,16 @@ function cancelBooking(event) {
 
 function requestPayment(bookingId, bookingNumber, totalAmount, downpayment) {
   const remaining = totalAmount - downpayment;
-  if (confirm(`Request ₱${remaining.toLocaleString()} payment for ${bookingNumber}?`)) {
-    showToast('Request sent!');
-  }
+  showConfirmToast({
+    title: 'Request Payment?',
+    message: `Send a ₱${remaining.toLocaleString()} payment request for booking ${bookingNumber}?`,
+    icon: 'fa-money-bill-wave',
+    iconBg: 'rgba(37,99,235,0.1)',
+    iconColor: '#2563eb',
+    confirmLabel: 'Send Request',
+    confirmBg: '#2563eb',
+    onConfirm: () => showToast('Payment request sent!')
+  });
 }
 
 function chatWithHiker(hikerId, hikerName) {
@@ -1959,6 +2192,31 @@ function showToast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
+}
+ {
+    function fetchAndUpdateBadge() {
+        fetch('../api/guide_messages.php?action=get_conversations')
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) return;
+                const total = (data.conversations || []).reduce((s, c) => s + (c.unread_count || 0), 0);
+                ['.sidebar-nav a[href="guide-communication.php"]', '.guide-bottom-nav a[href="guide-communication.php"]'].forEach((sel, i) => {
+                    const link = document.querySelector(sel);
+                    if (!link) return;
+                    link.style.position = 'relative';
+                    let badge = link.querySelector('.notif-badge');
+                    if (total > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'notif-badge'; link.appendChild(badge); }
+                        badge.textContent = total > 9 ? '9+' : total;
+                        badge.style.cssText = i === 0
+                            ? 'position:absolute;right:12px;top:8px;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px;min-width:18px;text-align:center;'
+                            : 'position:absolute;top:-5px;right:5px;background:#dc2626;color:white;font-size:9px;font-weight:700;padding:2px 5px;border-radius:20px;min-width:16px;text-align:center;';
+                    } else if (badge) { badge.remove(); }
+                });
+            }).catch(() => {});
+    }
+    fetchAndUpdateBadge();
+    setInterval(fetchAndUpdateBadge, 30000);
 }
 function switchMobileTab(tab, btn) {
   const layout = document.querySelector('.bookings-layout');
@@ -1991,7 +2249,18 @@ const viewBookingId = new URLSearchParams(location.search).get('view_booking');
 if (viewBookingId) setTimeout(() => viewBookingDetails(viewBookingId, ''), 500);
 
 function finishHike(bookingId, bookingNumber) {
-    if (confirm(`Mark booking ${bookingNumber} as FINISHED?\n\nGuide will become available for other bookings.`)) {
+    showConfirmToast({
+        title: 'Mark Hike as Finished?',
+        message: `Booking ${bookingNumber} will be marked as completed. The guide will become available again.`,
+        icon: 'fa-flag-checkered',
+        iconBg: 'rgba(27,112,69,0.1)',
+        iconColor: 'var(--green)',
+        confirmLabel: 'Yes, Finish',
+        confirmBg: '#1E7B48',
+        onConfirm: () => _doFinishHike(bookingId, bookingNumber)
+    });
+}
+function _doFinishHike(bookingId, bookingNumber) {
         showToast('Completing hike...');
         
         fetch(window.location.href, {
@@ -2018,15 +2287,9 @@ function finishHike(bookingId, bookingNumber) {
             console.error(err);
             showToast('Error finishing hike');
         });
-    }
 }
-function confirmGuideFeePayment(bookingId, bookingNumber, totalAmount, downpaymentAmount, hikeType, mountainId) {
-    // Calculate guide fee (you can fetch this via AJAX or calculate based on hike type)
-    // For now, we'll calculate based on hike type
-    let guideFee = hikeType === 'overnight' ? 1500 : 801;
-    let remainingBalance = guideFee - downpaymentAmount;
-    
-    if (confirm(`💰 Confirm guide fee payment for booking ${bookingNumber}?\n\nRemaining Guide Fee: ₱${remainingBalance.toLocaleString()}\n\nThis will mark the booking as FULLY PAID and COMPLETED.`)) {
+
+function _doConfirmGuideFeePayment(bookingId, bookingNumber, remainingBalance) {
         showToast('Confirming guide fee payment...');
         
         fetch(window.location.href, {
@@ -2054,7 +2317,6 @@ function confirmGuideFeePayment(bookingId, bookingNumber, totalAmount, downpayme
             console.error(err);
             showToast('Error confirming payment');
         });
-    }
 }
 </script>
 

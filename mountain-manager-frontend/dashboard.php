@@ -24,11 +24,15 @@ $assigned_mountains = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $mountain_ids = array_column($assigned_mountains, 'id');
 
+// Create placeholder for SQL queries (MUST be defined even if empty)
+$ids_placeholder = '';
+if (!empty($mountain_ids)) {
+    $ids_placeholder = implode(',', array_fill(0, count($mountain_ids), '?'));
+}
 
 // Get bookings for assigned mountains only
 $bookings = [];
 if (!empty($mountain_ids)) {
-    $ids_placeholder = implode(',', array_fill(0, count($mountain_ids), '?'));
     $stmt = $pdo->prepare("
         SELECT 
             b.*,
@@ -136,10 +140,10 @@ $bookings_json = json_encode(array_map(function($b) {
         'paymentStatus' => $b['payment_status']
     ];
 }, $bookings));
+
 // Get crowd reports for manager's mountains
 $crowdReports = [];
 if (!empty($mountain_ids)) {
-    $ids_placeholder = implode(',', array_fill(0, count($mountain_ids), '?'));
     $stmt = $pdo->prepare("
         SELECT 
             cr.*,
@@ -156,6 +160,7 @@ if (!empty($mountain_ids)) {
     $stmt->execute($mountain_ids);
     $crowdReports = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
 // Format crowd reports for JavaScript
 $crowdReports_json = json_encode(array_map(function($report) {
     return [
@@ -166,10 +171,11 @@ $crowdReports_json = json_encode(array_map(function($report) {
         'location_lng' => isset($report['longitude']) && $report['longitude'] ? floatval($report['longitude']) : null,
         'reporter_name' => $report['reporter_name'] ?? 'System',
         'reporter_role' => $report['reporter_role'] ?? 'auto',
-        'reported_at' => $report['created_at'],  // Using created_at instead of reported_at
+        'reported_at' => $report['created_at'],
         'notes' => $report['notes'] ?? ''
     ];
 }, $crowdReports));
+
 // Manager info
 $manager_name = $manager['name'];
 $manager_initials = implode('', array_map(function($word) {
@@ -181,76 +187,102 @@ $manager_role = ucfirst($manager['role']);
 // Get real statistics for manager's mountains
 $stats = [];
 
-// Total bookings
-$stmt = $pdo->prepare("SELECT COUNT(*) as total FROM bookings WHERE mountain_id IN ($ids_placeholder)");
-$stmt->execute($mountain_ids);
-$stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+// Only run queries if there are mountains assigned
+if (!empty($mountain_ids)) {
+    // Total bookings
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM bookings WHERE mountain_id IN ($ids_placeholder)");
+    $stmt->execute($mountain_ids);
+    $stats['total_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-// Completed hikes
-$stmt = $pdo->prepare("SELECT COUNT(*) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND status = 'completed'");
-$stmt->execute($mountain_ids);
-$stats['completed_hikes'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    // Completed hikes
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND status = 'completed'");
+    $stmt->execute($mountain_ids);
+    $stats['completed_hikes'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-// Pending responses
-$stmt = $pdo->prepare("SELECT COUNT(*) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND status = 'pending'");
-$stmt->execute($mountain_ids);
-$stats['pending_responses'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    // Pending responses
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND status = 'pending'");
+    $stmt->execute($mountain_ids);
+    $stats['pending_responses'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-// Expected revenue (from confirmed and active bookings)
-$stmt = $pdo->prepare("SELECT SUM(total_amount) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND status IN ('confirmed', 'active', 'completed')");
+    // Expected revenue (from ALL non-cancelled bookings - this should be the HIGHEST number)
+$stmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND status != 'cancelled'");
 $stmt->execute($mountain_ids);
-$stats['expected_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+$result = $stmt->fetch(PDO::FETCH_ASSOC);
+$stats['expected_revenue'] = $result['total'] ?? 0;
 
-// Total hikers (from all non-cancelled bookings)
-$stmt = $pdo->prepare("SELECT SUM(number_of_hikers) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND status != 'cancelled'");
-$stmt->execute($mountain_ids);
-$stats['total_hikers'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+// For debugging - add this temporarily to see what's happening
+error_log("Expected Revenue Query Result: " . $stats['expected_revenue']);
+error_log("Mountain IDs: " . implode(',', $mountain_ids));
+    
+    // Total hikers (from all non-cancelled bookings)
+    $stmt = $pdo->prepare("SELECT SUM(number_of_hikers) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND status != 'cancelled'");
+    $stmt->execute($mountain_ids);
+    $stats['total_hikers'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
 
-// Peak booking hour
-$stmt = $pdo->prepare("
-    SELECT HOUR(created_at) as hour, COUNT(*) as count 
-    FROM bookings 
-    WHERE mountain_id IN ($ids_placeholder) 
-    GROUP BY HOUR(created_at) 
-    ORDER BY count DESC 
-    LIMIT 1
-");
-$stmt->execute($mountain_ids);
-$peakHour = $stmt->fetch(PDO::FETCH_ASSOC);
-$stats['peak_booking_hour'] = $peakHour ? date('g:i A', strtotime($peakHour['hour'] . ':00')) : 'N/A';
+    // Peak booking hour
+    $stmt = $pdo->prepare("
+        SELECT HOUR(created_at) as hour, COUNT(*) as count 
+        FROM bookings 
+        WHERE mountain_id IN ($ids_placeholder) 
+        GROUP BY HOUR(created_at) 
+        ORDER BY count DESC 
+        LIMIT 1
+    ");
+    $stmt->execute($mountain_ids);
+    $peakHour = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stats['peak_booking_hour'] = $peakHour ? date('g:i A', strtotime($peakHour['hour'] . ':00')) : 'N/A';
 
-// Today's bookings
-$stmt = $pdo->prepare("
-    SELECT COUNT(*) as total 
-    FROM bookings 
-    WHERE mountain_id IN ($ids_placeholder) 
-    AND DATE(created_at) = CURDATE()
-");
-$stmt->execute($mountain_ids);
-$stats['today_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    // Today's bookings
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as total 
+        FROM bookings 
+        WHERE mountain_id IN ($ids_placeholder) 
+        AND DATE(created_at) = CURDATE()
+    ");
+    $stmt->execute($mountain_ids);
+    $stats['today_bookings'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-// Most popular mountain
-$stmt = $pdo->prepare("
-    SELECT m.name, COUNT(b.id) as booking_count 
-    FROM mountains m
-    INNER JOIN bookings b ON m.id = b.mountain_id
-    WHERE m.id IN ($ids_placeholder)
-    GROUP BY m.id
-    ORDER BY booking_count DESC
-    LIMIT 1
-");
-$stmt->execute($mountain_ids);
-$popularMountain = $stmt->fetch(PDO::FETCH_ASSOC);
-$stats['popular_mountain'] = $popularMountain['name'] ?? 'N/A';
+    // Most popular mountain
+    $stmt = $pdo->prepare("
+        SELECT m.name, COUNT(b.id) as booking_count 
+        FROM mountains m
+        INNER JOIN bookings b ON m.id = b.mountain_id
+        WHERE m.id IN ($ids_placeholder)
+        GROUP BY m.id
+        ORDER BY booking_count DESC
+        LIMIT 1
+    ");
+    $stmt->execute($mountain_ids);
+    $popularMountain = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stats['popular_mountain'] = $popularMountain['name'] ?? 'N/A';
 
-// Average hikers per booking
-$stmt = $pdo->prepare("
-    SELECT AVG(number_of_hikers) as avg_hikers 
-    FROM bookings 
-    WHERE mountain_id IN ($ids_placeholder) AND status != 'cancelled'
-");
+    // Average hikers per booking
+    $stmt = $pdo->prepare("
+        SELECT AVG(number_of_hikers) as avg_hikers 
+        FROM bookings 
+        WHERE mountain_id IN ($ids_placeholder) AND status != 'cancelled'
+    ");
+    $stmt->execute($mountain_ids);
+    $stats['avg_hikers'] = round($stmt->fetch(PDO::FETCH_ASSOC)['avg_hikers'] ?? 0, 1);
+
+// Actual collected revenue (from ALL paid bookings - this should be LOWER than expected)
+$stmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND payment_status = 'paid'");
 $stmt->execute($mountain_ids);
-$stats['avg_hikers'] = round($stmt->fetch(PDO::FETCH_ASSOC)['avg_hikers'] ?? 0, 1);
+$result = $stmt->fetch(PDO::FETCH_ASSOC);
+$stats['actual_revenue'] = $result['total'] ?? 0;
+} else {
+    // Default values if no mountains assigned
+    $stats['total_bookings'] = 0;
+    $stats['completed_hikes'] = 0;
+    $stats['pending_responses'] = 0;
+    $stats['expected_revenue'] = 0;
+    $stats['total_hikers'] = 0;
+    $stats['peak_booking_hour'] = 'N/A';
+    $stats['today_bookings'] = 0;
+    $stats['popular_mountain'] = 'N/A';
+    $stats['avg_hikers'] = 0;
+    $stats['actual_revenue'] = 0;
+}
 
 // Generate AI insights based on data
 $aiInsights = [];
@@ -268,12 +300,12 @@ if ($stats['popular_mountain'] != 'N/A') {
 }
 
 // Booking prediction
-$avgDaily = round($stats['total_bookings'] / 30, 1); // Average over last 30 days
+$avgDaily = $stats['total_bookings'] > 0 ? round($stats['total_bookings'] / 30, 1) : 0;
 $insight = "You're averaging {$avgDaily} bookings per day. ";
-if ($stats['today_bookings'] < $avgDaily) {
+if ($stats['today_bookings'] < $avgDaily && $avgDaily > 0) {
     $insight .= "Today has {$stats['today_bookings']} bookings so far, which is below average. ";
     $insight .= "Consider running a promotion to boost tonight's bookings.";
-} elseif ($stats['today_bookings'] > $avgDaily) {
+} elseif ($stats['today_bookings'] > $avgDaily && $avgDaily > 0) {
     $insight .= "Great! Today already has {$stats['today_bookings']} bookings, above your daily average of {$avgDaily}. ";
     $insight .= "Keep up the momentum!";
 } else {
@@ -301,11 +333,6 @@ $tips = [
     "Tip: Send weather updates to confirmed bookings to reduce last-minute cancellations."
 ];
 $aiInsights[] = $tips[array_rand($tips)];
-
-// Actual collected revenue (from paid bookings)
-$stmt = $pdo->prepare("SELECT SUM(total_amount) as total FROM bookings WHERE mountain_id IN ($ids_placeholder) AND payment_status = 'paid'");
-$stmt->execute($mountain_ids);
-$stats['actual_revenue'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
 
 // Default images
 $defaultImages = [
@@ -1663,6 +1690,57 @@ function toggleSidebar() {
     border-radius: 4px;
 }
 
+/* Alternative Status Badge Styles with Dots */
+.status-badge {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.status-Open {
+    background: rgba(27, 112, 69, 0.15);
+    color: #1B7045;
+}
+.status-Open::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #1B7045;
+    box-shadow: 0 0 0 2px rgba(27, 112, 69, 0.2);
+}
+.status-Closed {
+    background: rgba(184, 49, 42, 0.15);
+    color: #B8312A;
+}
+.status-Closed::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #B8312A;
+    box-shadow: 0 0 0 2px rgba(184, 49, 42, 0.2);
+}
+.status-Restricted {
+    background: rgba(201, 123, 26, 0.15);
+    color: #C97B1A;
+}
+.status-Restricted::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #C97B1A;
+    box-shadow: 0 0 0 2px rgba(201, 123, 26, 0.2);
+}
+
 </style>
 </head>
 <body>
@@ -2615,9 +2693,10 @@ for (const m of myMtns) {
                 <div class="mountain-title">
                     <h3>🏔️ ${escapeHtml(m.name)}</h3>
                     <div class="mountain-badges">
-                        <span class="difficulty-badge ${difficultyClass}">${m.difficulty || 'Moderate'}</span>
-                        <span class="crowd-badge ${crowdClass}">${m.crowdLevel || 'Low'} Crowd</span>
-                    </div>
+    <span class="difficulty-badge ${difficultyClass}">${m.difficulty || 'Moderate'}</span>
+    <span class="crowd-badge ${crowdClass}">${m.crowdLevel || 'Low'} Crowd</span>
+    <span class="status-badge status-${m.status || 'Open'}">${m.status || 'Open'}</span>
+</div>
                 </div>
                 <div class="mountain-header-actions">
                     <button class="btn-icon" onclick="event.stopPropagation(); openEditModal(${m.id})">
@@ -2793,23 +2872,25 @@ for (const m of myMtns) {
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon gold">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        </div>
-        <div>
-            <div class="stat-val" style="font-size:22px;">${fmtMoney(STATS.actual_revenue || 0)}</div>
-            <div class="stat-label">Total Revenue</div>
-        </div>
+    <div class="stat-icon gold">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
     </div>
-    <div class="stat-card">
-        <div class="stat-icon amber">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        </div>
-        <div>
-            <div class="stat-val" style="font-size:22px;">${fmtMoney(STATS.expected_revenue || 0)}</div>
-            <div class="stat-label">Expected Revenue</div>
-        </div>
+    <div>
+        <div class="stat-val" style="font-size:22px;">${fmtMoney(STATS.expected_revenue || 0)}</div>
+        <div class="stat-label">Expected Revenue</div>
+        <div class="stat-label" style="font-size:8px; margin-top:2px;">If all bookings pay in full</div>
     </div>
+</div>
+<div class="stat-card">
+    <div class="stat-icon amber">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </div>
+    <div>
+        <div class="stat-val" style="font-size:22px;">${fmtMoney(STATS.actual_revenue || 0)}</div>
+        <div class="stat-label">Total Revenue</div>
+        <div class="stat-label" style="font-size:8px; margin-top:2px;">Actually collected payments</div>
+    </div>
+</div>
     <div class="stat-card">
         <div class="stat-icon green">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>

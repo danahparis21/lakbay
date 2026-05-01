@@ -1549,9 +1549,9 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
     <div class="sidebar-profile-name"><?= htmlspecialchars($guideRecord['name']) ?></div>
     <div class="sidebar-profile-role"><?= htmlspecialchars($guideRecord['specialization'] ?? 'Trail Guide') ?></div>
   </div>
-  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+  <button onclick="confirmLogout()" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--ink-5)'">
     <i class="fas fa-sign-out-alt"></i>
-  </a>
+  </button>
 </div>
   </aside>
 
@@ -1861,13 +1861,136 @@ $guideInitials = implode('', array_map(fn($w) => strtoupper($w[0]), array_slice(
     </div>
 </div>
 
-<!-- ── SCRIPTS ── -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
-
 <script>
-// ── PHP DATA → JS ──────────────────────────────────────
+// ============================================
+// WORKING LOGOUT MODAL - NO CONFLICTS
+// ============================================
+function confirmLogout() {
+    // Remove any existing modal
+    const existingModal = document.getElementById('standaloneLogoutModal');
+    if (existingModal) existingModal.remove();
+    
+    // Create modal container
+    const modal = document.createElement('div');
+    modal.id = 'standaloneLogoutModal';
+    
+    // Apply styles directly
+    modal.style.cssText = `
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        background: rgba(0, 0, 0, 0.6) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        z-index: 9999999 !important;
+    `;
+    
+    modal.innerHTML = `
+        <div style="
+            background: white;
+            border-radius: 20px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            margin: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            font-family: 'DM Sans', sans-serif;
+        ">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 50%;
+                    background: #fef2f2;
+                    color: #dc2626;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 1.2rem;
+                ">
+                    <i class="fas fa-sign-out-alt"></i>
+                </div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: #1a1a18; margin: 0;">Log out of Guide Portal?</h3>
+            </div>
+            <div style="margin-bottom: 24px; color: #666; font-size: 0.85rem; line-height: 1.5;">
+                You will be redirected to the login page.
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button id="logoutCancelBtn" style="
+                    padding: 10px 20px;
+                    border-radius: 10px;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    border: 1px solid #ddd;
+                    background: #f0f0f0;
+                    color: #666;
+                    font-family: inherit;
+                ">Cancel</button>
+                <button id="logoutConfirmBtn" style="
+                    padding: 10px 20px;
+                    border-radius: 10px;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    border: none;
+                    background: #dc2626;
+                    color: white;
+                    font-family: inherit;
+                ">Log Out</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Event listeners
+    document.getElementById('logoutCancelBtn').onclick = function() { modal.remove(); };
+    document.getElementById('logoutConfirmBtn').onclick = function() {
+        window.location.href = '../login-and-signup/login.php';
+    };
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+// ============================================
+// UNREAD BADGE POLLER
+// ============================================
+function initUnreadBadgePoller() {
+    function fetchAndUpdateBadge() {
+        fetch('../api/guide_messages.php?action=get_conversations')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) return;
+                var total = (data.conversations || []).reduce(function(s, c) { return s + (c.unread_count || 0); }, 0);
+                ['.sidebar-nav a[href="guide-communication.php"]', '.guide-bottom-nav a[href="guide-communication.php"]'].forEach(function(sel, i) {
+                    var link = document.querySelector(sel);
+                    if (!link) return;
+                    link.style.position = 'relative';
+                    var badge = link.querySelector('.notif-badge');
+                    if (total > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'notif-badge'; link.appendChild(badge); }
+                        badge.textContent = total > 9 ? '9+' : total;
+                        badge.style.cssText = i === 0
+                            ? 'position:absolute;right:12px;top:8px;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px;min-width:18px;text-align:center;'
+                            : 'position:absolute;top:-5px;right:5px;background:#dc2626;color:white;font-size:9px;font-weight:700;padding:2px 5px;border-radius:20px;min-width:16px;text-align:center;';
+                    } else if (badge) { badge.remove(); }
+                });
+            }).catch(function() {});
+    }
+    fetchAndUpdateBadge();
+    setInterval(fetchAndUpdateBadge, 30000);
+}
+initUnreadBadgePoller();
+
+// ============================================
+// PHP DATA → JS
+// ============================================
 const HIKE_DATA = <?= json_encode($hike) ?>;
 const TRAIL_DATA = <?= json_encode($trailData) ?>;
 const BOOKING_HIKERS = <?= json_encode($bookingHikers) ?>;
@@ -1881,13 +2004,14 @@ const MOUNTAIN_ID = <?= json_encode($hike['mountain_id'] ?? null) ?>;
 const MOUNTAIN_NAME = <?= json_encode($hike['mountain_name'] ?? 'Unknown') ?>;
 const WAYPOINTS = <?= json_encode($waypoints) ?>;
 
-
-// ── STATE ───────────────────────────────────────────────
+// ============================================
+// STATE VARIABLES
+// ============================================
 let map, guideMarker, trailLayer, traveledLayer;
 let crowdMarkers = [];
 let currentHeatmapLayer = null;
 let heatmapAutoRefresh = null;
-let heatmapMode = 0; // 0 = off, 1 = blobs, 2 = heatmap
+let heatmapMode = 0;
 let distMarkers = [], wpMarkers = [], hikerLeafletMarkers = {};
 let watchId = null, guideIntervalId = null, hikerPollId = null;
 let guidePosition = null;
@@ -1910,6 +2034,7 @@ const LAYERS = [
   { url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', label: '⬜ Light' },
   { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', label: '🛰 Satellite' },
 ];
+
 
 // Tab switching
 function switchView(view) {
@@ -3752,6 +3877,31 @@ window.addEventListener('beforeunload', () => {
     if (hikerPollId) clearInterval(hikerPollId);
     if (boundaryWarningInterval) clearInterval(boundaryWarningInterval);
 });
+ {
+    function fetchAndUpdateBadge() {
+        fetch('../api/guide_messages.php?action=get_conversations')
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) return;
+                const total = (data.conversations || []).reduce((s, c) => s + (c.unread_count || 0), 0);
+                ['.sidebar-nav a[href="guide-communication.php"]', '.guide-bottom-nav a[href="guide-communication.php"]'].forEach((sel, i) => {
+                    const link = document.querySelector(sel);
+                    if (!link) return;
+                    link.style.position = 'relative';
+                    let badge = link.querySelector('.notif-badge');
+                    if (total > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'notif-badge'; link.appendChild(badge); }
+                        badge.textContent = total > 9 ? '9+' : total;
+                        badge.style.cssText = i === 0
+                            ? 'position:absolute;right:12px;top:8px;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px;min-width:18px;text-align:center;'
+                            : 'position:absolute;top:-5px;right:5px;background:#dc2626;color:white;font-size:9px;font-weight:700;padding:2px 5px;border-radius:20px;min-width:16px;text-align:center;';
+                    } else if (badge) { badge.remove(); }
+                });
+            }).catch(() => {});
+    }
+    fetchAndUpdateBadge();
+    setInterval(fetchAndUpdateBadge, 30000);
+}
 
 </script>
 </body>

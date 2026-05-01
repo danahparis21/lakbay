@@ -672,19 +672,19 @@ if (empty($mostHikedMountainImage)) {
       min-width: 0;
       padding-top: 20px;
     }
-    .profile-section {
-      background: var(--white);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 28px;
-      margin-bottom: 24px;
-      border: 1px solid rgba(16,6,0,0.08);
-      display: none;
-    }
-    .profile-section.active-section {
-      display: block;
-      animation: fadeIn 0.25s ease;
-    }
+   .profile-section {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 28px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(16,6,0,0.08);
+    display: block !important;
+}
+
+.profile-section:not(.active-section) {
+    display: none !important;
+}
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
@@ -1850,7 +1850,7 @@ $currentPage = 'hikerProfile'; // Change per page: 'explore', 'bookings', 'quiz'
             <?php endforeach; ?>
           <?php endif; ?>
         </div>
-      </div>      </div>
+      </div>     
     </div>
 
     <div id="section-personal" class="profile-section">
@@ -2136,29 +2136,71 @@ $currentPage = 'hikerProfile'; // Change per page: 'explore', 'bookings', 'quiz'
 <div class="toast" id="toast"></div>
 
 <script>
-  function initSidebarNavigation() {
+function initSidebarNavigation() {
     const links = document.querySelectorAll('.sidebar-link[data-section]');
     const sections = ['history', 'personal', 'saved', 'badges', 'settings', 'system_review'];
+    
     function showSection(sectionId) {
-      sections.forEach(s => {
-        const section = document.getElementById(`section-${s}`);
-        if(section) section.classList.remove('active-section');
-      });
-      const activeSection = document.getElementById(`section-${sectionId}`);
-      if(activeSection) activeSection.classList.add('active-section');
-      links.forEach(link => {
-        if(link.getAttribute('data-section') === sectionId) link.classList.add('active');
-        else link.classList.remove('active');
-      });
+        // Hide all sections
+        sections.forEach(s => {
+            const section = document.getElementById(`section-${s}`);
+            if(section) {
+                section.classList.remove('active-section');
+            }
+        });
+        
+        // Show the selected section
+        const activeSection = document.getElementById(`section-${sectionId}`);
+        if(activeSection) {
+            activeSection.classList.add('active-section');
+        }
+        
+        // Update active state on sidebar links
+        links.forEach(link => {
+            if(link.getAttribute('data-section') === sectionId) {
+                link.classList.add('active');
+            } else {
+                link.classList.remove('active');
+            }
+        });
+        
+        // Special handling for history section map
+        if(sectionId === 'history') {
+            setTimeout(initJourneyMap, 100);
+        }
+        if(sectionId === 'badges') {
+            loadBadges();
+        }
+        if(sectionId === 'system_review') {
+            setTimeout(() => {
+                checkExistingSystemReview();
+                initSystemStars();
+            }, 100);
+        }
     }
+    
+    // Add click event listeners
     links.forEach(link => {
-      link.addEventListener('click', () => {
-        const section = link.getAttribute('data-section');
-        if(section) showSection(section);
-      });
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const section = link.getAttribute('data-section');
+            if(section) {
+                showSection(section);
+                // Update URL hash without scrolling
+                window.location.hash = section;
+            }
+        });
     });
-  }
-
+    
+    // Check URL hash on load
+    const hash = window.location.hash.substring(1);
+    if(hash && sections.includes(hash)) {
+        showSection(hash);
+    } else {
+        // Default to history section
+        showSection('history');
+    }
+}
   function closeModal(modalId) { document.getElementById(modalId).classList.remove('open'); }
   function openEditModal() { document.getElementById('editProfileModal').classList.add('open'); }
   function openChangePasswordModal() { document.getElementById('changePasswordModal').classList.add('open'); }

@@ -270,7 +270,7 @@ $topGuidesPerMountain = array_values($topGuidesPerMountain);
 <body data-page="guides">
 <div class="app">
 
-<!-- ═══ SIDEBAR ═══ -->
+<!-- SIDEBAR -->
 <aside class="sidebar">
     <div>
         <div class="logo">
@@ -295,16 +295,19 @@ $topGuidesPerMountain = array_values($topGuidesPerMountain);
             <li class="nav-item active" data-href="/pages/admin/guides.php"><i class="fas fa-chalkboard-user"></i> Guides</li>
             <div class="nav-divider"></div>
             <li class="nav-item" data-href="/pages/admin/payments.php"><i class="fas fa-coins"></i> Revenue</li>
+            <li class="nav-item" data-href="/pages/admin/reviews.php"><i class="fas fa-star"></i> Reviews</li>
             <li class="nav-item" data-href="/pages/admin/alerts.php"><i class="fas fa-bell"></i> Alerts</li>
             <li class="nav-item" data-href="/pages/admin/analytics.php"><i class="fas fa-chart-simple"></i> Analytics</li>
         </ul>
     </div>
     <div>
-        <button class="logout-btn" onclick="showLogoutModal()">
-            <i class="fas fa-right-from-bracket"></i> Log Out
+        <button class="logout-btn" onclick="showLogoutModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;background:transparent;border:none;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:400;color:#dc2626;cursor:pointer;">
+            <i class="fas fa-right-from-bracket" style="width:16px;font-size:0.75rem;"></i> 
+            Log Out
         </button>
         <div class="sidebar-footer">
-            <div class="status-dot"></div> TEAM AURIX
+            <div class="status-dot"></div> 
+            TEAM AURIX
         </div>
     </div>
 </aside>
@@ -339,6 +342,19 @@ $topGuidesPerMountain = array_values($topGuidesPerMountain);
                 <button class="btn" id="broadcastBtn">
                     <i class="fas fa-bullhorn"></i> <span class="btn-responsive-text">Broadcast</span>
                 </button>
+                <!-- Add this button next to the existing buttons -->
+<button class="btn btn-primary" id="viewRegistrationsBtn" style="background: #1D9E75; border-color: #1D9E75;">
+    <i class="fas fa-clipboard-list"></i> <span class="btn-responsive-text">Registration Requests</span>
+    <?php
+    // Count pending registrations
+    $pendingStmt = $pdo->prepare("SELECT COUNT(*) FROM guides WHERE is_approved = 0 AND is_available = 1");
+    $pendingStmt->execute();
+    $pendingCount = $pendingStmt->fetchColumn();
+    if ($pendingCount > 0): ?>
+    <span style="background: #dc2626; color: white; border-radius: 20px; padding: 2px 8px; font-size: 11px; margin-left: 6px;"><?= $pendingCount ?></span>
+    <?php endif; ?>
+</button>
+
             </div>
         </div>
 
@@ -1039,6 +1055,11 @@ function reactivateGuide(guideId, guideName) {
     });
 }
 
+
+// Registration Requests Button Handler
+document.getElementById('viewRegistrationsBtn').addEventListener('click', function() {
+    window.location.href = 'guide_registrations.php';
+});
 
 // ════════════════════════════════════════════
 // BROADCAST & ANNOUNCEMENT

@@ -100,10 +100,7 @@ $finished_bookings = count(array_filter($bookings, function($b) { return $b['sta
 <title>LAKBAY Manager — Bookings</title>
 <link rel="stylesheet" href="manager.css">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
-
 <script>
-
-
 function updateClock() {
   const d = new Date();
   const dateEl = document.getElementById('topbarDate');
@@ -277,271 +274,10 @@ function closeModal(event) {
 document.addEventListener('DOMContentLoaded', () => {
   setInterval(updateClock, 1000);
   updateClock();
-  
-  // Sidebar links already handled via shared_sidebar.php
 });
+
 </script>
 <style>
-/* Base styles */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --ink: #100600;
-  --ink2: #3a2a1a;
-  --ink3: #7a6a5a;
-  --ink4: #b0a090;
-  --white: #ffffff;
-  --off: #faf9f7;
-  --surface: #f4f1ec;
-  --border: rgba(16,6,0,0.09);
-  --border2: rgba(16,6,0,0.15);
-  --gold: #c9a84c;
-  --gold2: #e8c96a;
-  --green: #2e7d32;
-  --green-bg: #e8f5e9;
-  --red: #c62828;
-  --red-bg: #fce4ec;
-  --amber: #e65100;
-  --amber-bg: #fff3e0;
-  --blue: #1565c0;
-  --blue-bg: #e3f2fd;
-  --r: 18px;
-  --r-sm: 10px;
-  --shadow: 0 4px 24px rgba(16,6,0,0.08);
-  --shadow-lg: 0 16px 48px rgba(16,6,0,0.14);
-  --shadow-xl: 0 24px 64px rgba(16,6,0,0.18);
-  --glass: rgba(255,255,255,0.72);
-  --sidebar-w: 260px;
-  --sidebar-w-sm: 72px;
-  --topbar-h: 64px;
-  --mobile-nav-h: 60px;
-}
-
-html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--surface); color: var(--ink); min-height: 100vh; }
-
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(16,6,0,0.15); border-radius: 2px; }
-
-/* Layout */
-.app-shell { display: flex; min-height: 100vh; }
-
-/* Sidebar - Desktop */
-.sidebar {
-  width: var(--sidebar-w);
-  background: #F8F6F0;
-  display: flex;
-  flex-direction: column;
-  position: fixed;
-  top: 0; left: 0; bottom: 0;
-  z-index: 200;
-  transition: width .25s ease;
-  overflow: hidden;
-}
-.sidebar.collapsed { width: var(--sidebar-w-sm); }
-.sidebar.collapsed .nav-label,
-.sidebar.collapsed .nav-text,
-.sidebar.collapsed .sidebar-brand-text,
-.sidebar.collapsed .sidebar-footer-text,
-.sidebar.collapsed .mountain-badge-text { display: none; }
-.sidebar.collapsed .sidebar-brand { justify-content: center; }
-.sidebar.collapsed .nav-item { justify-content: center; padding: 14px 0; }
-.sidebar.collapsed .nav-item svg { margin: 0; }
-.sidebar.collapsed .mountain-badge { justify-content: center; padding: 12px; }
-
-.sidebar-brand {
-  display: flex; align-items: center; gap: 12px;
-  padding: 22px 24px 18px;
-  border-bottom: 1px solid rgba(16,6,0,0.08);
-  text-decoration: none;
-}
-.sidebar-logo {
-  width: 36px; height: 36px; border-radius: 10px;
-  background: var(--gold); display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.sidebar-logo svg { width: 20px; height: 20px; }
-.sidebar-brand-text { line-height: 1.2; }
-.sidebar-app-name { font-family: 'Playfair Display', serif; font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: .3px; }
-.sidebar-app-sub { font-size: 9px; color: rgba(16,6,0,0.35); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 1px; }
-
-.mountain-badge {
-  display: flex; align-items: center; gap: 10px;
-  margin: 14px 16px;
-  background: linear-gradient(135deg, rgba(201,168,76,0.1), rgba(201,168,76,0.05));
-  border: 1px solid rgba(201,168,76,0.3);
-  border-radius: 12px;
-  padding: 12px 14px;
-}
-.mountain-badge-icon {
-  width: 34px; height: 34px; border-radius: 9px;
-  background: var(--gold); display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.mountain-badge-icon svg { width: 16px; height: 16px; stroke: var(--ink); }
-.mountain-badge-text { overflow: hidden; }
-.mountain-badge-name { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mountain-badge-role { font-size: 10px; color: rgba(16,6,0,0.5); margin-top: 1px; }
-
-.nav-section { padding: 0 0 8px; flex: 1; overflow-y: auto; }
-.nav-label { font-size: 9px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: rgba(16,6,0,0.35); padding: 16px 24px 6px; }
-.nav-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 11px 24px; font-size: 13px; font-weight: 500;
-  color: rgba(16,6,0,0.6); cursor: pointer; text-decoration: none;
-  transition: all .15s; border-left: 3px solid transparent;
-  white-space: nowrap;
-}
-.nav-item:hover { color: var(--ink); background: rgba(16,6,0,0.04); transform: translateX(2px); }
-.nav-item.active { color: var(--ink); background: rgba(201,168,76,0.1); border-left-color: var(--gold); }
-.nav-item svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.8; flex-shrink: 0; }
-.nav-divider { height: 1px; background: rgba(16,6,0,0.08); margin: 8px 20px; }
-
-/* Log out button - red style */
-.nav-item.logout-red {
-  margin-top: 12px;
-  border-top: 1px solid var(--border);
-  border-radius: 0;
-  color: #b91c1c;
-}
-.nav-item.logout-red:hover {
-  background: rgba(185, 28, 28, 0.08);
-  color: #b91c1c;
-}
-.nav-item.logout-red svg {
-  stroke: #b91c1c;
-}
-.nav-item.logout-red:hover svg {
-  stroke: #b91c1c;
-}
-
-.sidebar-footer {
-  padding: 16px 20px; border-top: 1px solid rgba(16,6,0,0.08);
-  display: flex; align-items: center; gap: 10px;
-}
-.sidebar-footer-avatar {
-  width: 34px; height: 34px; border-radius: 50%; background: var(--gold);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 700; color: var(--ink); flex-shrink: 0;
-}
-.sidebar-footer-text { overflow: hidden; }
-.sidebar-footer-name { font-size: 12px; font-weight: 700; color: var(--ink); }
-.sidebar-footer-role { font-size: 10px; color: rgba(16,6,0,0.5); }
-
-/* Main Area */
-.main-area {
-  flex: 1;
-  margin-left: var(--sidebar-w);
-  display: flex; flex-direction: column;
-  min-height: 100vh;
-  transition: margin-left .25s ease;
-}
-.main-area.expanded { margin-left: var(--sidebar-w-sm); }
-
-/* Topbar */
-.topbar {
-  height: var(--topbar-h);
-  background: var(--glass);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 28px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-.topbar-left { display: flex; align-items: center; gap: 14px; }
-.sidebar-toggle {
-  width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--border2);
-  background: var(--white); cursor: pointer; display: flex; align-items: center; justify-content: center;
-  color: var(--ink); transition: all .15s;
-}
-.sidebar-toggle:hover { background: var(--ink); color: var(--white); transform: rotate(90deg); }
-.sidebar-toggle svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; }
-.topbar-page-title { font-size: 15px; font-weight: 700; color: var(--ink); }
-.topbar-page-sub { font-size: 11px; color: var(--ink3); margin-top: 1px; }
-.topbar-right { display: flex; align-items: center; gap: 12px; }
-.topbar-date { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink4); padding: 6px 12px; background: var(--off); border-radius: 20px; }
-.topbar-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; cursor: pointer; transition: transform .2s; }
-.topbar-avatar:hover { transform: scale(1.05); }
-
-/* Mobile Bottom Navigation */
-.mobile-bottom-nav {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: var(--mobile-nav-h);
-  background: var(--white);
-  border-top: 1px solid var(--border);
-  box-shadow: 0 -4px 12px rgba(0,0,0,0.05);
-  z-index: 150;
-  justify-content: space-around;
-  align-items: center;
-  padding: 8px 16px;
-}
-.mobile-nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 6px 12px;
-  border-radius: 12px;
-  transition: all 0.2s;
-  color: var(--ink3);
-  text-decoration: none;
-}
-.mobile-nav-item svg {
-  width: 22px;
-  height: 22px;
-  stroke: currentColor;
-  stroke-width: 1.8;
-}
-.mobile-nav-item span {
-  font-size: 10px;
-  font-weight: 500;
-}
-.mobile-nav-item.active {
-  color: var(--gold);
-  background: rgba(201,168,76,0.1);
-}
-.mobile-nav-item:hover {
-  background: var(--off);
-}
-
-/* Hide desktop sidebar on mobile */
-@media (max-width: 768px) {
-  .sidebar {
-    transform: translateX(-100%);
-    transition: transform 0.3s ease;
-  }
-  .sidebar.mobile-open {
-    transform: translateX(0);
-  }
-  .main-area {
-    margin-left: 0 !important;
-  }
-  .mobile-bottom-nav {
-    display: flex;
-  }
-  .content {
-    padding-bottom: calc(var(--mobile-nav-h) + 16px) !important;
-  }
-  .topbar {
-    padding: 0 16px;
-  }
-}
-
-/* Content */
-.content { flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 24px; }
 
 /* Stats Cards */
 .stats-grid {
@@ -1051,15 +787,18 @@ html, body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sur
 <body>
 <div class="app-shell">
 
+
 <!-- SIDEBAR -->
 <?php $activePage = 'bookings'; ?>
 <?php include 'shared_sidebar.php'; ?>
+<!-- DEBUG: Check if sidebar exists -->
+
 <!-- MAIN -->
 <!-- Main Area -->
 <div class="main-area" id="mainArea">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="sidebar-toggle">
+      <button class="sidebar-toggle" onclick="toggleSidebar()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>

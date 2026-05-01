@@ -1156,6 +1156,118 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     border-radius: 10px;
 }
 
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(4px);
+}
+
+.modal-container {
+    background: white;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 400px;
+    padding: 24px;
+    animation: modalSlideIn 0.2s ease-out;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.modal-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+.modal-icon.warning {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.modal-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1a1a18;
+    margin: 0;
+}
+
+.modal-body {
+    margin-bottom: 24px;
+    color: #666;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.modal-btn {
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.modal-btn-secondary {
+    background: #f0f0f0;
+    color: #666;
+}
+
+.modal-btn-secondary:hover {
+    background: #e0e0e0;
+    transform: translateY(-1px);
+}
+
+.modal-btn-danger {
+    background: #dc2626;
+    color: white;
+}
+
+.modal-btn-danger:hover {
+    background: #b91c1c;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.modal-btn:active {
+    transform: translateY(0);
+}
   </style>
 </head>
 <body>
@@ -1197,9 +1309,9 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="sidebar-profile-name"><?= htmlspecialchars($guide['name']) ?></div>
     <div class="sidebar-profile-role"><?= htmlspecialchars($guide['specialization'] ?? 'Trail Guide') ?></div>
   </div>
-  <a href="../login-and-signup/login.php" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;text-decoration:none;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--ink-5)'">
+  <button onclick="confirmLogout()" style="background:none;border:none;color:var(--ink-5);font-size:0.9rem;padding:8px;cursor:pointer;transition:color 0.15s;display:flex;align-items:center;" title="Logout" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--ink-5)'">
     <i class="fas fa-sign-out-alt"></i>
-  </a>
+  </button>
 </div>
   </aside>
 
@@ -1747,10 +1859,193 @@ $my_alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
+<!-- CONFIRM TOAST MODAL -->
+<div id="confirmToast" style="
+    display:none;
+    position:fixed;
+    bottom:24px;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:9999;
+    background:white;
+    border-radius:16px;
+    box-shadow:0 8px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
+    padding:20px 24px;
+    min-width:300px;
+    max-width:380px;
+    border:1px solid var(--line);
+    animation: slideUpIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+        <div id="confirmToastIcon" style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;background:var(--primary-soft);color:var(--primary);"></div>
+        <div>
+            <div id="confirmToastTitle" style="font-weight:700;font-size:0.92rem;color:var(--ink);"></div>
+            <div id="confirmToastMsg" style="font-size:0.78rem;color:var(--ink-4);margin-top:2px;line-height:1.4;"></div>
+        </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button id="confirmToastCancel" onclick="hideConfirmToast()" style="
+            padding:8px 18px;border-radius:8px;border:1px solid var(--line);
+            background:white;color:var(--ink-3);font-size:0.8rem;font-weight:600;
+            cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;
+        " onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='white'">Cancel</button>
+        <button id="confirmToastOk" style="
+            padding:8px 18px;border-radius:8px;border:none;
+            font-size:0.8rem;font-weight:700;cursor:pointer;
+            font-family:'DM Sans',sans-serif;transition:all 0.15s;
+        "></button>
+    </div>
+</div>
+
+<style>
+@keyframes slideUpIn {
+    from { opacity:0; transform:translateX(-50%) translateY(20px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+</style>
+
 <div class="toast" id="toast"></div>
+<!-- LOGOUT CONFIRMATION MODAL -->
+<div id="logoutModal" class="modal-overlay" style="display: none;">
+    <div class="modal-container">
+        <div class="modal-header">
+            <div class="modal-icon warning">
+                <i class="fas fa-sign-out-alt"></i>
+            </div>
+            <h3 class="modal-title">Log out of Guide Portal?</h3>
+        </div>
+        <div class="modal-body">
+            <p>You will be redirected to the login page.</p>
+        </div>
+        <div class="modal-footer">            <button class="modal-btn modal-btn-secondary" onclick="closeLogoutModal()">Cancel</button>
+            <button class="modal-btn modal-btn-danger" onclick="confirmLogoutAction()">Log Out</button>
+        </div>
+    </div>
+</div>
+
 
 <script>
-// ── Calendar data from PHP ──────────────────────────────────────────────────
+// Dynamic Logout Modal (Working)
+function confirmLogout() {
+    // Create modal directly
+    const existingModal = document.getElementById('dynamicLogoutModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const modalDiv = document.createElement('div');
+    modalDiv.id = 'dynamicLogoutModal';
+    modalDiv.innerHTML = `
+        <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999999;">
+            <div style="background:white;border-radius:20px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:#fef2f2;color:#dc2626;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </div>
+                    <h3 style="font-size:1.1rem;font-weight:700;color:#1a1a18;margin:0;">Log out of Guide Portal?</h3>
+                </div>
+                <div style="margin-bottom:24px;color:#666;font-size:0.85rem;">
+                    <p>You will be redirected to the login page.</p>
+                </div>
+                <div style="display:flex;gap:12px;justify-content:flex-end;">
+                    <button onclick="this.closest('#dynamicLogoutModal').remove()" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #ddd;background:#f0f0f0;color:#666;">Cancel</button>
+                    <button onclick="window.location.href='../login-and-signup/login.php'" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:none;background:#dc2626;color:white;">Log Out</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modalDiv);
+}
+
+// Dynamic Confirm Modal for other actions
+function showConfirmModal(options) {
+    const { title, message, confirmText, confirmColor, onConfirm, cancelText = 'Cancel' } = options;
+    
+    const existingModal = document.getElementById('dynamicConfirmModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const modalDiv = document.createElement('div');
+    modalDiv.id = 'dynamicConfirmModal';
+    modalDiv.innerHTML = `
+        <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999999;">
+            <div style="background:white;border-radius:20px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:${confirmColor === '#dc2626' ? '#fef2f2' : 'rgba(27,112,69,0.1)'};color:${confirmColor};display:flex;align-items:center;justify-content:center;font-size:1.2rem;">
+                        <i class="fas ${confirmColor === '#dc2626' ? 'fa-exclamation-triangle' : 'fa-check-circle'}"></i>
+                    </div>
+                    <h3 style="font-size:1.1rem;font-weight:700;color:#1a1a18;margin:0;">${title}</h3>
+                </div>
+                <div style="margin-bottom:24px;color:#666;font-size:0.85rem;">
+                    <p>${message}</p>
+                </div>
+                <div style="display:flex;gap:12px;justify-content:flex-end;">
+                    <button onclick="this.closest('#dynamicConfirmModal').remove()" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #ddd;background:#f0f0f0;color:#666;">${cancelText}</button>
+                    <button id="confirmActionBtn" style="padding:10px 20px;border-radius:10px;font-size:0.8rem;font-weight:600;cursor:pointer;border:none;background:${confirmColor};color:white;">${confirmText}</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modalDiv);
+    
+    document.getElementById('confirmActionBtn').onclick = function() {
+        modalDiv.remove();
+        if (onConfirm) onConfirm();
+    };
+}
+
+// Update confirmBooking function to use new modal
+function confirmBooking(bookingId, bookingNumber) {
+    showConfirmModal({
+        title: 'Confirm Booking?',
+        message: `Booking ${bookingNumber} will be confirmed and the hiker will be notified to make a downpayment.`,
+        confirmText: 'Yes, Confirm',
+        confirmColor: '#1B7045',
+        onConfirm: () => _doConfirmBooking(bookingId, bookingNumber)
+    });
+}
+
+// Update showCancelModal function
+function showCancelModal(bookingId, bookingNumber) {
+    document.getElementById('cancelBookingId').value = bookingId;
+    document.getElementById('cancelBookingNumber').textContent = bookingNumber;
+    document.getElementById('cancelReason').value = '';
+    document.getElementById('cancelCharCount').textContent = '0';
+    openModal('cancelModal');
+}
+
+// Keep the rest of your existing functions unchanged
+function initUnreadBadgePoller() {
+    function fetchAndUpdateBadge() {
+        fetch('../api/guide_messages.php?action=get_conversations')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) return;
+                var total = (data.conversations || []).reduce(function(s, c) { return s + (c.unread_count || 0); }, 0);
+                ['.sidebar-nav a[href="guide-communication.php"]', '.guide-bottom-nav a[href="guide-communication.php"]'].forEach(function(sel, i) {
+                    var link = document.querySelector(sel);
+                    if (!link) return;
+                    link.style.position = 'relative';
+                    var badge = link.querySelector('.notif-badge');
+                    if (total > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'notif-badge'; link.appendChild(badge); }
+                        badge.textContent = total > 9 ? '9+' : total;
+                        badge.style.cssText = i === 0
+                            ? 'position:absolute;right:12px;top:8px;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px;min-width:18px;text-align:center;'
+                            : 'position:absolute;top:-5px;right:5px;background:#dc2626;color:white;font-size:9px;font-weight:700;padding:2px 5px;border-radius:20px;min-width:16px;text-align:center;';
+                    } else if (badge) { badge.remove(); }
+                });
+            }).catch(function() {});
+    }
+    fetchAndUpdateBadge();
+    setInterval(fetchAndUpdateBadge, 30000);
+}
+initUnreadBadgePoller();
+
+// ── Calendar data from PHP ──
 const occupiedDates = <?= $occupied_json ?>;
 const calendarBookings = <?= $calendar_json ?>;
 
@@ -1795,31 +2090,27 @@ function renderCal() {
     cell.textContent = d;
     cell.dataset.iso = iso;
     
-    // Status Dots - show a dot for EACH booking
-const dayBookings = calendarBookings.filter(b => b.hike_date === iso);
-if (dayBookings.length > 0) {
-    const dotsContainer = document.createElement('div');
-    dotsContainer.className = 'cal-dots';
-    
-    // Show a dot for EACH booking
-    dayBookings.forEach(booking => {
-        const dot = document.createElement('div');
-        let dotColor = '';
-        if (booking.status === 'active') dotColor = 'dot-active';
-        else if (booking.status === 'pending') dotColor = 'dot-pending';
-        else if (booking.status === 'cancelled') dotColor = 'dot-cancelled';
-        else if (booking.status === 'finished') dotColor = 'dot-finished';
-        dot.className = `cal-dot ${dotColor}`;
-        dotsContainer.appendChild(dot);
-    });
-    cell.appendChild(dotsContainer);
-    
-    // Tooltip
-    const summary = dayBookings.map(b => `${b.mountain_name} (${b.status})`).join(', ');
-    cell.title = summary;
-}
+    const dayBookings = calendarBookings.filter(b => b.hike_date === iso);
+    if (dayBookings.length > 0) {
+        const dotsContainer = document.createElement('div');
+        dotsContainer.className = 'cal-dots';
+        
+        dayBookings.forEach(booking => {
+            const dot = document.createElement('div');
+            let dotColor = '';
+            if (booking.status === 'active') dotColor = 'dot-active';
+            else if (booking.status === 'pending') dotColor = 'dot-pending';
+            else if (booking.status === 'cancelled') dotColor = 'dot-cancelled';
+            else if (booking.status === 'finished') dotColor = 'dot-finished';
+            dot.className = `cal-dot ${dotColor}`;
+            dotsContainer.appendChild(dot);
+        });
+        cell.appendChild(dotsContainer);
+        
+        const summary = dayBookings.map(b => `${b.mountain_name} (${b.status})`).join(', ');
+        cell.title = summary;
+    }
 
-    // Highlight selected date
     if (selectedDate === iso) cell.classList.add('selected');
 
     cell.addEventListener('click', () => {
@@ -1832,6 +2123,7 @@ if (dayBookings.length > 0) {
 
 let selectedDate = null;
 let allBookings = <?= $all_bookings_json ?>;
+
 function filterByDate(iso) {
     const header = document.querySelector('.section-title');
     const upcomingContainer = document.getElementById('upcomingBookingsList');
@@ -1840,20 +2132,16 @@ function filterByDate(iso) {
     const filteredTitle = document.getElementById('filteredBookingsTitle');
     
     if (selectedDate === iso) {
-        // Unclick: Reset to show upcoming bookings
         selectedDate = null;
         upcomingContainer.style.display = 'flex';
         filteredContainer.style.display = 'none';
-        header.textContent = "Upcoming Bookings";
+        if (header) header.textContent = "Upcoming Bookings";
     } else {
-        // Click: Show all bookings for this date
         selectedDate = iso;
         
-        // Hide upcoming container, show filtered container
         upcomingContainer.style.display = 'none';
         filteredContainer.style.display = 'block';
         
-        // Get all bookings for this date
         const dayBookings = allBookings.filter(b => b.hike_date === iso);
         
         const dateStr = new Date(iso + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -1876,13 +2164,11 @@ function filterByDate(iso) {
                 No bookings found for this date.
             </div>`;
         } else {
-            // Sort by status (pending first, then active, then others)
             const sortedBookings = [...dayBookings].sort((a, b) => {
                 const order = { 'pending': 1, 'active': 2, 'finished': 3, 'cancelled': 4 };
                 return (order[a.status] || 5) - (order[b.status] || 5);
             });
             
-            // Get active bookings on this date for overlap detection
             const activeOnThisDate = sortedBookings.filter(b => b.status === 'active');
             
             filteredList.innerHTML = sortedBookings.map(bk => {
@@ -1898,13 +2184,10 @@ function filterByDate(iso) {
                                   (bk.status === 'active' ? '<i class="fas fa-check-circle"></i>' : 
                                   '<i class="fas fa-clock"></i>'));
                 
-                const displayTime = bk.start_time ? bk.start_time.substring(0,5) : 'TBD';
                 const displayTimeFormatted = bk.start_time ? new Date('2000-01-01T' + bk.start_time).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'Time TBD';
                 
-                // Check for overlap (only for pending bookings)
                 let overlapWarning = '';
                 if (bk.status === 'pending' && activeOnThisDate.length > 0) {
-                    // Check if any active booking has same or similar time
                     let hasOverlap = false;
                     let activeTime = '';
                     for (let ab of activeOnThisDate) {
@@ -1916,7 +2199,6 @@ function filterByDate(iso) {
                                 activeTime = abTime;
                                 break;
                             } else if (bkTime && abTime) {
-                                // Check if times are within 2 hours
                                 const bkHour = parseInt(bkTime.split(':')[0]);
                                 const abHour = parseInt(abTime.split(':')[0]);
                                 if (Math.abs(bkHour - abHour) <= 2) {
@@ -1935,29 +2217,26 @@ function filterByDate(iso) {
                     }
                 }
                 
-                // Show appropriate action buttons based on status
                 let actionButtons = '';
-if (bk.status === 'active') {
-    actionButtons = `
-        <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
-            <i class="fas fa-comment-dots"></i>
-        </button>
-    `;
-} else if (bk.status === 'finished') {
-    // ADD THIS FOR FINISHED BOOKINGS
-    actionButtons = `
-        <button class="btn-icon-sm btn-view" title="View Hike Summary" onclick="viewGuideActivity(${bk.id})">
-            <i class="fas fa-chart-line"></i>
-        </button>
-       
-    `;
-} else if (bk.status === 'pending') {
-    actionButtons = `
-         <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
-            <i class="fas fa-comment-dots"></i>
-        </button>
-    `;
-}
+                if (bk.status === 'active') {
+                    actionButtons = `
+                        <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
+                            <i class="fas fa-comment-dots"></i>
+                        </button>
+                    `;
+                } else if (bk.status === 'finished') {
+                    actionButtons = `
+                        <button class="btn-icon-sm btn-view" title="View Hike Summary" onclick="viewGuideActivity(${bk.id})">
+                            <i class="fas fa-chart-line"></i>
+                        </button>
+                    `;
+                } else if (bk.status === 'pending') {
+                    actionButtons = `
+                         <button class="btn-icon-sm btn-message" title="Send Message" onclick="location.href='guide-communication.php?user_id=${bk.hiker_user_id}'">
+                            <i class="fas fa-comment-dots"></i>
+                        </button>
+                    `;
+                }
                 
                 return `
                 <div class="booking-item" style="${bk.status === 'pending' && activeOnThisDate.length > 0 ? 'border-left: 3px solid #ffc107;' : ''}">
@@ -1992,9 +2271,9 @@ if (bk.status === 'active') {
             }).join('');
         }
         
-        header.textContent = "Upcoming Bookings"; // Keep original header text
+        if (header) header.textContent = "Upcoming Bookings";
     }
-    renderCal(); // Re-render to update 'selected' class
+    renderCal();
 }
 
 function fmtDate2(dateStr) {
@@ -2011,7 +2290,7 @@ function closeFilteredView() {
     
     upcomingContainer.style.display = 'flex';
     filteredContainer.style.display = 'none';
-    header.textContent = "Upcoming Bookings";
+    if (header) header.textContent = "Upcoming Bookings";
     renderCal();
 }
 
@@ -2027,7 +2306,7 @@ function calPrev() { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
 function calNext() { calMonth++; if (calMonth > 11) { calMonth = 0;  calYear++; } renderCal(); }
 initCal();
 
-// ── Status ──────────────────────────────────────────────────────────────────
+// ── Status ──
 let currentStatus = '<?= $guide['trail_status'] ?: 'safe' ?>';
 function setStatus(s) {
     currentStatus = s;
@@ -2035,7 +2314,6 @@ function setStatus(s) {
     document.getElementById('sc-on_trail').className = 'status-chip' + (s === 'on_trail' ? ' active-trail' : '');
     document.getElementById('sc-completed').className = 'status-chip' + (s === 'completed' ? ' active-done'  : '');
     
-    // Send AJAX to update database
     fetch(window.location.href, {
         method: 'POST',
         headers: {
@@ -2059,49 +2337,22 @@ function setStatus(s) {
     .catch(() => showToast(' Network error updating status'));
 }
 
-// ── Modal ───────────────────────────────────────────────────────────────────
+// ── Modal functions ──
 document.getElementById('emergencyBtn').addEventListener('click', () => openModal('emergencyModal'));
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if(e.target===o) closeModal(o.id); }));
 
-// ── Toast ────────────────────────────────────────────────────────────────────
-function showToast(msg) {
+// ── Toast ──
+function showToast(msg, type = 'info') {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2800);
+  if (type === 'success') t.style.background = 'var(--green)';
+  else if (type === 'error') t.style.background = 'var(--red)';
+  else t.style.background = '';
+  setTimeout(() => { t.classList.remove('show'); t.style.background = ''; }, 2800);
 }
-
-// ── Live clock ───────────────────────────────────────────────────────────────
-function updateTime() {
-  const d  = new Date();
-  const t  = d.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'});
-  const dt = d.toLocaleDateString('en-PH', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
-  document.getElementById('liveTime').textContent = t;
-  document.getElementById('welcomeDate').innerHTML = `<i class="fas fa-clock" style="font-size:0.6rem;"></i> ${dt}`;
-}
-updateTime(); setInterval(updateTime, 1000);
-document.addEventListener('DOMContentLoaded', function() {
-    const broadcastCards = document.querySelectorAll('.announcement-card.unread');
-    broadcastCards.forEach(card => {
-        const broadcastId = card.dataset.id;
-        if (broadcastId) {
-            fetch(window.location.href, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: new URLSearchParams({
-                    action: 'mark_read',
-                    broadcast_id: broadcastId
-                })
-            });
-            card.classList.remove('unread');
-        }
-    });
-});
 
 function viewBookingDetails(bookingId, bookingNumber) {
     fetch(window.location.href, {
@@ -2121,18 +2372,15 @@ function viewBookingDetails(bookingId, bookingNumber) {
             const booking = data.booking;
             const typeMap = { day_hike: 'Day Hike', overnight: 'Overnight', multi_day: 'Multi-Day' };
 
-            // Calculate guide fee based on hike type (use fee from database if available)
             let guideFee = booking.guide_fee || (booking.hike_type === 'overnight' ? 1500 : 801);
             let downpaymentPaid = parseFloat(booking.downpayment_amount || 0);
             let remainingGuideFee = guideFee - downpaymentPaid;
 
-            // Downpayment status badge
             let downpaymentBadge = '';
             if (booking.downpayment_status === 'paid') downpaymentBadge = '<span class="badge badge-green">Paid</span>';
             else if (booking.downpayment_status === 'expired') downpaymentBadge = '<span class="badge badge-gray">Expired</span>';
             else downpaymentBadge = '<span class="badge badge-amber">Unpaid</span>';
 
-            // Guide payment status badge
             let guidePaymentBadge = '';
             if (booking.guide_payment_status === 'paid') guidePaymentBadge = '<span class="badge badge-green">Guide Fee Paid</span>';
             else if (remainingGuideFee <= 0) guidePaymentBadge = '<span class="badge badge-green">Fully Paid</span>';
@@ -2188,9 +2436,9 @@ function viewBookingDetails(bookingId, bookingNumber) {
                             <div class="detail-val">${new Date(booking.hike_date).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
                         </div>
                         <div class="detail-item">
-    <div class="detail-label">Start Time</div>
-    <div class="detail-val">${booking.start_time ? booking.start_time.substring(0,5) : 'Not specified'}</div>
-</div>
+                            <div class="detail-label">Start Time</div>
+                            <div class="detail-val">${booking.start_time ? booking.start_time.substring(0,5) : 'Not specified'}</div>
+                        </div>
                         <div class="detail-item">
                             <div class="detail-label">Hike Type</div>
                             <div class="detail-val">${typeMap[booking.hike_type] || booking.hike_type}</div>
@@ -2267,21 +2515,11 @@ function viewBookingDetails(bookingId, bookingNumber) {
                     <div style="overflow-x:auto;">
                         <table class="hikers-table">
                             <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Age</th>
-                                    <th>Emergency Contact</th>
-                                    <th>Emergency Phone</th>
-                                </tr>
+                                <tr><th>Name</th><th>Age</th><th>Emergency Contact</th><th>Emergency Phone</th></tr>
                             </thead>
                             <tbody>
                                 ${booking.additional_hikers.map(hiker => `
-                                <tr>
-                                    <td>${escapeHtml(hiker.hiker_name)}</td>
-                                    <td>${hiker.age || 'N/A'}</td>
-                                    <td>${escapeHtml(hiker.emergency_contact_name || 'N/A')}</td>
-                                    <td>${escapeHtml(hiker.emergency_contact_number || 'N/A')}</td>
-                                </tr>
+                                <tr><td>${escapeHtml(hiker.hiker_name)}</td><td>${hiker.age || 'N/A'}</td><td>${escapeHtml(hiker.emergency_contact_name || 'N/A')}</td><td>${escapeHtml(hiker.emergency_contact_number || 'N/A')}</td></tr>
                                 `).join('')}
                             </tbody>
                         </table>
@@ -2302,49 +2540,34 @@ function viewBookingDetails(bookingId, bookingNumber) {
     });
 }
 
-function confirmBooking(bookingId, bookingNumber) {
-    if (confirm(`Are you sure you want to confirm booking ${bookingNumber}? This will notify the hiker that you've accepted the booking.`)) {
-        showToast('Confirming booking...');
-        
-        fetch(window.location.href, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: new URLSearchParams({
-                action: 'confirm_booking',
-                booking_id: bookingId
-            })
+function _doConfirmBooking(bookingId, bookingNumber) {
+    showToast('Confirming booking...');
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: new URLSearchParams({
+            action: 'confirm_booking',
+            booking_id: bookingId
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showToast(`✓ Booking ${bookingNumber} confirmed!`);
-                closeModal('bookingDetailsModal');
-                setTimeout(() => location.reload(), 1200);
-            } else {
-                showToast(data.message || 'Failed to confirm booking');
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            showToast('Error confirming booking');
-        });
-    }
-}
-
-function showCancelModal(bookingId, bookingNumber) {
-    document.getElementById('cancelBookingId').value = bookingId;
-    document.getElementById('cancelBookingNumber').textContent = bookingNumber;
-    document.getElementById('cancelReason').value = '';
-    document.getElementById('cancelCharCount').textContent = '0';
-    openModal('cancelModal');
-}
-
-function showCancelModalFromDetails(bookingId, bookingNumber) {
-    closeModal('bookingDetailsModal');
-    showCancelModal(bookingId, bookingNumber);
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`✓ Booking ${bookingNumber} confirmed!`);
+            closeModal('bookingDetailsModal');
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            showToast(data.message || 'Failed to confirm booking');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('Error confirming booking');
+    });
 }
 
 function cancelBooking(event) {
@@ -2388,9 +2611,19 @@ function cancelBooking(event) {
     });
 }
 
+function showCancelModal(bookingId, bookingNumber) {
+    document.getElementById('cancelBookingId').value = bookingId;
+    document.getElementById('cancelBookingNumber').textContent = bookingNumber;
+    document.getElementById('cancelReason').value = '';
+    document.getElementById('cancelCharCount').textContent = '0';
+    openModal('cancelModal');
+}
 
+function showCancelModalFromDetails(bookingId, bookingNumber) {
+    closeModal('bookingDetailsModal');
+    showCancelModal(bookingId, bookingNumber);
+}
 
-// Character counter for cancel modal
 const cancelReason = document.getElementById('cancelReason');
 const cancelCharCount = document.getElementById('cancelCharCount');
 if (cancelReason && cancelCharCount) {
@@ -2408,6 +2641,7 @@ function escapeHtml(str) {
         return m;
     });
 }
+
 function viewGuideActivity(bookingId) {
     window.location.href = `guide-view-activity.php?booking_id=${bookingId}`;
 }
@@ -2416,6 +2650,41 @@ document.getElementById('viewAlertsBtn')?.addEventListener('click', () => openMo
 <?php if ($emergency_error): ?>
 openModal('emergencyModal');
 <?php endif; ?>
+
+// Live clock
+function updateTime() {
+  const d  = new Date();
+  const t  = d.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'});
+  const dt = d.toLocaleDateString('en-PH', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
+  const liveTimeEl = document.getElementById('liveTime');
+  const welcomeDateEl = document.getElementById('welcomeDate');
+  if (liveTimeEl) liveTimeEl.textContent = t;
+  if (welcomeDateEl) welcomeDateEl.innerHTML = `<i class="fas fa-clock" style="font-size:0.6rem;"></i> ${dt}`;
+}
+updateTime(); 
+setInterval(updateTime, 1000);
+
+// Mark broadcasts as read
+document.addEventListener('DOMContentLoaded', function() {
+    const broadcastCards = document.querySelectorAll('.announcement-card.unread');
+    broadcastCards.forEach(card => {
+        const broadcastId = card.dataset.id;
+        if (broadcastId) {
+            fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: new URLSearchParams({
+                    action: 'mark_read',
+                    broadcast_id: broadcastId
+                })
+            });
+            card.classList.remove('unread');
+        }
+    });
+});
 </script>
 </body>
 </html>

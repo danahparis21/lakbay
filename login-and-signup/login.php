@@ -6,6 +6,29 @@ $error = '';
 $success_redirect = false;
 $redirect_url = '';
 
+
+// Get total number of mountains
+$mountainsStmt = $pdo->query("SELECT COUNT(*) as total FROM mountains WHERE status = 'Open'");
+$totalMountains = $mountainsStmt->fetch()['total'] ?? 0;
+
+// Get total number of registered users (hikers + guides + managers + admins)
+$usersStmt = $pdo->query("SELECT COUNT(*) as total FROM users");
+$totalUsers = $usersStmt->fetch()['total'] ?? 0;
+
+// Calculate average safety/completion rate from approved reviews
+// Using average rating as a proxy for "safe trips" satisfaction
+$reviewsStmt = $pdo->query("SELECT AVG(rating) as avg_rating FROM reviews WHERE status = 'approved'");
+$avgRating = $reviewsStmt->fetch()['avg_rating'] ?? 0;
+// Convert 5-star rating to percentage (e.g., 4.7/5 = 94%)
+$safetyPercentage = round(($avgRating / 5) * 100);
+
+// If no reviews exist yet, use a default or fetch from system_reviews
+if ($safetyPercentage == 0) {
+    $sysReviewsStmt = $pdo->query("SELECT AVG(rating) as avg_rating FROM system_reviews WHERE status = 'approved'");
+    $sysAvgRating = $sysReviewsStmt->fetch()['avg_rating'] ?? 0;
+    $safetyPercentage = $sysAvgRating > 0 ? round(($sysAvgRating / 5) * 100) : 96; // fallback default
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $pass = trim($_POST['password'] ?? '');
@@ -709,15 +732,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="page-wrapper">
 
-  <!-- LEFT VISUAL PANEL -->
+    <!-- LEFT VISUAL PANEL -->
   <div class="visual-panel">
     <div class="visual-bg"></div>
     <div class="visual-overlay"></div>
 
     <div class="floating-chips">
-      <div class="chip"><div class="chip-dot"></div> Mt. Batulao — 4.8 ★</div>
-      <div class="chip"><div class="chip-dot"></div> 12 trails nearby</div>
-      <div class="chip"><div class="chip-dot"></div> Weather: Clear skies</div>
+      <?php
+      // Get the top 3 highest-rated open mountains
+      $topMountainsStmt = $pdo->query("
+        SELECT name, rating 
+        FROM mountains 
+        WHERE status = 'Open' AND rating IS NOT NULL 
+        ORDER BY rating DESC 
+        LIMIT 3
+      ");
+      $topMountains = $topMountainsStmt->fetchAll();
+      
+      // Get trail count for nearby trails
+      $trailCountStmt = $pdo->query("SELECT COUNT(*) as total FROM mountains WHERE status = 'Open'");
+      $totalTrails = $trailCountStmt->fetch()['total'] ?? 0;
+      ?>
+      
+      <?php foreach ($topMountains as $index => $mountain): ?>
+      <div class="chip">
+        <div class="chip-dot"></div> 
+        <?= htmlspecialchars($mountain['name']) ?> — <?= number_format($mountain['rating'], 1) ?> ★
+      </div>
+      <?php endforeach; ?>
+      
+      <div class="chip">
+        <div class="chip-dot"></div> 
+        <?= $totalTrails ?> <?= $totalTrails == 1 ? 'trail' : 'trails' ?> nearby
+      </div>
+      
+      <div class="chip">
+        <div class="chip-dot"></div> 
+        Weather: Clear skies
+      </div>
     </div>
 
     <div class="visual-content">
@@ -742,9 +794,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </p>
 
       <div class="visual-stats">
-        <div class="vstat"><div class="vstat-num">240+</div><div class="vstat-label">Mountains</div></div>
-        <div class="vstat"><div class="vstat-num">18K</div><div class="vstat-label">Hikers</div></div>
-        <div class="vstat"><div class="vstat-num">96%</div><div class="vstat-label">Safe trips</div></div>
+        <div class="vstat">
+          <div class="vstat-num"><?= number_format($totalMountains) ?>+</div>
+          <div class="vstat-label">Mountains</div>
+        </div>
+        <div class="vstat">
+          <div class="vstat-num"><?= number_format($totalUsers) ?></div>
+          <div class="vstat-label">Hikers</div>
+        </div>
+        <div class="vstat">
+          <div class="vstat-num"><?= $safetyPercentage ?>%</div>
+          <div class="vstat-label">Safe trips</div>
+        </div>
       </div>
     </div>
   </div>

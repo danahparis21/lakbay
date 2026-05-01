@@ -57,9 +57,11 @@ function getMountainsFromDB($pdo) {
     $mountains = [];
     try {
         $stmt = $pdo->query("
-            SELECT id, name, location, difficulty, image, 
+            SELECT id, name, location, difficulty, image, status,
                    registration_fee, environmental_fee, elevation 
-            FROM mountains WHERE status = 'Open' ORDER BY name
+            FROM mountains ORDER BY 
+                CASE WHEN status = 'Open' THEN 0 ELSE 1 END,
+                name
         ");
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             // Get actual guide fees from guide_mountain_rates
@@ -83,6 +85,7 @@ function getMountainsFromDB($pdo) {
                 'location' => $row['location'],
                 'difficulty' => strtolower($row['difficulty']),
                 'image' => $row['image'] ?? 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=60',
+                'status' => $row['status'], // Add status field
                 'fees' => [
                     'regFee' => intval($row['registration_fee'] ?? 0),
                     'envFee' => intval($row['environmental_fee'] ?? 0),
@@ -99,7 +102,6 @@ function getMountainsFromDB($pdo) {
     }
     return $mountains;
 }
-
 function getGuidesFromDB($pdo) {
     $guides = [];
     try {
@@ -2548,6 +2550,24 @@ body {
         font-size: 16px; /* Prevents zoom on iOS */
     }
 }
+/* Closed mountain styling */
+.mtn-select-card.closed-mountain {
+    opacity: 0.7;
+    cursor: not-allowed;
+    background: #f5f5f5;
+    border-color: #e0e0e0;
+}
+
+.mtn-select-card.closed-mountain:hover {
+    border-color: #e0e0e0;
+    background: #f5f5f5;
+    transform: none;
+}
+
+.mtn-select-card.closed-mountain .mtn-select-name {
+    color: #999;
+}
+
 
 </style>
 </head>
@@ -3042,11 +3062,12 @@ function renderStep(n) {
     document.getElementById('flowTitle').textContent = 'Book a Hike';
     document.getElementById('flowSubtitle').textContent = 'Choose your mountain';
     body.innerHTML = mountains.map(m=>`
-      <div class="mtn-select-card" id="ms${m.id}" onclick="selectMtn(${m.id})">
+      <div class="mtn-select-card ${m.status !== 'Open' ? 'closed-mountain' : ''}" id="ms${m.id}" onclick="${m.status === 'Open' ? `selectMtn(${m.id})` : ''}" style="${m.status !== 'Open' ? 'opacity:0.7; cursor:not-allowed;' : ''}">
         <div class="mtn-select-img" style="background-image:url('${m.image}')"></div>
         <div>
-          <div class="mtn-select-name">${m.name}</div>
+          <div class="mtn-select-name">${m.name} ${m.status !== 'Open' ? '<span style="background:#ffebee; color:#c62828; font-size:10px; padding:2px 8px; border-radius:20px; margin-left:8px;">CLOSED</span>' : ''}</div>
           <div class="mtn-select-meta">${m.location} · <span class="badge badge-${m.difficulty}">${m.difficulty}</span></div>
+          ${m.status !== 'Open' ? '<div style="font-size:11px; color:#c62828; margin-top:4px;"><i class="fas fa-info-circle"></i> Currently closed for bookings</div>' : ''}
         </div>
       </div>`).join('');
     footer.innerHTML = `<button class="btn btn-outline" onclick="renderStep(0)">
@@ -3054,8 +3075,8 @@ function renderStep(n) {
     </button><button class="btn btn-primary btn-full" onclick="nextStep()" id="nextBtn1" disabled>Continue
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>`;
-
- } else if(n===2) {
+}
+ else if(n===2) {
     document.getElementById('flowTitle').textContent = flowState.mtn?.name || '';
     document.getElementById('flowSubtitle').textContent = 'Hike details';
     
@@ -3565,10 +3586,15 @@ function lookupHikeId() {
 
 // ── NORMAL FLOW HELPERS ──
 function selectMtn(id) {
-  flowState.mtn = mountains.find(m=>m.id===id);
-  document.querySelectorAll('.mtn-select-card').forEach(c=>c.classList.remove('selected'));
-  document.getElementById('ms'+id)?.classList.add('selected');
-  document.getElementById('nextBtn1').disabled = false;
+    const mountain = mountains.find(m => m.id === id);
+    if (mountain && mountain.status !== 'Open') {
+        showToast('❌ This mountain is currently closed for bookings.');
+        return;
+    }
+    flowState.mtn = mountain;
+    document.querySelectorAll('.mtn-select-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('ms'+id)?.classList.add('selected');
+    document.getElementById('nextBtn1').disabled = false;
 }
 function setType(t) {
   flowState.type = t;

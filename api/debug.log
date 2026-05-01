@@ -2994,3 +2994,23 @@
 2026-04-30 15:53:50 - === GET MESSAGES CALLED ===
 2026-04-30 15:53:50 - otherUserId param: 2
 2026-04-30 15:53:50 - hikerId: 4
+2026-05-01 07:26:19 - === GET MESSAGES CALLED ===
+2026-05-01 07:26:19 - otherUserId param: 3
+2026-05-01 07:26:19 - hikerId: 4
+2026-05-01 07:26:21 - === SEND MESSAGE CALLED ===
+2026-05-01 07:26:21 - POST data: Array
+(
+    [action] => send_message
+    [recipient_id] => 3
+    [recipient_type] => guide
+    [body] => sup supsups
+)
+
+2026-05-01 07:26:21 - hikerId from session: 4
+2026-05-01 07:26:21 - Parsed recipient_id: 3
+2026-05-01 07:26:21 - Body length: 11
+2026-05-01 15:26:21 - Insert result: SUCCESS
+2026-05-01 15:26:21 - =====================================
+2026-05-01 07:26:21 - === GET MESSAGES CALLED ===
+2026-05-01 07:26:21 - otherUserId param: 3
+2026-05-01 07:26:22 - hikerId: 4

@@ -17,51 +17,47 @@ if (!$data || !isset($data['id'])) {
     exit;
 }
 
+// Verify manager has permission for this mountain
+$manager_id = $_SESSION['user_id'];
+$stmt = $pdo->prepare("SELECT 1 FROM manager_mountains WHERE manager_id = ? AND mountain_id = ?");
+$stmt->execute([$manager_id, $data['id']]);
+if (!$stmt->fetch()) {
+    echo json_encode(['success' => false, 'message' => 'Permission denied']);
+    exit;
+}
+
 try {
-    $stmt = $pdo->prepare("
-        UPDATE mountains SET
-            name = ?,
-            location = ?,
-            description = ?,
-            difficulty = ?,
-            elevation = ?,
-            registration_fee = ?,
-            environmental_fee = ?,
-            trail_length_km = ?,
-            estimated_duration = ?,
-            jumpOff = ?,
-            weatherAdvisory = ?,
-            peakTimes = ?,
-            rules = ?,
-            envReminders = ?,
-            hazards = ?,
-            status = ?,
-            updated_at = NOW()
-        WHERE id = ?
-    ");
+    // Build update query dynamically based on what fields are provided
+    $updateFields = [];
+    $params = [];
     
-    $stmt->execute([
-        $data['name'],
-        $data['location'],
-        $data['description'],
-        $data['difficulty'],
-        $data['elevation'],
-        $data['registration_fee'],
-        $data['environmental_fee'],
-        $data['trail_length_km'],
-        $data['estimated_duration'],
-        $data['jumpOff'],
-        $data['weatherAdvisory'],
-        $data['peakTimes'],
-        json_encode($data['rules']),
-        json_encode($data['envReminders']),
-        json_encode($data['hazards']),
-        $data['status'],
-        $data['id']
-    ]);
+    $fields = [
+        'name', 'location', 'description', 'difficulty', 'elevation',
+        'registration_fee', 'environmental_fee', 'trail_length_km',
+        'estimated_duration', 'jumpOff', 'weatherAdvisory', 'peakTimes',
+        'rules', 'envReminders', 'hazards', 'status'
+    ];
     
-    echo json_encode(['success' => true]);
+    foreach ($fields as $field) {
+        if (isset($data[$field])) {
+            $updateFields[] = "$field = ?";
+            if ($field === 'rules' || $field === 'envReminders' || $field === 'hazards') {
+                $params[] = is_array($data[$field]) ? json_encode($data[$field]) : $data[$field];
+            } else {
+                $params[] = $data[$field];
+            }
+        }
+    }
+    
+    $updateFields[] = "updated_at = NOW()";
+    $params[] = $data['id'];
+    
+    $sql = "UPDATE mountains SET " . implode(', ', $updateFields) . " WHERE id = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    
+    echo json_encode(['success' => true, 'message' => 'Mountain updated successfully']);
 } catch (PDOException $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
 }
 ?>

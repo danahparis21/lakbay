@@ -6232,3 +6232,857 @@ Booking: BK-2025-002 - Status: cancelled
 Booking: BK-2025-005 - Status: cancelled
 Booking: BK-2025-003 - Status: finished
 Total bookings: 53
+
+=== getUserBookingsFromDB called ===
+Current User ID: 4
+Current User Name: Pedro Hiker
+Found booking: CK-2026-012 - Status: waiting_payment
+Found booking: BK-2026-036 - Status: pending
+Found booking: CK-2026-011 - Status: pending
+Found booking: BK-2026-035 - Status: pending
+Found booking: BK-2026-034 - Status: waiting_payment
+Found booking: BK-2026-033 - Status: waiting_payment
+Found booking: BK-2026-032 - Status: waiting_payment
+Found booking: BK-2026-031 - Status: waiting_payment
+Found booking: BK-2026-030 - Status: finished
+Found booking: BK-2026-029 - Status: finished
+Found booking: CK-2026-010 - Status: waiting_payment
+Found booking: CK-2026-009 - Status: finished
+Found booking: BK-2026-028 - Status: cancelled
+Found booking: BK-2026-027 - Status: pending
+Found booking: BK-2026-026 - Status: finished
+Found booking: BK-2026-025 - Status: cancelled
+Found booking: CK-2026-008 - Status: cancelled
+Found booking: BK-2026-024 - Status: waiting_payment
+Found booking: CK-2026-007 - Status: finished
+Found booking: BK-2026-023 - Status: finished
+Found booking: BK-2026-022 - Status: finished
+Found booking: BK-2026-021 - Status: finished
+Found booking: BK-2026-020 - Status: cancelled
+Found booking: BK-2026-019 - Status: cancelled
+Found booking: BK-2026-018 - Status: pending
+Found booking: CK-2026-006 - Status: cancelled
+Found booking: CK-2026-005 - Status: finished
+Found booking: BK-2026-017 - Status: finished
+Found booking: BK-2026-016 - Status: finished
+Found booking: BK-2026-015 - Status: pending
+Found booking: BK-2026-014 - Status: pending
+Found booking: BK-2026-013 - Status: cancelled
+Found booking: BK-2026-012 - Status: pending
+Found booking: BK-2026-011 - Status: pending
+Found booking: CK-2026-004 - Status: pending
+Found booking: BK-2026-010 - Status: active
+Found booking: BK-2026-009 - Status: finished
+Found booking: BK-2026-008 - Status: cancelled
+Found booking: BK-2026-006 - Status: pending
+Found booking: BK-2026-005 - Status: cancelled
+Found booking: BK-2026-042 - Status: finished
+Found booking: CK-2026-003 - Status: cancelled
+Found booking: BK-2026-004 - Status: cancelled
+Found booking: BK-2026-003 - Status: cancelled
+Found booking: BK-2026-002 - Status: finished
+Found booking: CK-2026-002 - Status: cancelled
+Found booking: CK-2026-001 - Status: cancelled
+Found booking: BK-2026-001 - Status: cancelled
+Found booking: BK-2025-004 - Status: cancelled
+Found booking: BK-2025-001 - Status: cancelled
+Found booking: BK-2025-002 - Status: cancelled
+Found booking: BK-2025-005 - Status: cancelled
+Found booking: BK-2025-003 - Status: finished
+
+=== CHECKING FOR WAITING_PAYMENT BOOKINGS ===
+Found waiting_payment booking: BK-2026-024 for user 4
+Found waiting_payment booking: CK-2026-010 for user 4
+Found waiting_payment booking: BK-2026-031 for user 4
+Found waiting_payment booking: BK-2026-032 for user 4
+Found waiting_payment booking: BK-2026-033 for user 4
+Found waiting_payment booking: BK-2026-034 for user 4
+Found waiting_payment booking: CK-2026-012 for user 4
+
+=== ALL BOOKINGS STATUSES FOUND ===
+Booking: CK-2026-012 - Status: waiting_payment
+Booking: BK-2026-036 - Status: pending
+Booking: CK-2026-011 - Status: pending
+Booking: BK-2026-035 - Status: pending
+Booking: BK-2026-034 - Status: waiting_payment
+Booking: BK-2026-033 - Status: waiting_payment
+Booking: BK-2026-032 - Status: waiting_payment
+Booking: BK-2026-031 - Status: waiting_payment
+Booking: BK-2026-030 - Status: finished
+Booking: BK-2026-029 - Status: finished
+Booking: CK-2026-010 - Status: waiting_payment
+Booking: CK-2026-009 - Status: finished
+Booking: BK-2026-028 - Status: cancelled
+Booking: BK-2026-027 - Status: pending
+Booking: BK-2026-026 - Status: finished
+Booking: BK-2026-025 - Status: cancelled
+Booking: CK-2026-008 - Status: cancelled
+Booking: BK-2026-024 - Status: waiting_payment
+Booking: CK-2026-007 - Status: finished
+Booking: BK-2026-023 - Status: finished
+Booking: BK-2026-022 - Status: finished
+Booking: BK-2026-021 - Status: finished
+Booking: BK-2026-020 - Status: cancelled
+Booking: BK-2026-019 - Status: cancelled
+Booking: BK-2026-018 - Status: pending
+Booking: CK-2026-006 - Status: cancelled
+Booking: CK-2026-005 - Status: finished
+Booking: BK-2026-017 - Status: finished
+Booking: BK-2026-016 - Status: finished
+Booking: BK-2026-015 - Status: pending
+Booking: BK-2026-014 - Status: pending
+Booking: BK-2026-013 - Status: cancelled
+Booking: BK-2026-012 - Status: pending
+Booking: BK-2026-011 - Status: pending
+Booking: CK-2026-004 - Status: pending
+Booking: BK-2026-010 - Status: active
+Booking: BK-2026-009 - Status: finished
+Booking: BK-2026-008 - Status: cancelled
+Booking: BK-2026-006 - Status: pending
+Booking: BK-2026-005 - Status: cancelled
+Booking: BK-2026-042 - Status: finished
+Booking: CK-2026-003 - Status: cancelled
+Booking: BK-2026-004 - Status: cancelled
+Booking: BK-2026-003 - Status: cancelled
+Booking: BK-2026-002 - Status: finished
+Booking: CK-2026-002 - Status: cancelled
+Booking: CK-2026-001 - Status: cancelled
+Booking: BK-2026-001 - Status: cancelled
+Booking: BK-2025-004 - Status: cancelled
+Booking: BK-2025-001 - Status: cancelled
+Booking: BK-2025-002 - Status: cancelled
+Booking: BK-2025-005 - Status: cancelled
+Booking: BK-2025-003 - Status: finished
+Total bookings: 53
+
+=== getUserBookingsFromDB called ===
+Current User ID: 4
+Current User Name: Pedro Hiker
+Found booking: CK-2026-012 - Status: waiting_payment
+Found booking: BK-2026-036 - Status: pending
+Found booking: CK-2026-011 - Status: pending
+Found booking: BK-2026-035 - Status: pending
+Found booking: BK-2026-034 - Status: waiting_payment
+Found booking: BK-2026-033 - Status: waiting_payment
+Found booking: BK-2026-032 - Status: waiting_payment
+Found booking: BK-2026-031 - Status: waiting_payment
+Found booking: BK-2026-030 - Status: finished
+Found booking: BK-2026-029 - Status: finished
+Found booking: CK-2026-010 - Status: waiting_payment
+Found booking: CK-2026-009 - Status: finished
+Found booking: BK-2026-028 - Status: cancelled
+Found booking: BK-2026-027 - Status: pending
+Found booking: BK-2026-026 - Status: finished
+Found booking: BK-2026-025 - Status: cancelled
+Found booking: CK-2026-008 - Status: cancelled
+Found booking: BK-2026-024 - Status: waiting_payment
+Found booking: CK-2026-007 - Status: finished
+Found booking: BK-2026-023 - Status: finished
+Found booking: BK-2026-022 - Status: finished
+Found booking: BK-2026-021 - Status: finished
+Found booking: BK-2026-020 - Status: cancelled
+Found booking: BK-2026-019 - Status: cancelled
+Found booking: BK-2026-018 - Status: pending
+Found booking: CK-2026-006 - Status: cancelled
+Found booking: CK-2026-005 - Status: finished
+Found booking: BK-2026-017 - Status: finished
+Found booking: BK-2026-016 - Status: finished
+Found booking: BK-2026-015 - Status: pending
+Found booking: BK-2026-014 - Status: pending
+Found booking: BK-2026-013 - Status: cancelled
+Found booking: BK-2026-012 - Status: pending
+Found booking: BK-2026-011 - Status: pending
+Found booking: CK-2026-004 - Status: pending
+Found booking: BK-2026-010 - Status: active
+Found booking: BK-2026-009 - Status: finished
+Found booking: BK-2026-008 - Status: cancelled
+Found booking: BK-2026-006 - Status: pending
+Found booking: BK-2026-005 - Status: cancelled
+Found booking: BK-2026-042 - Status: finished
+Found booking: CK-2026-003 - Status: cancelled
+Found booking: BK-2026-004 - Status: cancelled
+Found booking: BK-2026-003 - Status: cancelled
+Found booking: BK-2026-002 - Status: finished
+Found booking: CK-2026-002 - Status: cancelled
+Found booking: CK-2026-001 - Status: cancelled
+Found booking: BK-2026-001 - Status: cancelled
+Found booking: BK-2025-004 - Status: cancelled
+Found booking: BK-2025-001 - Status: cancelled
+Found booking: BK-2025-002 - Status: cancelled
+Found booking: BK-2025-005 - Status: cancelled
+Found booking: BK-2025-003 - Status: finished
+
+=== CHECKING FOR WAITING_PAYMENT BOOKINGS ===
+Found waiting_payment booking: BK-2026-024 for user 4
+Found waiting_payment booking: CK-2026-010 for user 4
+Found waiting_payment booking: BK-2026-031 for user 4
+Found waiting_payment booking: BK-2026-032 for user 4
+Found waiting_payment booking: BK-2026-033 for user 4
+Found waiting_payment booking: BK-2026-034 for user 4
+Found waiting_payment booking: CK-2026-012 for user 4
+
+=== ALL BOOKINGS STATUSES FOUND ===
+Booking: CK-2026-012 - Status: waiting_payment
+Booking: BK-2026-036 - Status: pending
+Booking: CK-2026-011 - Status: pending
+Booking: BK-2026-035 - Status: pending
+Booking: BK-2026-034 - Status: waiting_payment
+Booking: BK-2026-033 - Status: waiting_payment
+Booking: BK-2026-032 - Status: waiting_payment
+Booking: BK-2026-031 - Status: waiting_payment
+Booking: BK-2026-030 - Status: finished
+Booking: BK-2026-029 - Status: finished
+Booking: CK-2026-010 - Status: waiting_payment
+Booking: CK-2026-009 - Status: finished
+Booking: BK-2026-028 - Status: cancelled
+Booking: BK-2026-027 - Status: pending
+Booking: BK-2026-026 - Status: finished
+Booking: BK-2026-025 - Status: cancelled
+Booking: CK-2026-008 - Status: cancelled
+Booking: BK-2026-024 - Status: waiting_payment
+Booking: CK-2026-007 - Status: finished
+Booking: BK-2026-023 - Status: finished
+Booking: BK-2026-022 - Status: finished
+Booking: BK-2026-021 - Status: finished
+Booking: BK-2026-020 - Status: cancelled
+Booking: BK-2026-019 - Status: cancelled
+Booking: BK-2026-018 - Status: pending
+Booking: CK-2026-006 - Status: cancelled
+Booking: CK-2026-005 - Status: finished
+Booking: BK-2026-017 - Status: finished
+Booking: BK-2026-016 - Status: finished
+Booking: BK-2026-015 - Status: pending
+Booking: BK-2026-014 - Status: pending
+Booking: BK-2026-013 - Status: cancelled
+Booking: BK-2026-012 - Status: pending
+Booking: BK-2026-011 - Status: pending
+Booking: CK-2026-004 - Status: pending
+Booking: BK-2026-010 - Status: active
+Booking: BK-2026-009 - Status: finished
+Booking: BK-2026-008 - Status: cancelled
+Booking: BK-2026-006 - Status: pending
+Booking: BK-2026-005 - Status: cancelled
+Booking: BK-2026-042 - Status: finished
+Booking: CK-2026-003 - Status: cancelled
+Booking: BK-2026-004 - Status: cancelled
+Booking: BK-2026-003 - Status: cancelled
+Booking: BK-2026-002 - Status: finished
+Booking: CK-2026-002 - Status: cancelled
+Booking: CK-2026-001 - Status: cancelled
+Booking: BK-2026-001 - Status: cancelled
+Booking: BK-2025-004 - Status: cancelled
+Booking: BK-2025-001 - Status: cancelled
+Booking: BK-2025-002 - Status: cancelled
+Booking: BK-2025-005 - Status: cancelled
+Booking: BK-2025-003 - Status: finished
+Total bookings: 53
+
+=== getUserBookingsFromDB called ===
+Current User ID: 4
+Current User Name: Pedro Hiker
+Found booking: CK-2026-012 - Status: waiting_payment
+Found booking: BK-2026-036 - Status: pending
+Found booking: CK-2026-011 - Status: pending
+Found booking: BK-2026-035 - Status: pending
+Found booking: BK-2026-034 - Status: waiting_payment
+Found booking: BK-2026-033 - Status: waiting_payment
+Found booking: BK-2026-032 - Status: waiting_payment
+Found booking: BK-2026-031 - Status: waiting_payment
+Found booking: BK-2026-030 - Status: finished
+Found booking: BK-2026-029 - Status: finished
+Found booking: CK-2026-010 - Status: waiting_payment
+Found booking: CK-2026-009 - Status: finished
+Found booking: BK-2026-028 - Status: cancelled
+Found booking: BK-2026-027 - Status: pending
+Found booking: BK-2026-026 - Status: finished
+Found booking: BK-2026-025 - Status: cancelled
+Found booking: CK-2026-008 - Status: cancelled
+Found booking: BK-2026-024 - Status: waiting_payment
+Found booking: CK-2026-007 - Status: finished
+Found booking: BK-2026-023 - Status: finished
+Found booking: BK-2026-022 - Status: finished
+Found booking: BK-2026-021 - Status: finished
+Found booking: BK-2026-020 - Status: cancelled
+Found booking: BK-2026-019 - Status: cancelled
+Found booking: BK-2026-018 - Status: pending
+Found booking: CK-2026-006 - Status: cancelled
+Found booking: CK-2026-005 - Status: finished
+Found booking: BK-2026-017 - Status: finished
+Found booking: BK-2026-016 - Status: finished
+Found booking: BK-2026-015 - Status: pending
+Found booking: BK-2026-014 - Status: pending
+Found booking: BK-2026-013 - Status: cancelled
+Found booking: BK-2026-012 - Status: pending
+Found booking: BK-2026-011 - Status: pending
+Found booking: CK-2026-004 - Status: pending
+Found booking: BK-2026-010 - Status: active
+Found booking: BK-2026-009 - Status: finished
+Found booking: BK-2026-008 - Status: cancelled
+Found booking: BK-2026-006 - Status: pending
+Found booking: BK-2026-005 - Status: cancelled
+Found booking: BK-2026-042 - Status: finished
+Found booking: CK-2026-003 - Status: cancelled
+Found booking: BK-2026-004 - Status: cancelled
+Found booking: BK-2026-003 - Status: cancelled
+Found booking: BK-2026-002 - Status: finished
+Found booking: CK-2026-002 - Status: cancelled
+Found booking: CK-2026-001 - Status: cancelled
+Found booking: BK-2026-001 - Status: cancelled
+Found booking: BK-2025-004 - Status: cancelled
+Found booking: BK-2025-001 - Status: cancelled
+Found booking: BK-2025-002 - Status: cancelled
+Found booking: BK-2025-005 - Status: cancelled
+Found booking: BK-2025-003 - Status: finished
+
+=== CHECKING FOR WAITING_PAYMENT BOOKINGS ===
+Found waiting_payment booking: BK-2026-024 for user 4
+Found waiting_payment booking: CK-2026-010 for user 4
+Found waiting_payment booking: BK-2026-031 for user 4
+Found waiting_payment booking: BK-2026-032 for user 4
+Found waiting_payment booking: BK-2026-033 for user 4
+Found waiting_payment booking: BK-2026-034 for user 4
+Found waiting_payment booking: CK-2026-012 for user 4
+
+=== ALL BOOKINGS STATUSES FOUND ===
+Booking: CK-2026-012 - Status: waiting_payment
+Booking: BK-2026-036 - Status: pending
+Booking: CK-2026-011 - Status: pending
+Booking: BK-2026-035 - Status: pending
+Booking: BK-2026-034 - Status: waiting_payment
+Booking: BK-2026-033 - Status: waiting_payment
+Booking: BK-2026-032 - Status: waiting_payment
+Booking: BK-2026-031 - Status: waiting_payment
+Booking: BK-2026-030 - Status: finished
+Booking: BK-2026-029 - Status: finished
+Booking: CK-2026-010 - Status: waiting_payment
+Booking: CK-2026-009 - Status: finished
+Booking: BK-2026-028 - Status: cancelled
+Booking: BK-2026-027 - Status: pending
+Booking: BK-2026-026 - Status: finished
+Booking: BK-2026-025 - Status: cancelled
+Booking: CK-2026-008 - Status: cancelled
+Booking: BK-2026-024 - Status: waiting_payment
+Booking: CK-2026-007 - Status: finished
+Booking: BK-2026-023 - Status: finished
+Booking: BK-2026-022 - Status: finished
+Booking: BK-2026-021 - Status: finished
+Booking: BK-2026-020 - Status: cancelled
+Booking: BK-2026-019 - Status: cancelled
+Booking: BK-2026-018 - Status: pending
+Booking: CK-2026-006 - Status: cancelled
+Booking: CK-2026-005 - Status: finished
+Booking: BK-2026-017 - Status: finished
+Booking: BK-2026-016 - Status: finished
+Booking: BK-2026-015 - Status: pending
+Booking: BK-2026-014 - Status: pending
+Booking: BK-2026-013 - Status: cancelled
+Booking: BK-2026-012 - Status: pending
+Booking: BK-2026-011 - Status: pending
+Booking: CK-2026-004 - Status: pending
+Booking: BK-2026-010 - Status: active
+Booking: BK-2026-009 - Status: finished
+Booking: BK-2026-008 - Status: cancelled
+Booking: BK-2026-006 - Status: pending
+Booking: BK-2026-005 - Status: cancelled
+Booking: BK-2026-042 - Status: finished
+Booking: CK-2026-003 - Status: cancelled
+Booking: BK-2026-004 - Status: cancelled
+Booking: BK-2026-003 - Status: cancelled
+Booking: BK-2026-002 - Status: finished
+Booking: CK-2026-002 - Status: cancelled
+Booking: CK-2026-001 - Status: cancelled
+Booking: BK-2026-001 - Status: cancelled
+Booking: BK-2025-004 - Status: cancelled
+Booking: BK-2025-001 - Status: cancelled
+Booking: BK-2025-002 - Status: cancelled
+Booking: BK-2025-005 - Status: cancelled
+Booking: BK-2025-003 - Status: finished
+Total bookings: 53
+
+=== getUserBookingsFromDB called ===
+Current User ID: 4
+Current User Name: Pedro Hiker
+Found booking: CK-2026-012 - Status: waiting_payment
+Found booking: BK-2026-036 - Status: pending
+Found booking: CK-2026-011 - Status: pending
+Found booking: BK-2026-035 - Status: pending
+Found booking: BK-2026-034 - Status: waiting_payment
+Found booking: BK-2026-033 - Status: waiting_payment
+Found booking: BK-2026-032 - Status: waiting_payment
+Found booking: BK-2026-031 - Status: waiting_payment
+Found booking: BK-2026-030 - Status: finished
+Found booking: BK-2026-029 - Status: finished
+Found booking: CK-2026-010 - Status: waiting_payment
+Found booking: CK-2026-009 - Status: finished
+Found booking: BK-2026-028 - Status: cancelled
+Found booking: BK-2026-027 - Status: pending
+Found booking: BK-2026-026 - Status: finished
+Found booking: BK-2026-025 - Status: cancelled
+Found booking: CK-2026-008 - Status: cancelled
+Found booking: BK-2026-024 - Status: waiting_payment
+Found booking: CK-2026-007 - Status: finished
+Found booking: BK-2026-023 - Status: finished
+Found booking: BK-2026-022 - Status: finished
+Found booking: BK-2026-021 - Status: finished
+Found booking: BK-2026-020 - Status: cancelled
+Found booking: BK-2026-019 - Status: cancelled
+Found booking: BK-2026-018 - Status: pending
+Found booking: CK-2026-006 - Status: cancelled
+Found booking: CK-2026-005 - Status: finished
+Found booking: BK-2026-017 - Status: finished
+Found booking: BK-2026-016 - Status: finished
+Found booking: BK-2026-015 - Status: pending
+Found booking: BK-2026-014 - Status: pending
+Found booking: BK-2026-013 - Status: cancelled
+Found booking: BK-2026-012 - Status: pending
+Found booking: BK-2026-011 - Status: pending
+Found booking: CK-2026-004 - Status: pending
+Found booking: BK-2026-010 - Status: active
+Found booking: BK-2026-009 - Status: finished
+Found booking: BK-2026-008 - Status: cancelled
+Found booking: BK-2026-006 - Status: pending
+Found booking: BK-2026-005 - Status: cancelled
+Found booking: BK-2026-042 - Status: finished
+Found booking: CK-2026-003 - Status: cancelled
+Found booking: BK-2026-004 - Status: cancelled
+Found booking: BK-2026-003 - Status: cancelled
+Found booking: BK-2026-002 - Status: finished
+Found booking: CK-2026-002 - Status: cancelled
+Found booking: CK-2026-001 - Status: cancelled
+Found booking: BK-2026-001 - Status: cancelled
+Found booking: BK-2025-004 - Status: cancelled
+Found booking: BK-2025-001 - Status: cancelled
+Found booking: BK-2025-002 - Status: cancelled
+Found booking: BK-2025-005 - Status: cancelled
+Found booking: BK-2025-003 - Status: finished
+
+=== CHECKING FOR WAITING_PAYMENT BOOKINGS ===
+Found waiting_payment booking: BK-2026-024 for user 4
+Found waiting_payment booking: CK-2026-010 for user 4
+Found waiting_payment booking: BK-2026-031 for user 4
+Found waiting_payment booking: BK-2026-032 for user 4
+Found waiting_payment booking: BK-2026-033 for user 4
+Found waiting_payment booking: BK-2026-034 for user 4
+Found waiting_payment booking: CK-2026-012 for user 4
+
+=== ALL BOOKINGS STATUSES FOUND ===
+Booking: CK-2026-012 - Status: waiting_payment
+Booking: BK-2026-036 - Status: pending
+Booking: CK-2026-011 - Status: pending
+Booking: BK-2026-035 - Status: pending
+Booking: BK-2026-034 - Status: waiting_payment
+Booking: BK-2026-033 - Status: waiting_payment
+Booking: BK-2026-032 - Status: waiting_payment
+Booking: BK-2026-031 - Status: waiting_payment
+Booking: BK-2026-030 - Status: finished
+Booking: BK-2026-029 - Status: finished
+Booking: CK-2026-010 - Status: waiting_payment
+Booking: CK-2026-009 - Status: finished
+Booking: BK-2026-028 - Status: cancelled
+Booking: BK-2026-027 - Status: pending
+Booking: BK-2026-026 - Status: finished
+Booking: BK-2026-025 - Status: cancelled
+Booking: CK-2026-008 - Status: cancelled
+Booking: BK-2026-024 - Status: waiting_payment
+Booking: CK-2026-007 - Status: finished
+Booking: BK-2026-023 - Status: finished
+Booking: BK-2026-022 - Status: finished
+Booking: BK-2026-021 - Status: finished
+Booking: BK-2026-020 - Status: cancelled
+Booking: BK-2026-019 - Status: cancelled
+Booking: BK-2026-018 - Status: pending
+Booking: CK-2026-006 - Status: cancelled
+Booking: CK-2026-005 - Status: finished
+Booking: BK-2026-017 - Status: finished
+Booking: BK-2026-016 - Status: finished
+Booking: BK-2026-015 - Status: pending
+Booking: BK-2026-014 - Status: pending
+Booking: BK-2026-013 - Status: cancelled
+Booking: BK-2026-012 - Status: pending
+Booking: BK-2026-011 - Status: pending
+Booking: CK-2026-004 - Status: pending
+Booking: BK-2026-010 - Status: active
+Booking: BK-2026-009 - Status: finished
+Booking: BK-2026-008 - Status: cancelled
+Booking: BK-2026-006 - Status: pending
+Booking: BK-2026-005 - Status: cancelled
+Booking: BK-2026-042 - Status: finished
+Booking: CK-2026-003 - Status: cancelled
+Booking: BK-2026-004 - Status: cancelled
+Booking: BK-2026-003 - Status: cancelled
+Booking: BK-2026-002 - Status: finished
+Booking: CK-2026-002 - Status: cancelled
+Booking: CK-2026-001 - Status: cancelled
+Booking: BK-2026-001 - Status: cancelled
+Booking: BK-2025-004 - Status: cancelled
+Booking: BK-2025-001 - Status: cancelled
+Booking: BK-2025-002 - Status: cancelled
+Booking: BK-2025-005 - Status: cancelled
+Booking: BK-2025-003 - Status: finished
+Total bookings: 53
+
+=== getUserBookingsFromDB called ===
+Current User ID: 4
+Current User Name: Pedro Hiker
+Found booking: CK-2026-012 - Status: waiting_payment
+Found booking: BK-2026-036 - Status: pending
+Found booking: CK-2026-011 - Status: pending
+Found booking: BK-2026-035 - Status: pending
+Found booking: BK-2026-034 - Status: waiting_payment
+Found booking: BK-2026-033 - Status: waiting_payment
+Found booking: BK-2026-032 - Status: waiting_payment
+Found booking: BK-2026-031 - Status: waiting_payment
+Found booking: BK-2026-030 - Status: finished
+Found booking: BK-2026-029 - Status: finished
+Found booking: CK-2026-010 - Status: waiting_payment
+Found booking: CK-2026-009 - Status: finished
+Found booking: BK-2026-028 - Status: cancelled
+Found booking: BK-2026-027 - Status: pending
+Found booking: BK-2026-026 - Status: finished
+Found booking: BK-2026-025 - Status: cancelled
+Found booking: CK-2026-008 - Status: cancelled
+Found booking: BK-2026-024 - Status: waiting_payment
+Found booking: CK-2026-007 - Status: finished
+Found booking: BK-2026-023 - Status: finished
+Found booking: BK-2026-022 - Status: finished
+Found booking: BK-2026-021 - Status: finished
+Found booking: BK-2026-020 - Status: cancelled
+Found booking: BK-2026-019 - Status: cancelled
+Found booking: BK-2026-018 - Status: pending
+Found booking: CK-2026-006 - Status: cancelled
+Found booking: CK-2026-005 - Status: finished
+Found booking: BK-2026-017 - Status: finished
+Found booking: BK-2026-016 - Status: finished
+Found booking: BK-2026-015 - Status: pending
+Found booking: BK-2026-014 - Status: pending
+Found booking: BK-2026-013 - Status: cancelled
+Found booking: BK-2026-012 - Status: pending
+Found booking: BK-2026-011 - Status: pending
+Found booking: CK-2026-004 - Status: pending
+Found booking: BK-2026-010 - Status: active
+Found booking: BK-2026-009 - Status: finished
+Found booking: BK-2026-008 - Status: cancelled
+Found booking: BK-2026-006 - Status: pending
+Found booking: BK-2026-005 - Status: cancelled
+Found booking: BK-2026-042 - Status: finished
+Found booking: CK-2026-003 - Status: cancelled
+Found booking: BK-2026-004 - Status: cancelled
+Found booking: BK-2026-003 - Status: cancelled
+Found booking: BK-2026-002 - Status: finished
+Found booking: CK-2026-002 - Status: cancelled
+Found booking: CK-2026-001 - Status: cancelled
+Found booking: BK-2026-001 - Status: cancelled
+Found booking: BK-2025-004 - Status: cancelled
+Found booking: BK-2025-001 - Status: cancelled
+Found booking: BK-2025-002 - Status: cancelled
+Found booking: BK-2025-005 - Status: cancelled
+Found booking: BK-2025-003 - Status: finished
+
+=== CHECKING FOR WAITING_PAYMENT BOOKINGS ===
+Found waiting_payment booking: BK-2026-024 for user 4
+Found waiting_payment booking: CK-2026-010 for user 4
+Found waiting_payment booking: BK-2026-031 for user 4
+Found waiting_payment booking: BK-2026-032 for user 4
+Found waiting_payment booking: BK-2026-033 for user 4
+Found waiting_payment booking: BK-2026-034 for user 4
+Found waiting_payment booking: CK-2026-012 for user 4
+
+=== ALL BOOKINGS STATUSES FOUND ===
+Booking: CK-2026-012 - Status: waiting_payment
+Booking: BK-2026-036 - Status: pending
+Booking: CK-2026-011 - Status: pending
+Booking: BK-2026-035 - Status: pending
+Booking: BK-2026-034 - Status: waiting_payment
+Booking: BK-2026-033 - Status: waiting_payment
+Booking: BK-2026-032 - Status: waiting_payment
+Booking: BK-2026-031 - Status: waiting_payment
+Booking: BK-2026-030 - Status: finished
+Booking: BK-2026-029 - Status: finished
+Booking: CK-2026-010 - Status: waiting_payment
+Booking: CK-2026-009 - Status: finished
+Booking: BK-2026-028 - Status: cancelled
+Booking: BK-2026-027 - Status: pending
+Booking: BK-2026-026 - Status: finished
+Booking: BK-2026-025 - Status: cancelled
+Booking: CK-2026-008 - Status: cancelled
+Booking: BK-2026-024 - Status: waiting_payment
+Booking: CK-2026-007 - Status: finished
+Booking: BK-2026-023 - Status: finished
+Booking: BK-2026-022 - Status: finished
+Booking: BK-2026-021 - Status: finished
+Booking: BK-2026-020 - Status: cancelled
+Booking: BK-2026-019 - Status: cancelled
+Booking: BK-2026-018 - Status: pending
+Booking: CK-2026-006 - Status: cancelled
+Booking: CK-2026-005 - Status: finished
+Booking: BK-2026-017 - Status: finished
+Booking: BK-2026-016 - Status: finished
+Booking: BK-2026-015 - Status: pending
+Booking: BK-2026-014 - Status: pending
+Booking: BK-2026-013 - Status: cancelled
+Booking: BK-2026-012 - Status: pending
+Booking: BK-2026-011 - Status: pending
+Booking: CK-2026-004 - Status: pending
+Booking: BK-2026-010 - Status: active
+Booking: BK-2026-009 - Status: finished
+Booking: BK-2026-008 - Status: cancelled
+Booking: BK-2026-006 - Status: pending
+Booking: BK-2026-005 - Status: cancelled
+Booking: BK-2026-042 - Status: finished
+Booking: CK-2026-003 - Status: cancelled
+Booking: BK-2026-004 - Status: cancelled
+Booking: BK-2026-003 - Status: cancelled
+Booking: BK-2026-002 - Status: finished
+Booking: CK-2026-002 - Status: cancelled
+Booking: CK-2026-001 - Status: cancelled
+Booking: BK-2026-001 - Status: cancelled
+Booking: BK-2025-004 - Status: cancelled
+Booking: BK-2025-001 - Status: cancelled
+Booking: BK-2025-002 - Status: cancelled
+Booking: BK-2025-005 - Status: cancelled
+Booking: BK-2025-003 - Status: finished
+Total bookings: 53
+
+=== getUserBookingsFromDB called ===
+Current User ID: 4
+Current User Name: Pedro Hiker
+Found booking: CK-2026-012 - Status: waiting_payment
+Found booking: BK-2026-036 - Status: pending
+Found booking: CK-2026-011 - Status: pending
+Found booking: BK-2026-035 - Status: pending
+Found booking: BK-2026-034 - Status: waiting_payment
+Found booking: BK-2026-033 - Status: waiting_payment
+Found booking: BK-2026-032 - Status: waiting_payment
+Found booking: BK-2026-031 - Status: waiting_payment
+Found booking: BK-2026-030 - Status: finished
+Found booking: BK-2026-029 - Status: finished
+Found booking: CK-2026-010 - Status: waiting_payment
+Found booking: CK-2026-009 - Status: finished
+Found booking: BK-2026-028 - Status: cancelled
+Found booking: BK-2026-027 - Status: pending
+Found booking: BK-2026-026 - Status: finished
+Found booking: BK-2026-025 - Status: cancelled
+Found booking: CK-2026-008 - Status: cancelled
+Found booking: BK-2026-024 - Status: waiting_payment
+Found booking: CK-2026-007 - Status: finished
+Found booking: BK-2026-023 - Status: finished
+Found booking: BK-2026-022 - Status: finished
+Found booking: BK-2026-021 - Status: finished
+Found booking: BK-2026-020 - Status: cancelled
+Found booking: BK-2026-019 - Status: cancelled
+Found booking: BK-2026-018 - Status: pending
+Found booking: CK-2026-006 - Status: cancelled
+Found booking: CK-2026-005 - Status: finished
+Found booking: BK-2026-017 - Status: finished
+Found booking: BK-2026-016 - Status: finished
+Found booking: BK-2026-015 - Status: pending
+Found booking: BK-2026-014 - Status: pending
+Found booking: BK-2026-013 - Status: cancelled
+Found booking: BK-2026-012 - Status: pending
+Found booking: BK-2026-011 - Status: pending
+Found booking: CK-2026-004 - Status: pending
+Found booking: BK-2026-010 - Status: active
+Found booking: BK-2026-009 - Status: finished
+Found booking: BK-2026-008 - Status: cancelled
+Found booking: BK-2026-006 - Status: pending
+Found booking: BK-2026-005 - Status: cancelled
+Found booking: BK-2026-042 - Status: finished
+Found booking: CK-2026-003 - Status: cancelled
+Found booking: BK-2026-004 - Status: cancelled
+Found booking: BK-2026-003 - Status: cancelled
+Found booking: BK-2026-002 - Status: finished
+Found booking: CK-2026-002 - Status: cancelled
+Found booking: CK-2026-001 - Status: cancelled
+Found booking: BK-2026-001 - Status: cancelled
+Found booking: BK-2025-004 - Status: cancelled
+Found booking: BK-2025-001 - Status: cancelled
+Found booking: BK-2025-002 - Status: cancelled
+Found booking: BK-2025-005 - Status: cancelled
+Found booking: BK-2025-003 - Status: finished
+
+=== CHECKING FOR WAITING_PAYMENT BOOKINGS ===
+Found waiting_payment booking: BK-2026-024 for user 4
+Found waiting_payment booking: CK-2026-010 for user 4
+Found waiting_payment booking: BK-2026-031 for user 4
+Found waiting_payment booking: BK-2026-032 for user 4
+Found waiting_payment booking: BK-2026-033 for user 4
+Found waiting_payment booking: BK-2026-034 for user 4
+Found waiting_payment booking: CK-2026-012 for user 4
+
+=== ALL BOOKINGS STATUSES FOUND ===
+Booking: CK-2026-012 - Status: waiting_payment
+Booking: BK-2026-036 - Status: pending
+Booking: CK-2026-011 - Status: pending
+Booking: BK-2026-035 - Status: pending
+Booking: BK-2026-034 - Status: waiting_payment
+Booking: BK-2026-033 - Status: waiting_payment
+Booking: BK-2026-032 - Status: waiting_payment
+Booking: BK-2026-031 - Status: waiting_payment
+Booking: BK-2026-030 - Status: finished
+Booking: BK-2026-029 - Status: finished
+Booking: CK-2026-010 - Status: waiting_payment
+Booking: CK-2026-009 - Status: finished
+Booking: BK-2026-028 - Status: cancelled
+Booking: BK-2026-027 - Status: pending
+Booking: BK-2026-026 - Status: finished
+Booking: BK-2026-025 - Status: cancelled
+Booking: CK-2026-008 - Status: cancelled
+Booking: BK-2026-024 - Status: waiting_payment
+Booking: CK-2026-007 - Status: finished
+Booking: BK-2026-023 - Status: finished
+Booking: BK-2026-022 - Status: finished
+Booking: BK-2026-021 - Status: finished
+Booking: BK-2026-020 - Status: cancelled
+Booking: BK-2026-019 - Status: cancelled
+Booking: BK-2026-018 - Status: pending
+Booking: CK-2026-006 - Status: cancelled
+Booking: CK-2026-005 - Status: finished
+Booking: BK-2026-017 - Status: finished
+Booking: BK-2026-016 - Status: finished
+Booking: BK-2026-015 - Status: pending
+Booking: BK-2026-014 - Status: pending
+Booking: BK-2026-013 - Status: cancelled
+Booking: BK-2026-012 - Status: pending
+Booking: BK-2026-011 - Status: pending
+Booking: CK-2026-004 - Status: pending
+Booking: BK-2026-010 - Status: active
+Booking: BK-2026-009 - Status: finished
+Booking: BK-2026-008 - Status: cancelled
+Booking: BK-2026-006 - Status: pending
+Booking: BK-2026-005 - Status: cancelled
+Booking: BK-2026-042 - Status: finished
+Booking: CK-2026-003 - Status: cancelled
+Booking: BK-2026-004 - Status: cancelled
+Booking: BK-2026-003 - Status: cancelled
+Booking: BK-2026-002 - Status: finished
+Booking: CK-2026-002 - Status: cancelled
+Booking: CK-2026-001 - Status: cancelled
+Booking: BK-2026-001 - Status: cancelled
+Booking: BK-2025-004 - Status: cancelled
+Booking: BK-2025-001 - Status: cancelled
+Booking: BK-2025-002 - Status: cancelled
+Booking: BK-2025-005 - Status: cancelled
+Booking: BK-2025-003 - Status: finished
+Total bookings: 53
+
+=== getUserBookingsFromDB called ===
+Current User ID: 4
+Current User Name: Pedro Hiker
+Found booking: CK-2026-012 - Status: waiting_payment
+Found booking: BK-2026-036 - Status: pending
+Found booking: CK-2026-011 - Status: pending
+Found booking: BK-2026-035 - Status: pending
+Found booking: BK-2026-034 - Status: waiting_payment
+Found booking: BK-2026-033 - Status: waiting_payment
+Found booking: BK-2026-032 - Status: waiting_payment
+Found booking: BK-2026-031 - Status: waiting_payment
+Found booking: BK-2026-030 - Status: finished
+Found booking: BK-2026-029 - Status: finished
+Found booking: CK-2026-010 - Status: waiting_payment
+Found booking: CK-2026-009 - Status: finished
+Found booking: BK-2026-028 - Status: cancelled
+Found booking: BK-2026-027 - Status: pending
+Found booking: BK-2026-026 - Status: finished
+Found booking: BK-2026-025 - Status: cancelled
+Found booking: CK-2026-008 - Status: cancelled
+Found booking: BK-2026-024 - Status: waiting_payment
+Found booking: CK-2026-007 - Status: finished
+Found booking: BK-2026-023 - Status: finished
+Found booking: BK-2026-022 - Status: finished
+Found booking: BK-2026-021 - Status: finished
+Found booking: BK-2026-020 - Status: cancelled
+Found booking: BK-2026-019 - Status: cancelled
+Found booking: BK-2026-018 - Status: pending
+Found booking: CK-2026-006 - Status: cancelled
+Found booking: CK-2026-005 - Status: finished
+Found booking: BK-2026-017 - Status: finished
+Found booking: BK-2026-016 - Status: finished
+Found booking: BK-2026-015 - Status: pending
+Found booking: BK-2026-014 - Status: pending
+Found booking: BK-2026-013 - Status: cancelled
+Found booking: BK-2026-012 - Status: pending
+Found booking: BK-2026-011 - Status: pending
+Found booking: CK-2026-004 - Status: pending
+Found booking: BK-2026-010 - Status: active
+Found booking: BK-2026-009 - Status: finished
+Found booking: BK-2026-008 - Status: cancelled
+Found booking: BK-2026-006 - Status: pending
+Found booking: BK-2026-005 - Status: cancelled
+Found booking: BK-2026-042 - Status: finished
+Found booking: CK-2026-003 - Status: cancelled
+Found booking: BK-2026-004 - Status: cancelled
+Found booking: BK-2026-003 - Status: cancelled
+Found booking: BK-2026-002 - Status: finished
+Found booking: CK-2026-002 - Status: cancelled
+Found booking: CK-2026-001 - Status: cancelled
+Found booking: BK-2026-001 - Status: cancelled
+Found booking: BK-2025-004 - Status: cancelled
+Found booking: BK-2025-001 - Status: cancelled
+Found booking: BK-2025-002 - Status: cancelled
+Found booking: BK-2025-005 - Status: cancelled
+Found booking: BK-2025-003 - Status: finished
+
+=== CHECKING FOR WAITING_PAYMENT BOOKINGS ===
+Found waiting_payment booking: BK-2026-024 for user 4
+Found waiting_payment booking: CK-2026-010 for user 4
+Found waiting_payment booking: BK-2026-031 for user 4
+Found waiting_payment booking: BK-2026-032 for user 4
+Found waiting_payment booking: BK-2026-033 for user 4
+Found waiting_payment booking: BK-2026-034 for user 4
+Found waiting_payment booking: CK-2026-012 for user 4
+
+=== ALL BOOKINGS STATUSES FOUND ===
+Booking: CK-2026-012 - Status: waiting_payment
+Booking: BK-2026-036 - Status: pending
+Booking: CK-2026-011 - Status: pending
+Booking: BK-2026-035 - Status: pending
+Booking: BK-2026-034 - Status: waiting_payment
+Booking: BK-2026-033 - Status: waiting_payment
+Booking: BK-2026-032 - Status: waiting_payment
+Booking: BK-2026-031 - Status: waiting_payment
+Booking: BK-2026-030 - Status: finished
+Booking: BK-2026-029 - Status: finished
+Booking: CK-2026-010 - Status: waiting_payment
+Booking: CK-2026-009 - Status: finished
+Booking: BK-2026-028 - Status: cancelled
+Booking: BK-2026-027 - Status: pending
+Booking: BK-2026-026 - Status: finished
+Booking: BK-2026-025 - Status: cancelled
+Booking: CK-2026-008 - Status: cancelled
+Booking: BK-2026-024 - Status: waiting_payment
+Booking: CK-2026-007 - Status: finished
+Booking: BK-2026-023 - Status: finished
+Booking: BK-2026-022 - Status: finished
+Booking: BK-2026-021 - Status: finished
+Booking: BK-2026-020 - Status: cancelled
+Booking: BK-2026-019 - Status: cancelled
+Booking: BK-2026-018 - Status: pending
+Booking: CK-2026-006 - Status: cancelled
+Booking: CK-2026-005 - Status: finished
+Booking: BK-2026-017 - Status: finished
+Booking: BK-2026-016 - Status: finished
+Booking: BK-2026-015 - Status: pending
+Booking: BK-2026-014 - Status: pending
+Booking: BK-2026-013 - Status: cancelled
+Booking: BK-2026-012 - Status: pending
+Booking: BK-2026-011 - Status: pending
+Booking: CK-2026-004 - Status: pending
+Booking: BK-2026-010 - Status: active
+Booking: BK-2026-009 - Status: finished
+Booking: BK-2026-008 - Status: cancelled
+Booking: BK-2026-006 - Status: pending
+Booking: BK-2026-005 - Status: cancelled
+Booking: BK-2026-042 - Status: finished
+Booking: CK-2026-003 - Status: cancelled
+Booking: BK-2026-004 - Status: cancelled
+Booking: BK-2026-003 - Status: cancelled
+Booking: BK-2026-002 - Status: finished
+Booking: CK-2026-002 - Status: cancelled
+Booking: CK-2026-001 - Status: cancelled
+Booking: BK-2026-001 - Status: cancelled
+Booking: BK-2025-004 - Status: cancelled
+Booking: BK-2025-001 - Status: cancelled
+Booking: BK-2025-002 - Status: cancelled
+Booking: BK-2025-005 - Status: cancelled
+Booking: BK-2025-003 - Status: finished
+Total bookings: 53
