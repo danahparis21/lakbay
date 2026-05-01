@@ -3152,3 +3152,12 @@
 2026-05-01 13:30:50 - === GET MESSAGES CALLED ===
 2026-05-01 13:30:50 - otherUserId param: 3
 2026-05-01 13:30:50 - hikerId: 4
+2026-05-01 13:31:56 - === GET MESSAGES CALLED ===
+2026-05-01 13:31:56 - otherUserId param: 3
+2026-05-01 13:31:56 - hikerId: 4
+2026-05-01 13:32:56 - === GET MESSAGES CALLED ===
+2026-05-01 13:32:56 - otherUserId param: 3
+2026-05-01 13:32:56 - hikerId: 4
+2026-05-01 13:33:56 - === GET MESSAGES CALLED ===
+2026-05-01 13:33:56 - otherUserId param: 3
+2026-05-01 13:33:56 - hikerId: 4

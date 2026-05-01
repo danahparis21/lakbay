@@ -640,32 +640,33 @@ async function openThread(id, type) {
     }
 }
 async function loadMessages(userId, silent = false) {
-    debugLog('loadMessages called with userId:', userId, 'silent:', silent);
+    console.log('loadMessages called with userId:', userId, 'silent:', silent);
     const area = document.getElementById('chatArea');
     if (!silent) area.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading messages…</div>';
     
     try {
         const url = `../api/hiker_messages.php?action=get_messages&user_id=${userId}`;
-        debugLog('Fetching URL:', url);
+        console.log('Fetching URL:', url);
         
         const res = await fetch(url);
-        debugLog('Response status:', res.status);
+        console.log('Response status:', res.status);
         
         const data = await res.json();
-        debugLog('Response data:', data);
+        console.log('Response data:', data);
         
         if (data.success) {
-            debugLog('Messages count:', data.messages?.length);
-            debugLog('First message sample:', data.messages?.[0]);
+            console.log('Messages count:', data.messages?.length);
+            if (data.messages && data.messages.length > 0) {
+                console.log('First message sample:', data.messages[0]);
+            }
             renderMessages(data.messages || []);
             await markAsRead(userId);
         } else {
-            debugLog('API Error:', data.message);
+            console.error('API Error:', data.message);
             area.innerHTML = `<div class="chat-empty">Error: ${data.message || 'Unknown error'}</div>`;
         }
     } catch (e) {
-        debugLog('Fetch error:', e);
-        console.error('Full error object:', e);
+        console.error('Fetch error:', e);
         if (!silent) area.innerHTML = '<div class="chat-empty">Error loading messages. Check console.</div>';
     }
 }
