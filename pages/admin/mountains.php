@@ -597,9 +597,188 @@ function getMountainPhoto($mountain, $imgBank) {
     .manager-option:hover { background: #F8F9FB; }
     .manager-option.selected { background: #e0e7ff; }
     
-    @media (max-width: 900px) { .heatmap-layout { flex-direction: column; } .reports-column { border-left: none; border-top: 1px solid #EFF2F6; max-height: 300px; } .mtn-grid { grid-template-columns: 1fr; } .form-row { grid-template-columns: 1fr; } }
-    @media (max-width: 900px) { .heatmap-layout { flex-direction: column; } .reports-column { border-left: none; border-top: 1px solid #EFF2F6; max-height: 300px; } .mtn-grid { grid-template-columns: 1fr; } }
-  </style>
+    /* Add this to your style section */
+#heatmapMap {
+    height: 100%;
+    width: 100%;
+    min-height: 400px;
+}
+.heatmap-container {
+    height: 100%;
+    width: 100%;
+    position: relative;
+    min-height: 500px;
+}
+
+.modal-box {
+    background: #fff;
+    border-radius: 28px;
+    width: 100%;
+    max-width: 1300px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Add this for mobile */
+@media (max-width: 768px) {
+    .modal-box {
+        max-width: 95%;
+        width: 95%;
+        margin: 10px auto;
+    }
+}
+
+    /* Responsive styles for mobile */
+@media (max-width: 768px) {
+    .mtn-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .mtn-name {
+        font-size: 1.3rem;
+    }
+    
+    .mtn-info {
+        padding: 16px;
+    }
+    
+    .mtn-actions {
+        flex-direction: column;
+    }
+    
+    .btn {
+        justify-content: center;
+        padding: 10px 16px;
+    }
+    
+    /* Heatmap modal mobile layout */
+    .heatmap-layout {
+        flex-direction: column;
+        min-height: auto;
+    }
+    
+    .map-column {
+        min-height: 400px;
+        flex: none;
+        height: 400px;
+    }
+    
+    .reports-column {
+        border-left: none;
+        border-top: 1px solid #EFF2F6;
+        max-height: 300px;
+        flex: none;
+    }
+    
+    .heatmap-container {
+        min-height: 400px;
+        height: 100%;
+    }
+    
+    #heatmapMap {
+        min-height: 400px;
+        height: 100%;
+    }
+    
+    .modal-box {
+        max-width: 95%;
+        width: 95%;
+        margin: 10px;
+    }
+    
+    .modal-header {
+        padding: 14px 16px;
+    }
+    
+    .modal-body {
+        padding: 16px;
+    }
+    
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .map-controls {
+        top: 5px;
+        right: 5px;
+    }
+    
+    .map-btn {
+        padding: 4px 8px;
+        font-size: 0.6rem;
+    }
+    
+    .map-legend {
+        bottom: 5px;
+        right: 5px;
+        padding: 4px 8px;
+        font-size: 0.5rem;
+    }
+    
+    .crowd-report-item {
+        padding: 10px 12px;
+    }
+    
+    .crowd-report-icon {
+        width: 28px;
+        height: 28px;
+    }
+    
+    .empty-state {
+        padding: 20px;
+    }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+    .map-column {
+        min-height: 350px;
+        height: 350px;
+    }
+    
+    .heatmap-container {
+        min-height: 350px;
+    }
+    
+    #heatmapMap {
+        min-height: 350px;
+    }
+    
+    .modal-title {
+        font-size: 1.1rem;
+    }
+    
+    .mtn-detail {
+        font-size: 11px;
+    }
+    
+    .manager-tag {
+        font-size: 9px;
+        padding: 3px 8px;
+    }
+}
+
+/* Landscape orientation fix */
+@media (max-height: 600px) and (orientation: landscape) {
+    .modal-box {
+        max-height: 95vh;
+    }
+    
+    .map-column {
+        min-height: 300px;
+        height: 300px;
+    }
+    
+    .reports-column {
+        max-height: 250px;
+    }
+}
+
+</style>
 </head>
 <body data-page="mountains">
 <div class="app">
@@ -1071,34 +1250,76 @@ async function loadHeatmapData(mountainId) {
 function initHeatmapMap(data) {
   const mapContainer = document.getElementById('heatmapMap');
   if (!mapContainer) return;
+  
+  // Make sure the container is visible
+  if (mapContainer.offsetWidth === 0 || mapContainer.offsetHeight === 0) {
+    console.warn('Map container not visible, waiting...');
+    setTimeout(() => initHeatmapMap(data), 100);
+    return;
+  }
+  
   if (heatmapMap) heatmapMap.remove();
   
   const centerLat = data.mountain?.lat || 14.0583;
   const centerLng = data.mountain?.lng || 120.8320;
-  heatmapMap = L.map('heatmapMap').setView([centerLat, centerLng], 13);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap, © CartoDB', subdomains: 'abcd', maxZoom: 19 }).addTo(heatmapMap);
   
-  // Draw Trail
-  if (data.trail && data.trail.length > 0) {
-    const trailCoords = data.trail.map(c => [c[1], c[0]]);
-    trailLayer = L.polyline(trailCoords, { color: '#100600', weight: 5, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }).addTo(heatmapMap);
-    heatmapMap.fitBounds(L.latLngBounds(trailCoords).pad(0.15));
-  }
-  
-  // Add Waypoints
-  if (data.waypoints && data.waypoints.length > 0) {
-    data.waypoints.forEach(wp => {
-      const iconHtml = `<div style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:white;border-radius:50%;border:2px solid #c9a84c;box-shadow:0 2px 4px rgba(0,0,0,0.2);"><i class="fas fa-${wp.type === 'summit' ? 'mountain' : 'map-pin'}" style="font-size:10px;color:#c9a84c;"></i></div>`;
-      const marker = L.marker([parseFloat(wp.latitude), parseFloat(wp.longitude)], { icon: L.divIcon({ html: iconHtml, iconSize: [24, 24], className: '' }) }).bindPopup(`<strong>${wp.name}</strong><br>${wp.type}${wp.elevation ? ` · ${wp.elevation}m` : ''}${wp.description ? `<br>${wp.description}` : ''}`).addTo(heatmapMap);
-      waypointMarkers.push(marker);
-    });
-  }
-  
-  // Add Heatmap Layer
-  if (data.points && data.points.length > 0) {
-    const heatData = data.points.map(p => [p.lat, p.lng, p.intensity || 0.5]);
-    heatLayer = L.heatLayer(heatData, { radius: 25, blur: 15, maxZoom: 17, minOpacity: 0.4, gradient: { 0.3: '#10B981', 0.5: '#84CC16', 0.6: '#F59E0B', 0.8: '#EF4444', 1.0: '#7F1D1D' } }).addTo(heatmapMap);
-  }
+  // Initialize map with a small delay to ensure container is ready
+  setTimeout(() => {
+    heatmapMap = L.map('heatmapMap').setView([centerLat, centerLng], 13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
+      attribution: '© OpenStreetMap, © CartoDB', 
+      subdomains: 'abcd', 
+      maxZoom: 19 
+    }).addTo(heatmapMap);
+    
+    // Draw Trail
+    if (data.trail && data.trail.length > 0) {
+      const trailCoords = data.trail.map(c => [c[1], c[0]]);
+      trailLayer = L.polyline(trailCoords, { 
+        color: '#100600', 
+        weight: 5, 
+        opacity: 0.85, 
+        lineCap: 'round', 
+        lineJoin: 'round' 
+      }).addTo(heatmapMap);
+      heatmapMap.fitBounds(L.latLngBounds(trailCoords).pad(0.15));
+    }
+    
+    // Add Waypoints
+    if (data.waypoints && data.waypoints.length > 0) {
+      data.waypoints.forEach(wp => {
+        const iconHtml = `<div style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:white;border-radius:50%;border:2px solid #c9a84c;box-shadow:0 2px 4px rgba(0,0,0,0.2);"><i class="fas fa-${wp.type === 'summit' ? 'mountain' : 'map-pin'}" style="font-size:10px;color:#c9a84c;"></i></div>`;
+        const marker = L.marker([parseFloat(wp.latitude), parseFloat(wp.longitude)], { 
+          icon: L.divIcon({ html: iconHtml, iconSize: [24, 24], className: '' }) 
+        }).bindPopup(`<strong>${wp.name}</strong><br>${wp.type}${wp.elevation ? ` · ${wp.elevation}m` : ''}${wp.description ? `<br>${wp.description}` : ''}`).addTo(heatmapMap);
+        waypointMarkers.push(marker);
+      });
+    }
+    
+    // Add Heatmap Layer - with validation
+    if (data.points && data.points.length > 0) {
+      // Validate and clean heatmap data
+      const heatData = data.points
+        .filter(p => p.lat && p.lng && !isNaN(p.lat) && !isNaN(p.lng))
+        .map(p => [p.lat, p.lng, Math.min(1.0, Math.max(0.1, p.intensity || 0.5))]);
+      
+      if (heatData.length > 0) {
+        heatLayer = L.heatLayer(heatData, { 
+          radius: 25, 
+          blur: 15, 
+          maxZoom: 17, 
+          minOpacity: 0.4,
+          gradient: { 0.3: '#10B981', 0.5: '#84CC16', 0.6: '#F59E0B', 0.8: '#EF4444', 1.0: '#7F1D1D' }
+        }).addTo(heatmapMap);
+      }
+    }
+    
+    // Force a resize after map is added
+    setTimeout(() => {
+      if (heatmapMap) heatmapMap.invalidateSize();
+    }, 100);
+    
+  }, 50);
 }
 
 function resetHeatmapView() {
