@@ -241,12 +241,10 @@ function denyBookingRequest($pdo, $hikerId) {
    GET MESSAGES
 ────────────────────────────────────────────── */
 function getMessages($pdo, $hikerId, $otherUserId) {
-    debug_log('=== GET MESSAGES CALLED ===');
-    debug_log('otherUserId param: ' . $otherUserId);
-    debug_log('hikerId: ' . $hikerId);
+  
     
     if (!$otherUserId) { 
-        debug_log('ERROR: No user ID provided');
+       
         echo json_encode(['success'=>false,'message'=>'User ID required']); 
         return; 
     }
@@ -358,19 +356,15 @@ function getMessages($pdo, $hikerId, $otherUserId) {
    SEND MESSAGE
 ────────────────────────────────────────────── */
 function sendMessage($pdo, $hikerId) {
-    // Debug: Log all POST data received
-    debug_log('=== SEND MESSAGE CALLED ===');
-    debug_log('POST data: ' . print_r($_POST, true));
-    debug_log('hikerId from session: ' . $hikerId);
+  
     
     $recipientId = $_POST['recipient_id'] ?? $_POST['guide_id'] ?? null;
     $body = $_POST['body'] ?? '';
     
-    debug_log('Parsed recipient_id: ' . $recipientId);
-    debug_log('Body length: ' . strlen($body));
+ 
     
     if (!$recipientId || empty($body)) { 
-        debug_log('ERROR: Missing recipient ID or body');
+      
         echo json_encode(['success'=>false,'message'=>'Missing required fields']); 
         return; 
     }
@@ -383,7 +377,7 @@ function sendMessage($pdo, $hikerId) {
     $recipient = $check->fetch();
     
     if (!$recipient) { 
-        debug_log('ERROR: User not found: ' . $recipientId);
+     
         echo json_encode(['success'=>false,'message'=>'User not found: ' . $recipientId]); 
         return; 
     }
@@ -403,9 +397,7 @@ function sendMessage($pdo, $hikerId) {
         ':now' => date('Y-m-d H:i:s')
     ]);
 
-    debug_log('Insert result: ' . ($ok ? 'SUCCESS' : 'FAILED'));
-    debug_log('=====================================');
-
+ 
     echo json_encode(['success'=>$ok,'message'=>$ok?'Message sent':'Failed to send message']);
 }
 /* ──────────────────────────────────────────────
