@@ -465,15 +465,137 @@ function getCrowdBadge($level) {
   .alert-bar-action { background: white; color: var(--critical); border: none; border-radius: 8px; padding: 8px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
 /* Enhanced Weather Cards */
 
-  /* Weather Cards */
-  .weather-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-  .weather-card { background: linear-gradient(135deg, var(--ink) 0%, #2a1a0a 100%); border-radius: 16px; padding: 16px; color: white; }
-  .weather-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .weather-mountain { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; }
-  .weather-temp { font-size: 28px; font-weight: 700; font-family: 'DM Mono', monospace; }
-  .weather-condition { font-size: 12px; opacity: 0.8; margin-top: 4px; }
-  .weather-detail { display: flex; gap: 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; }
-  .forecast-list { display: flex; gap: 12px; margin-top: 12px; overflow-x: auto; }
+ /* Minimal Weather Cards */
+.weather-minimal-card {
+    background: var(--white);
+    border-radius: var(--r);
+    overflow: hidden;
+    transition: all 0.2s;
+}
+
+.weather-minimal-card.border-critical { border-left: 3px solid #b91c1c; }
+.weather-minimal-card.border-warning { border-left: 3px solid #f59e0b; }
+.weather-minimal-card.border-info { border-left: 3px solid #3b82f6; }
+.weather-minimal-card.border-success { border-left: 3px solid #10b981; }
+
+.weather-minimal-header {
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+}
+
+.weather-minimal-header.bg-critical { background: #fef2f2; }
+.weather-minimal-header.bg-warning { background: #fffbeb; }
+.weather-minimal-header.bg-info { background: #eff6ff; }
+.weather-minimal-header.bg-success { background: #f0fdf4; }
+
+.weather-minimal-mountain {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--ink);
+}
+
+.weather-minimal-temp {
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+}
+
+.weather-minimal-body {
+    padding: 16px;
+}
+
+.weather-minimal-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.weather-minimal-icon {
+    font-size: 36px;
+}
+
+.weather-minimal-condition {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--ink);
+}
+
+.weather-minimal-details {
+    font-size: 11px;
+    color: var(--ink3);
+    margin-top: 4px;
+}
+
+.weather-minimal-forecast {
+    display: flex;
+    gap: 16px;
+    justify-content: space-around;
+    margin-bottom: 12px;
+}
+
+.forecast-minimal-item {
+    text-align: center;
+    flex: 1;
+}
+
+.forecast-day {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink3);
+    text-transform: uppercase;
+}
+
+.forecast-icon {
+    font-size: 20px;
+    margin: 4px 0;
+}
+
+.forecast-temp-min {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.weather-minimal-note {
+    font-size: 11px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-top: 8px;
+}
+
+.weather-minimal-note.critical-note {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.weather-minimal-note.warning-note {
+    background: #fffbeb;
+    color: #d97706;
+}
+
+.weather-minimal-note.success-note {
+    background: #f0fdf4;
+    color: #059669;
+}
+
+/* Remove old weather styles */
+.weather-card, .weather-advisory, .rain-meter, .weather-icon-large {
+    display: none;
+}
+
+/* Keep grid responsive */
+.weather-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}.forecast-list { display: flex; gap: 12px; margin-top: 12px; overflow-x: auto; }
   .forecast-day { text-align: center; min-width: 60px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 10px; }
   .forecast-temp { font-size: 14px; font-weight: 700; }
 
@@ -827,12 +949,12 @@ function getCrowdBadge($level) {
       </div>
     </div>
 
-   <!-- Weather Section - Enhanced -->
+  <!-- Weather Section - Minimal Design -->
 <div class="panel" id="weather">
     <div class="panel-hdr">
         <div class="panel-title">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="18"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
-            Weather Forecast & Advisories
+            Weather Forecast
         </div>
         <button class="btn-sm btn-outline-sm" onclick="refreshWeather()">⟳ Refresh</button>
     </div>
@@ -843,166 +965,92 @@ function getCrowdBadge($level) {
                 $weather = $weather_data[$mountain['id']] ?? null;
                 $current = $weather['current'] ?? null;
                 
-                // Determine weather type for styling
-                $weather_type = 'sunny';
-                $advisory_level = 'success';
-                $advisory_message = '';
-                $action_needed = '';
-                $rain_percent = 0;
+                // Determine weather condition class for border
+                $condition_class = 'condition-default';
+                $border_class = '';
+                $header_bg = '';
                 
                 if ($current) {
                     $code = $current['weather_code'];
                     $precip = $current['precip'] ?? 0;
-                    
-                    // Forecast rain probability for today
-                    $today_forecast = $weather[date('Y-m-d')] ?? null;
-                    $rain_prob = $today_forecast['precip_prob'] ?? 0;
+                    $rain_prob = $weather[date('Y-m-d')]['precip_prob'] ?? 0;
                     
                     if ($code >= 95) { // Thunderstorm
-                        $weather_type = 'storm';
-                        $advisory_level = 'critical';
-                        $advisory_message = '⛈️ SEVERE THUNDERSTORM WARNING';
-                        $action_needed = '🚨 ALL HIKING ACTIVITIES SUSPENDED. Evacuate immediately if on trail.';
-                        $rain_percent = 100;
-                    } elseif ($code >= 61 && $code <= 67) { // Rain
-                        $weather_type = 'rainy';
-                        $advisory_level = 'warning';
-                        $advisory_message = '🌧️ HEAVY RAIN ADVISORY';
-                        $action_needed = '⚠️ Trails may be slippery. Guides must carry rain gear. Consider postponing if rain persists.';
-                        $rain_percent = max($precip * 10, $rain_prob);
-                    } elseif ($code >= 80 && $code <= 82) { // Rain showers
-                        $weather_type = 'rainy';
-                        $advisory_level = 'warning';
-                        $advisory_message = '🌦️ RAIN SHOWERS EXPECTED';
-                        $action_needed = '⚠️ Intermittent rain expected. Bring waterproof gear and extra clothing.';
-                        $rain_percent = max($precip * 8, $rain_prob);
+                        $condition_class = 'condition-storm';
+                        $border_class = 'border-critical';
+                        $header_bg = 'bg-critical';
+                    } elseif ($code >= 61 && $code <= 67 || $code >= 80 && $code <= 82) { // Rain
+                        $condition_class = 'condition-rainy';
+                        $border_class = 'border-warning';
+                        $header_bg = 'bg-warning';
                     } elseif ($code >= 45 && $code <= 49) { // Fog
-                        $weather_type = 'foggy';
-                        $advisory_level = 'warning';
-                        $advisory_message = '🌫️ LOW VISIBILITY ADVISORY';
-                        $action_needed = '⚠️ Dense fog reduces visibility. Stay on marked trails and use headlamps.';
-                        $rain_percent = $rain_prob;
-                    } elseif ($code >= 3) { // Overcast/Cloudy
-                        $weather_type = 'cloudy';
-                        $advisory_level = 'info';
-                        $advisory_message = '☁️ OVERCAST CONDITIONS';
-                        $action_needed = '📋 Cool weather expected. Dress in layers for changing conditions.';
-                        $rain_percent = $rain_prob;
-                    } elseif ($code >= 0 && $code <= 2) { // Clear/Sunny
-                        $weather_type = 'sunny';
-                        $advisory_level = 'success';
-                        $advisory_message = '☀️ PERFECT HIKING WEATHER';
-                        $action_needed = '✅ Warm bright day! Great for hiking. Don\'t forget sun protection and hydration.';
-                        $rain_percent = $rain_prob;
-                    }
-                    
-                    // Check for high wind
-                    if (($current['wind'] ?? 0) > 40) {
-                        $advisory_message .= ' 💨 Strong Winds';
-                        $action_needed .= ' Strong winds expected at summit. Extra caution needed.';
-                        if ($advisory_level !== 'critical') $advisory_level = 'warning';
-                    }
-                    
-                    // Check for extreme heat
-                    if (($current['temp'] ?? 0) > 30) {
-                        $advisory_message .= ' 🔥 Heat Warning';
-                        $action_needed .= ' High temperatures - ensure adequate water supply (min 3L per person).';
+                        $condition_class = 'condition-foggy';
+                        $border_class = 'border-warning';
+                        $header_bg = 'bg-warning';
+                    } elseif ($code >= 3) { // Cloudy
+                        $condition_class = 'condition-cloudy';
+                        $border_class = 'border-info';
+                        $header_bg = 'bg-info';
+                    } else { // Clear
+                        $condition_class = 'condition-clear';
+                        $border_class = 'border-success';
+                        $header_bg = 'bg-success';
                     }
                 }
                 ?>
-                <div class="weather-card <?= $weather_type ?>">
-                    <?php if($weather_type === 'rainy'): ?>
-                        <div class="rain-animation"></div>
-                    <?php endif; ?>
-                    
-                    <div class="weather-header">
-                        <div>
-                            <span class="weather-mountain"><?= htmlspecialchars($mountain['name']) ?></span>
-                            <div class="weather-condition">
-                                <?php if($current): ?>
-                                    <span class="weather-icon-large <?= $weather_type ?>"><?= $current['icon'] ?? '🌤' ?></span>
-                                    <span style="margin-left: 8px;"><?= $current['condition'] ?? 'Unknown' ?></span>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                        <div style="text-align: right;">
-                            <div class="weather-temp">
-                                <?php if($current): ?>
-                                    <?= round($current['temp']) ?>°C
-                                <?php else: ?>
-                                    —
-                                <?php endif; ?>
-                            </div>
-                            <div style="font-size: 11px; opacity: 0.8;">
-                                Feels like <?= round(($current['temp'] ?? 0) - (($current['wind'] ?? 0) * 0.2)) ?>°
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 16px; margin: 12px 0; font-size: 12px; flex-wrap: wrap;">
+                <div class="weather-minimal-card <?= $border_class ?>">
+                    <div class="weather-minimal-header <?= $header_bg ?>">
+                        <span class="weather-minimal-mountain"><?= htmlspecialchars($mountain['name']) ?></span>
                         <?php if($current): ?>
-                            <span>💨 Wind: <?= round($current['wind']) ?> km/h</span>
-                            <span>💧 Humidity: <?= round($current['humidity']) ?>%</span>
-                            <span>📍 Elev: <?= $mountain['elevation'] ?? 'N/A' ?>m</span>
+                            <span class="weather-minimal-temp"><?= round($current['temp']) ?>°C</span>
                         <?php endif; ?>
                     </div>
-                    
-                    <?php if($rain_percent > 0): ?>
-                        <div class="rain-meter">
-                            <div class="rain-fill" style="width: <?= min($rain_percent, 100) ?>%"></div>
-                        </div>
-                        <div style="font-size: 10px; margin-top: 4px; opacity: 0.8;">
-                            💧 Rain probability: <?= round($rain_percent) ?>%
-                        </div>
-                    <?php endif; ?>
-                    
-                    <?php if($weather && count($weather) > 1): ?>
-                        <div class="forecast-list" style="margin-top: 16px;">
-                            <?php 
-                            $days = array_slice(array_filter(array_keys($weather), fn($k) => $k !== 'current'), 0, 4);
-                            foreach($days as $day):
-                                $forecast = $weather[$day];
-                                $is_rainy = ($forecast['precip_prob'] ?? 0) > 30;
-                            ?>
-                                <div class="forecast-day" style="<?= $is_rainy ? 'background: rgba(96, 165, 250, 0.3);' : '' ?>">
-                                    <div><?= date('D', strtotime($day)) ?></div>
-                                    <div class="forecast-temp"><?= round($forecast['temp_max'] ?? 0) ?>°</div>
-                                    <div style="font-size: 16px; margin: 4px 0;"><?= $forecast['icon'] ?? '🌤' ?></div>
-                                    <?php if($is_rainy): ?>
-                                        <div style="font-size: 9px; color: #93c5fd;">🌧️ <?= round($forecast['precip_prob']) ?>%</div>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                    
-                    <!-- Weather Advisory Banner -->
-                    <?php if($advisory_message): ?>
-                        <div class="weather-advisory <?= $advisory_level ?>">
-                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                                <span style="font-size: 20px;">
-                                    <?= $advisory_level === 'critical' ? '🚨' : ($advisory_level === 'warning' ? '⚠️' : ($advisory_level === 'success' ? '✅' : 'ℹ️')) ?>
-                                </span>
-                                <strong><?= $advisory_message ?></strong>
+                    <div class="weather-minimal-body">
+                        <div class="weather-minimal-main <?= $condition_class ?>">
+                            <span class="weather-minimal-icon">
+                                <?= $current['icon'] ?? '🌤' ?>
+                            </span>
+                            <div>
+                                <div class="weather-minimal-condition"><?= $current['condition'] ?? 'Loading...' ?></div>
+                                <?php if($current): ?>
+                                    <div class="weather-minimal-details">
+                                        💨 <?= round($current['wind']) ?> km/h · 💧 <?= round($current['humidity']) ?>%
+                                    </div>
+                                <?php endif; ?>
                             </div>
-                            <div style="font-size: 11px; line-height: 1.4;">
-                                <?= $action_needed ?>
-                            </div>
-                            <?php if($advisory_level === 'critical'): ?>
-                                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; font-weight: bold;">
-                                    🔴 ALL BOOKINGS AFFECTED: Contact all scheduled hikers immediately to reschedule or cancel.
-                                </div>
-                            <?php elseif($advisory_level === 'warning' && $rain_percent > 50): ?>
-                                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px;">
-                                    📢 Recommended: Postpone long hikes. Short trails only with proper rain gear.
-                                </div>
-                            <?php elseif($advisory_level === 'success'): ?>
-                                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px;">
-                                    ✨ Perfect day for hiking! Sunrise views are expected to be spectacular.
-                                </div>
-                            <?php endif; ?>
                         </div>
-                    <?php endif; ?>
+                        
+                        <?php if($weather && count($weather) > 1): ?>
+                            <div class="weather-minimal-forecast">
+                                <?php 
+                                $days = array_slice(array_filter(array_keys($weather), fn($k) => $k !== 'current'), 0, 3);
+                                foreach($days as $day):
+                                    $forecast = $weather[$day];
+                                ?>
+                                    <div class="forecast-minimal-item">
+                                        <div class="forecast-day"><?= date('D', strtotime($day)) ?></div>
+                                        <div class="forecast-icon"><?= $forecast['icon'] ?? '🌤' ?></div>
+                                        <div class="forecast-temp-min"><?= round($forecast['temp_max'] ?? 0) ?>°</div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <!-- Minimal advisory note -->
+                        <?php if($border_class === 'border-critical'): ?>
+                            <div class="weather-minimal-note critical-note">
+                                ⚠️ Severe weather expected. Hiking not recommended.
+                            </div>
+                        <?php elseif($border_class === 'border-warning'): ?>
+                            <div class="weather-minimal-note warning-note">
+                                🌧️ Rain expected. Bring proper gear.
+                            </div>
+                        <?php elseif($border_class === 'border-success'): ?>
+                            <div class="weather-minimal-note success-note">
+                                ✓ Great hiking conditions.
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             <?php endforeach; ?>
         </div>
