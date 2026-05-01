@@ -179,8 +179,7 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
         $stmt->execute([$currentUserId]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            file_put_contents($debugFile, "Found booking: {$row['booking_number']} - Status: {$row['status']}\n", FILE_APPEND);
-            
+          
             // Get hikers for this booking
             $hikers = [];
             $stmt2 = $pdo->prepare("SELECT hiker_name FROM booking_hikers WHERE booking_id = ?");
@@ -308,30 +307,7 @@ LEFT JOIN guides g ON b.guide_id = g.id
             ];
         }
         
-        // ========== DEBUG CODE ==========
-        file_put_contents($debugFile, "\n=== CHECKING FOR WAITING_PAYMENT BOOKINGS ===\n", FILE_APPEND);
-        $checkStmt = $pdo->prepare("SELECT id, booking_number, status, user_id FROM bookings WHERE status = 'waiting_payment' AND user_id = ?");
-        $checkStmt->execute([$currentUserId]);
-        $waitingCount = 0;
-        while ($checkRow = $checkStmt->fetch()) {
-            $waitingCount++;
-            file_put_contents($debugFile, "Found waiting_payment booking: " . $checkRow['booking_number'] . " for user " . $currentUserId . "\n", FILE_APPEND);
-        }
-        if ($waitingCount == 0) {
-            file_put_contents($debugFile, "No waiting_payment bookings found for user $currentUserId\n", FILE_APPEND);
-        }
-        
-        // Also log all statuses found in the main query for debugging
-        file_put_contents($debugFile, "\n=== ALL BOOKINGS STATUSES FOUND ===\n", FILE_APPEND);
-        foreach ($bookings as $b) {
-            file_put_contents($debugFile, "Booking: " . $b['id'] . " - Status: " . $b['status'] . "\n", FILE_APPEND);
-        }
-        file_put_contents($debugFile, "Total bookings: " . count($bookings) . "\n", FILE_APPEND);
-        
-    } catch (PDOException $e) {
-        file_put_contents($debugFile, "Bookings fetch error: " . $e->getMessage() . "\n", FILE_APPEND);
     }
-    
     
     return $bookings;
 }
