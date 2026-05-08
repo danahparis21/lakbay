@@ -4545,10 +4545,15 @@ function viewActiveHikeDetails(bookingId) {
         </div>
         
         <!-- Hiker List -->
-        <div class="detail-section-label">Hiker List (${b.pax})</div>
-        <div class="detail-hikers-list" style="margin-bottom:16px;">
-            ${b.hikers.map(h => `<div class="detail-hiker-chip"><div class="dh-av">${h.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>${h}</div>`).join('')}
-        </div>
+<div class="detail-section-label">Hiker List (${b.pax})</div>
+<div class="detail-hikers-list" style="margin-bottom:16px;">
+    ${b.hikers.map(h => {
+        // Handle both string and object hiker formats
+        const hikerName = typeof h === 'string' ? h : (h.name || h.hiker_name || 'Unknown');
+        const initials = hikerName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        return `<div class="detail-hiker-chip"><div class="dh-av">${initials}</div>${escapeHtml(hikerName)}</div>`;
+    }).join('')}
+</div>
         
         ${b.notes ? `
         <div class="detail-section-label">Notes & Advisories</div>
