@@ -747,10 +747,11 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
                         <span><strong>Payment Proof:</strong></span>
                     </div>
                     ${proofImageBase64 ? `
-                        <div class="proof-image-preview" style="margin-top:8px;text-align:center;">
-    <img src="${proofImageBase64}" alt="Payment Proof" style="max-width:100%;max-height:300px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="openImageModal('${proofImageBase64}')">
-    <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
-</div>
+    <div class="proof-image-preview" style="margin-top:8px;text-align:center;">
+        <img src="${proofImageBase64}" alt="Payment Proof" style="max-width:100%;max-height:300px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="openImageModal('${proofImageBase64}')">
+        <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
+    </div>
+` : '<div style="font-size:12px;color:#6b7280;">No image uploaded</div>'}
                 ${actionButtons}
                 ${!isGuide && !isMine ? `
                 <div class="info-note" style="background:#fef3c7;border-radius:8px;padding:10px;margin-top:12px;text-align:center;">
