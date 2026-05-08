@@ -165,22 +165,34 @@ $uniqueBadgeCount = count($allUserBadges);
 
 // Handle avatar upload
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
+    // DEBUG: Log the upload attempt FIRST
+    error_log("=== AVATAR UPLOAD ATTEMPT ===");
+    error_log("Upload - File name: " . ($_FILES['avatar']['name'] ?? 'none'));
+    error_log("Upload - File size: " . ($_FILES['avatar']['size'] ?? 0) . " bytes");
+    error_log("Upload - File type: " . ($_FILES['avatar']['type'] ?? 'none'));
+    error_log("Upload - Temp path: " . ($_FILES['avatar']['tmp_name'] ?? 'none'));
+    error_log("Upload - Error code: " . ($_FILES['avatar']['error'] ?? 'none'));
+    
     // Use absolute path based on the current file's directory
     $uploadDir = __DIR__ . '/../uploads/avatars/';
+    error_log("Upload - Target directory: " . $uploadDir);
     
     // Create directory if it doesn't exist
     if (!file_exists($uploadDir)) {
         mkdir($uploadDir, 0755, true);
+        error_log("Upload - Created directory: " . $uploadDir);
     }
     
     // Check if directory is writable
     if (!is_writable($uploadDir)) {
         chmod($uploadDir, 0755);
+        error_log("Upload - Changed permissions for: " . $uploadDir);
     }
     
     $fileExt = strtolower(pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION));
     $fileName = 'user_' . $currentUserId . '_' . time() . '.' . $fileExt;
     $uploadPath = $uploadDir . $fileName;
+    error_log("Upload - Target file path: " . $uploadPath);
     
     $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
@@ -188,37 +200,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
     $errorMessage = null;
     $success = false;
     
-    if (in_array($_FILES['avatar']['type'], $allowedTypes) && in_array($fileExt, $allowedExts) && $_FILES['avatar']['error'] === 0) {
-        if ($_FILES['avatar']['size'] > 2 * 1024 * 1024) {
-            $errorMessage = "File too large. Maximum 2MB.";
-        } else {
-            if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
-                $avatarPath = '/uploads/avatars/' . $fileName;
-                $stmt = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
-                if ($stmt->execute([$avatarPath, $currentUserId])) {
-                    $currentUser['avatar'] = $avatarPath;
-                    $_SESSION['user_avatar'] = $avatarPath;
-                    $success = true;
-                } else {
-                    $errorMessage = "Database update failed.";
-                }
+    // Check file error first
+    if ($_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
+        $errorMessage = "Upload error code: " . $_FILES['avatar']['error'];
+        error_log("Upload - PHP upload error: " . $errorMessage);
+    }
+    // Check file type
+    elseif (!in_array($_FILES['avatar']['type'], $allowedTypes)) {
+        $errorMessage = "Invalid file type: " . $_FILES['avatar']['type'] . ". Use JPG, PNG, GIF, or WEBP.";
+        error_log("Upload - Invalid type: " . $_FILES['avatar']['type']);
+    }
+    // Check file extension
+    elseif (!in_array($fileExt, $allowedExts)) {
+        $errorMessage = "Invalid file extension: .$fileExt. Use .jpg, .png, .gif, or .webp";
+        error_log("Upload - Invalid extension: " . $fileExt);
+    }
+    // Check file size
+    elseif ($_FILES['avatar']['size'] > 2 * 1024 * 1024) {
+        $errorMessage = "File too large: " . $_FILES['avatar']['size'] . " bytes. Maximum 2MB.";
+        error_log("Upload - File too large: " . $_FILES['avatar']['size']);
+    }
+    else {
+        // Try to move the file
+        if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
+            error_log("Upload - File moved successfully to: " . $uploadPath);
+            
+            $avatarPath = '/uploads/avatars/' . $fileName;
+            $stmt = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
+            if ($stmt->execute([$avatarPath, $currentUserId])) {
+                $currentUser['avatar'] = $avatarPath;
+                $_SESSION['user_avatar'] = $avatarPath;
+                $success = true;
+                error_log("Upload - Database updated successfully for user: " . $currentUserId);
             } else {
-                $errorMessage = "Failed to save file. Please check directory permissions.";
-                error_log("Upload failed - couldn't move file to: " . $uploadPath);
+                $errorMessage = "Database update failed.";
+                error_log("Upload - Database update failed for user: " . $currentUserId);
             }
+        } else {
+            $errorMessage = "Failed to save file. Check directory permissions.";
+            error_log("Upload - move_uploaded_file FAILED for: " . $uploadPath);
+            error_log("Upload - Temp file exists? " . (file_exists($_FILES['avatar']['tmp_name']) ? 'yes' : 'no'));
         }
-    } else {
-        $errorMessage = "Invalid file type. Use JPG, PNG, GIF, or WEBP.";
     }
     
     if ($success) {
-        // Use JavaScript redirect instead of reload to avoid form resubmission
         echo "<script>
             alert('Profile picture updated successfully!');
             window.location.href = window.location.href.split('?')[0];
         </script>";
         exit;
     } else {
+        error_log("Upload - FAILED with message: " . $errorMessage);
         echo "<script>
             alert('" . addslashes($errorMessage) . "');
             window.location.href = window.location.href.split('?')[0];
@@ -226,7 +258,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
         exit;
     }
 }
-
 // Handle profile update (name, email, phone, home_region)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_profile') {
     $name = trim($_POST['name'] ?? '');
@@ -2583,6 +2614,21 @@ function uploadAvatar(input) {
     if (!input.files || !input.files[0]) return;
     
     const file = input.files[0];
+    
+    // Check file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        showToast('❌ File too large. Maximum 2MB.', 'error');
+        input.value = ''; // Clear the input
+        return;
+    }
+    
+    // Check if it's actually an image
+    if (!file.type.startsWith('image/')) {
+        showToast('❌ Please select an image file (JPG, PNG, GIF, WEBP).', 'error');
+        input.value = '';
+        return;
+    }
+    
     const formData = new FormData();
     formData.append('avatar', file);
     
@@ -2595,11 +2641,24 @@ function uploadAvatar(input) {
     .then(response => response.text())
     .then(() => {
         showToast('✓ Profile picture updated!', 'success');
+        // Add timestamp to force cache refresh
+        const timestamp = Date.now();
+        const avatarDiv = document.getElementById('avatarDisplay');
+        const currentStyle = avatarDiv.style.backgroundImage;
+        // Force reload by updating the URL with a timestamp
+        if (currentStyle && currentStyle.includes('url(')) {
+            const urlMatch = currentStyle.match(/url\(["']?([^"')]+)["']?\)/);
+            if (urlMatch && urlMatch[1]) {
+                const newUrl = urlMatch[1].split('?')[0] + '?t=' + timestamp;
+                avatarDiv.style.backgroundImage = `url('${newUrl}')`;
+            }
+        }
         setTimeout(() => window.location.reload(), 1500);
     })
     .catch(err => {
-        console.error(err);
+        console.error('Upload error:', err);
         showToast('❌ Upload failed. Please try again.', 'error');
+        input.value = ''; // Clear the input on error
     });
 }
 
