@@ -2977,21 +2977,48 @@ function autoSelectMountain() {
             const tryAutoSelect = () => {
                 const newBookingBtn = document.querySelector('.btn-glass-primary');
                 if (newBookingBtn && typeof openBookingFlow === 'function') {
+                    // Open the booking modal first
                     newBookingBtn.click();
+                    
+                    // Wait for modal to render, then select "Book a new hike" mode
                     setTimeout(() => {
-                        if (flowState && typeof selectMtn === 'function') {
-                            selectMtn(foundMtn.id);
-                            // Auto-advance to next step after selection
-                            setTimeout(() => {
-                                if (currentStep === 1 && flowState.mtn) {
-                                    const nextBtn = document.getElementById('nextBtn1');
-                                    if (nextBtn && !nextBtn.disabled) {
-                                        nextStep();
+                        // Select the "Book a new hike" mode
+                        const modeBook = document.getElementById('modeBook');
+                        if (modeBook && typeof selectMode === 'function') {
+                            selectMode('book');
+                            // Enable and click the continue button
+                            const modeNextBtn = document.getElementById('modeNextBtn');
+                            if (modeNextBtn && !modeNextBtn.disabled) {
+                                modeNextBtn.click();
+                                
+                                // Wait for mountain selection screen, then select the mountain
+                                setTimeout(() => {
+                                    // Safely select the mountain with error handling
+                                    try {
+                                        const mountainCard = document.getElementById('ms' + foundMtn.id);
+                                        if (mountainCard && typeof selectMtn === 'function') {
+                                            selectMtn(foundMtn.id);
+                                            
+                                            // Auto-advance to next step after selection
+                                            setTimeout(() => {
+                                                if (currentStep === 1 && flowState.mtn) {
+                                                    const nextBtn = document.getElementById('nextBtn1');
+                                                    if (nextBtn && !nextBtn.disabled) {
+                                                        nextStep();
+                                                    }
+                                                }
+                                            }, 300);
+                                        } else {
+                                            console.warn('Mountain card or selectMtn function not ready');
+                                        }
+                                    } catch (err) {
+                                        console.error('Error selecting mountain:', err);
+                                        showToast(`Selected ${foundMtn.name}. Please continue booking.`);
                                     }
-                                }
-                            }, 400);
+                                }, 400);
+                            }
                         }
-                    }, 300);
+                    }, 200);
                 } else {
                     // Retry if elements aren't ready yet
                     setTimeout(tryAutoSelect, 200);
@@ -3013,7 +3040,6 @@ function autoSelectMountain() {
         window.history.replaceState({}, document.title, newUrl);
     }
 }
-
 function loadBookings() {
     // bookings is already populated from PHP/DB at page load.
     // Sync nextId with existing IDs
@@ -3665,8 +3691,6 @@ function lookupHikeId() {
   });
 }
 
-
-// ── NORMAL FLOW HELPERS ──
 function selectMtn(id) {
     const mountain = mountains.find(m => m.id === id);
     if (mountain && mountain.status !== 'Open') {
@@ -3675,8 +3699,14 @@ function selectMtn(id) {
     }
     flowState.mtn = mountain;
     document.querySelectorAll('.mtn-select-card').forEach(c => c.classList.remove('selected'));
-    document.getElementById('ms'+id)?.classList.add('selected');
-    document.getElementById('nextBtn1').disabled = false;
+    const selectedCard = document.getElementById('ms'+id);
+    if (selectedCard) {
+        selectedCard.classList.add('selected');
+    }
+    const nextBtn = document.getElementById('nextBtn1');
+    if (nextBtn) {
+        nextBtn.disabled = false;
+    }
 }
 function setType(t) {
   flowState.type = t;
