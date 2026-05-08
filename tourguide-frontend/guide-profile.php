@@ -94,36 +94,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
             $stmt->execute([$specialization, $years_experience, $bio, $gcash_name, $gcash_number, $user_id]);
             
             // Handle Avatar Upload
-            if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
-                $upload_dir = '../uploads/avatars/';
-                if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-                
-                $file_ext = pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION);
-                $file_name = 'guide_' . $user_id . '_' . time() . '.' . $file_ext;
-                $target_file = $upload_dir . $file_name;
-                
-                if (move_uploaded_file($_FILES['avatar']['tmp_name'], $target_file)) {
-                    $avatar_path = 'uploads/avatars/' . $file_name;
-                    $stmt = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
-                    $stmt->execute([$avatar_path, $user_id]);
-                }
-            }
+if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
+    $upload_dir = '../uploads/avatars/';
+    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+    
+    $file = $_FILES['avatar'];
+    $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    
+    $allowed_types = ['jpg', 'jpeg', 'png', 'webp'];
+    if (!in_array($file_ext, $allowed_types)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid file type for avatar']);
+        exit;
+    }
+    
+    if ($file['size'] > 5 * 1024 * 1024) {
+        echo json_encode(['success' => false, 'message' => 'Avatar must be less than 5MB']);
+        exit;
+    }
+    
+    $file_name = 'guide_' . $user_id . '_' . time() . '.' . $file_ext;
+    $target_file = $upload_dir . $file_name;
+    
+    if (move_uploaded_file($file['tmp_name'], $target_file)) {
+        $avatar_path = 'uploads/avatars/' . $file_name;
+        
+        // Delete old avatar if exists
+        $stmt = $pdo->prepare("SELECT avatar FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $old_avatar = $stmt->fetchColumn();
+        if ($old_avatar && file_exists('../' . $old_avatar)) {
+            unlink('../' . $old_avatar);
+        }
+        
+        $stmt = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
+        $stmt->execute([$avatar_path, $user_id]);
+    }
+}
             
             // Handle QR Code upload
-            if (isset($_FILES['gcash_qr']) && $_FILES['gcash_qr']['error'] === UPLOAD_ERR_OK) {
-                $upload_dir = '../uploads/qr_codes/';
-                if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-                
-                $file_ext = pathinfo($_FILES['gcash_qr']['name'], PATHINFO_EXTENSION);
-                $file_name = 'gcash_' . $guide_id . '_' . time() . '.' . $file_ext;
-                $target_file = $upload_dir . $file_name;
-                
-                if (move_uploaded_file($_FILES['gcash_qr']['tmp_name'], $target_file)) {
-                    $gcash_qr = 'uploads/qr_codes/' . $file_name;
-                    $stmt = $pdo->prepare("UPDATE guides SET gcash_qr_code = ? WHERE user_id = ?");
-                    $stmt->execute([$gcash_qr, $user_id]);
-                }
-            }
+if (isset($_FILES['gcash_qr']) && $_FILES['gcash_qr']['error'] === UPLOAD_ERR_OK) {
+    $upload_dir = '../uploads/qr_codes/';
+    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+    
+    $file = $_FILES['gcash_qr'];
+    $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    
+    // Validate file type
+    $allowed_types = ['jpg', 'jpeg', 'png', 'webp'];
+    if (!in_array($file_ext, $allowed_types)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid file type. Please upload JPG, PNG, or WEBP']);
+        exit;
+    }
+    
+    // Validate file size (max 2MB)
+    if ($file['size'] > 2 * 1024 * 1024) {
+        echo json_encode(['success' => false, 'message' => 'File is too large. Max 2MB']);
+        exit;
+    }
+    
+    $file_name = 'gcash_' . $guide_id . '_' . time() . '.' . $file_ext;
+    $target_file = $upload_dir . $file_name;
+    
+    // Check if upload directory is writable
+    if (!is_writable($upload_dir)) {
+        echo json_encode(['success' => false, 'message' => 'Upload directory is not writable']);
+        exit;
+    }
+    
+    if (move_uploaded_file($file['tmp_name'], $target_file)) {
+        $gcash_qr = 'uploads/qr_codes/' . $file_name;
+        
+        // Delete old QR code if exists
+        $stmt = $pdo->prepare("SELECT gcash_qr_code FROM guides WHERE user_id = ?");
+        $stmt->execute([$user_id]);
+        $old_qr = $stmt->fetchColumn();
+        if ($old_qr && file_exists('../' . $old_qr)) {
+            unlink('../' . $old_qr);
+        }
+        
+        $stmt = $pdo->prepare("UPDATE guides SET gcash_qr_code = ? WHERE user_id = ?");
+        $stmt->execute([$gcash_qr, $user_id]);
+        error_log("QR Code uploaded successfully: " . $target_file);
+    } else {
+        error_log("Failed to move uploaded file. Upload error: " . $file['error']);
+        echo json_encode(['success' => false, 'message' => 'Failed to save QR code image']);
+        exit;
+    }
+}
             
             $pdo->commit();
             echo json_encode(['success' => true, 'message' => 'Profile updated successfully']);
