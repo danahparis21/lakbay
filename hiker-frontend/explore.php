@@ -2801,18 +2801,12 @@ async function loadTrailForModal(mountainId) {
       waypointMarkers.forEach(marker => { if (marker && marker.remove) marker.remove(); });
       waypointMarkers = [];
       
-      const initialLat = data.mountain?.lat || 14.0583;
-      const initialLng = data.mountain?.lng || 120.8320;
+      trailMap = L.map('trailMap');
       
-      trailMap = L.map('trailMap').setView([initialLat, initialLng], 13);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-        subdomains: 'abcd'
-      }).addTo(trailMap);
+      // Collect all coordinates for bounds
+      let allCoords = [];
       
-      let trailBounds = [];
-      
-      // Draw trail
+      // Draw trail and collect coordinates
       if (data.success && data.trail && data.trail.length > 0) {
         const trailCoords = data.trail.map(c => [c[1], c[0]]);
         L.polyline(trailCoords, {
@@ -2821,10 +2815,10 @@ async function loadTrailForModal(mountainId) {
           opacity: 0.9,
           lineCap: 'round'
         }).addTo(trailMap);
-        trailBounds = L.latLngBounds(trailCoords);
+        allCoords = allCoords.concat(trailCoords);
       }
       
-      // Get icon for waypoint type (same as active_hike.php)
+      // Get icon for waypoint type
       function getIconForType(type) {
         const icons = {
           'summit': 'fa-mountain',
@@ -2876,7 +2870,7 @@ async function loadTrailForModal(mountainId) {
         return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
       }
       
-      // Add waypoints to map
+      // Add waypoints to map and collect their coordinates
       if (data.waypoints && data.waypoints.length > 0) {
         data.waypoints.forEach(wp => {
           const lat = parseFloat(wp.latitude);
@@ -2884,12 +2878,7 @@ async function loadTrailForModal(mountainId) {
           const type = wp.type || 'viewpoint';
           
           if (!isNaN(lat) && !isNaN(lng)) {
-            // Extend bounds
-            if (trailBounds.length === 0) {
-              trailBounds = L.latLngBounds([[lat, lng]]);
-            } else {
-              trailBounds.extend([lat, lng]);
-            }
+            allCoords.push([lat, lng]);
             
             const iconClass = getIconForType(type);
             const colorClass = getColorClass(type);
@@ -2913,7 +2902,6 @@ async function loadTrailForModal(mountainId) {
               </div>
             `;
             
-            // Create marker with Font Awesome icon (same as active_hike.php)
             const marker = L.marker([lat, lng], {
               icon: L.divIcon({
                 html: `<div class="waypoint-marker ${colorClass}">
@@ -3010,14 +2998,23 @@ async function loadTrailForModal(mountainId) {
         }
       }
       
-      // Zoom to trail bounds
-      if (trailBounds.isValid()) {
-        trailMap.fitBounds(trailBounds.pad(0.15));
-        console.log('Zooming to trail bounds');
+      // Add tile layer
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+        subdomains: 'abcd'
+      }).addTo(trailMap);
+      
+      // Zoom to bounds if we have coordinates
+      if (allCoords.length > 0) {
+        const bounds = L.latLngBounds(allCoords);
+        trailMap.fitBounds(bounds.pad(0.15));
+        console.log(`Zooming to bounds with ${allCoords.length} points`);
       } else if (data.mountain?.lat && data.mountain?.lng) {
         trailMap.setView([data.mountain.lat, data.mountain.lng], 14);
+        console.log('Using mountain center point');
       } else {
         trailMap.setView([14.0583, 120.8320], 12);
+        console.log('Using default Nasugbu view');
       }
     }
   } catch (error) {
@@ -3031,6 +3028,16 @@ async function loadTrailForModal(mountainId) {
     if (trailEstDurationElem) trailEstDurationElem.innerHTML = 'Unavailable';
     if (trailDifficultyElem) trailDifficultyElem.innerHTML = 'Unavailable';
     if (waypointsContainer) waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">Trail information unavailable at this time.</p>';
+    
+    // Still try to show something on the map
+    const trailMapContainer = document.getElementById('trailMap');
+    if (trailMapContainer && !trailMap) {
+      trailMap = L.map('trailMap').setView([14.0583, 120.8320], 12);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+        subdomains: 'abcd'
+      }).addTo(trailMap);
+    }
   }
 }
 // Update tab switching - FIXED for modal-tab class
