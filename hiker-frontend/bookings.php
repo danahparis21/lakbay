@@ -169,6 +169,7 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
         m.name as mountain,
         COALESCE(u.name, 'Unknown Guide') as guideName,
         COALESCE(SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2), '??') as guideInitials
+        COALESCE(g.user_id, 0) as guide_user_id
     FROM bookings b
     JOIN mountains m ON b.mountain_id = m.id
     LEFT JOIN guides g ON b.guide_id = g.id      
@@ -198,6 +199,7 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
             $stmt2->execute([$row['id']]);
             $nudgeData = $stmt2->fetch(PDO::FETCH_ASSOC);
             
+            
             // Check if reviewed
             $stmt2 = $pdo->prepare("SELECT COUNT(*) as has_reviewed FROM reviews WHERE booking_id = ? AND user_id = ?");
             $stmt2->execute([$row['id'], $currentUserId]);
@@ -222,6 +224,7 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
                 'guideId' => $row['guide_id'],
                 'guideName' => $row['guideName'],
                 'guideInitials' => $row['guideInitials'] ?: substr($row['guideName'], 0, 2),
+                'guide_user_id' => $row['guide_user_id'] ?? 0,
                 'pax' => $row['pax'],
                 'hikers' => $hikers,
                 'totalFee' => floatval($row['totalFee']),
@@ -3892,12 +3895,12 @@ function todayCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
     const startUrl = `active-hike.php?booking_id=${b.db_id}&booking_number=${b.id}`;
  
     // Secondary actions: message guide and view details
-    const msgBtn = `
-        <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}"
-           class="btn btn-outline btn-sm">
-            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            Message Guide
-        </a>`;
+   const msgBtn = `
+    <a href="messages.php?guide=${b.guide_user_id}&guide_name=${encodeURIComponent(b.guideName)}"
+       class="btn btn-outline btn-sm">
+        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Message Guide
+    </a>`;
  
     // Cancel/Leave logic
     let cancelBtn = '';
@@ -4472,7 +4475,7 @@ function viewActiveHikeDetails(bookingId) {
         ` : ''}
         
         <div style="margin-top: 20px;">
-            <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-full" style="margin-bottom: 8px;">
+            <a href="messages.php?guide=${b.guide_user_id}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-full" style="margin-bottom: 8px;">
                 <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Message Guide
             </a>
         </div>
