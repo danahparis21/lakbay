@@ -189,16 +189,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($chk->fetch()) $errors[] = "An account with this email or username already exists.";
     }
 
-       $upload_dir  = __DIR__ . '/../uploads/guide_registrations/';
-    $id_img_path = '';
-    
-    // Create directories if they don't exist
-    if (!is_dir(__DIR__ . '/../uploads/')) {
-        mkdir(__DIR__ . '/../uploads/', 0755, true);
-    }
-    if (!is_dir($upload_dir)) {
-        mkdir($upload_dir, 0755, true);
-    }
+    $upload_dir  = __DIR__ . '/../uploads/guide_registrations/';
+$id_img_path = '';
+
+// Suppress warnings with @ (not ideal but works)
+if (!is_dir(__DIR__ . '/../uploads/')) {
+    @mkdir(__DIR__ . '/../uploads/', 0755, true);
+}
+if (!is_dir($upload_dir)) {
+    @mkdir($upload_dir, 0755, true);
+}
 
     if (empty($errors)) {
         if (isset($_FILES['gov_id']) && $_FILES['gov_id']['error'] === UPLOAD_ERR_OK) {
