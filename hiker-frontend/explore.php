@@ -2192,11 +2192,6 @@ svg{display:block;flex-shrink:0;}
     color: var(--gold);
 }
 
-/* Guide verification badges */
-.status-confirmed { background: #e8f5e9; color: #2e7d32; border: 1px solid rgba(46,125,50,0.2); }
-.status-pending { background: #fff8e1; color: #f57f17; border: 1px solid rgba(245,127,23,0.2); }
-.status-cancelled { background: #fce4ec; color: #c62828; border: 1px solid rgba(198,40,40,0.2); }
-
 </style>
 </head>
 <body>
@@ -3765,80 +3760,14 @@ const revListHtml = g.reviews.length
   : '<div style="padding:24px;text-align:center;color:var(--stone);font-size:13px;">No reviews yet.</div>';
   document.getElementById('gRevList').innerHTML = revListHtml;
   
-// Build verification status badge
-const verificationStatus = {
-    0: { text: 'Pending Verification', class: 'status-pending', icon: '⏳' },
-    1: { text: 'Verified Guide', class: 'status-confirmed', icon: '✅' },
-    2: { text: 'Verification Failed', class: 'status-cancelled', icon: '❌' }
-}[g.is_approved] || { text: 'Unknown', class: 'status-pending', icon: '❓' };
-
-// Build ID image HTML
-let idImageHtml = '';
-if (g.id_image) {
-    idImageHtml = `<div style="margin-top:6px;">
-        <a href="/${g.id_image}" target="_blank" style="display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="2" width="20" height="20" rx="2.18"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5-6 6-3-3-4 4"/></svg>
-            View ID Document
-        </a>
-    </div>`;
-} else if (g.id_image_base64) {
-    idImageHtml = `<div style="margin-top:6px;">
-        <a href="${g.id_image_base64}" target="_blank" style="display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="2" width="20" height="20" rx="2.18"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5-6 6-3-3-4 4"/></svg>
-            View ID Document
-        </a>
-    </div>`;
-} else {
-    idImageHtml = `<div style="margin-top:6px; color:var(--stone); font-size:10px;">No ID document</div>`;
-}
-
-// GCash info HTML
-let gcashHtml = '';
-if (g.gcash_number && g.gcash_name) {
-    gcashHtml = `
-        <div class="gd-item">
-            <div class="gd-lbl">💳 GCash</div>
-            <div class="gd-val">
-                ${esc(g.gcash_name)}<br>
-                <span style="font-size:11px; color:var(--stone);">${esc(g.gcash_number)}</span>
-            </div>
-            ${g.gcash_qr_code ? `<div style="margin-top:6px;"><img src="${g.gcash_qr_code}" alt="GCash QR" style="max-width:70px; border-radius:8px; cursor:pointer;" onclick="window.open(this.src)"></div>` : ''}
-        </div>
-    `;
-} else {
-    gcashHtml = `<div class="gd-item"><div class="gd-lbl">💳 GCash</div><div class="gd-val" style="color:var(--stone);">Not set up</div></div>`;
-}
-
-// Trail status HTML
-let trailStatusHtml = '';
-const trailStatusMap = {
-    'safe': { icon: '🟢', text: 'Safe', class: 'status-confirmed' },
-    'caution': { icon: '🟡', text: 'Caution', class: 'status-pending' },
-    'danger': { icon: '🔴', text: 'Danger', class: 'status-cancelled' }
-};
-const trailStatus = trailStatusMap[g.trail_status] || trailStatusMap.safe;
-
-if (g.id_image) {
-    // Regular image from uploads folder
-    idImageHtml = `<div style="margin-top:8px;">
-        <img src="/${g.id_image}" alt="ID Document" style="max-width:100%; max-height:150px; border-radius:8px; border:1px solid var(--mist); object-fit:contain;">
-    </div>`;
-} else if (g.id_image_base64 && g.id_image_base64.startsWith('data:image')) {
-    // Base64 image
-    idImageHtml = `<div style="margin-top:8px;">
-        <img src="${g.id_image_base64}" alt="ID Document" style="max-width:100%; max-height:150px; border-radius:8px; border:1px solid var(--mist); object-fit:contain;">
-    </div>`;
-} else {
-    idImageHtml = `<div style="margin-top:8px; color:var(--stone); font-size:12px;">No ID document uploaded</div>`;
-}
-
-// Display only Guide ID and ID Type with image
-document.getElementById('gDetails').innerHTML = `
-    <div class="gd-item">
-        <div class="gd-lbl">🪪 ID Type</div>
-        <div class="gd-val">${g.id_type ? esc(g.id_type) : 'Not provided'}${idImageHtml}</div>
-    </div>
-`;
+  document.getElementById('gDetails').innerHTML=[
+    {lbl:'Specialization',val:g.specialization},
+    {lbl:'Experience',    val:g.years_experience+' years'},
+    {lbl:'Hiking Level',  val:g.hiking_level},
+    {lbl:'Home Region',   val:g.home_region},
+    {lbl:'Languages',     val:'English, Tagalog'},
+    {lbl:'Certifications',val:'First Aid Certified'},
+  ].map(d=>`<div class="gd-item"><div class="gd-lbl">${d.lbl}</div><div class="gd-val">${esc(d.val)}</div></div>`).join('');
   gTab('reviews',document.querySelector('.g-mtab'));
   document.getElementById('guideOverlay').classList.add('open');
   document.body.style.overflow='hidden';
