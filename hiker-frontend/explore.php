@@ -2486,15 +2486,11 @@ $currentPage = 'explore'; // Change per page: 'explore', 'bookings', 'quiz', 'me
     </div>
 
     <div class="guide-modal-footer">
-      <button class="g-action g-msg" onclick="msgGuide()">
-        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        Message
-      </button>
-      <button class="g-action g-book" onclick="bookGuide()">
-        <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        Book This Guide
-      </button>
-    </div>
+  <button class="g-action g-msg btn-full" onclick="msgGuide()">
+    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Message Guide 
+  </button>
+</div>
   </div>
 </div>
 
