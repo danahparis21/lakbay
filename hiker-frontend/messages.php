@@ -1684,7 +1684,18 @@ async function submitProofOfPayment() {
             method: 'POST',
             body: formData
         });
-        const uploadData = await uploadRes.json();
+        
+        const responseText = await uploadRes.text();
+        console.log('Upload response:', responseText);
+        
+        let uploadData;
+        try {
+            uploadData = JSON.parse(responseText);
+        } catch (e) {
+            console.error('Failed to parse JSON:', responseText);
+            showToast('❌ Server error: Invalid response from upload');
+            return;
+        }
         
         if (!uploadData.success) {
             showToast('❌ Failed to upload image: ' + (uploadData.message || 'Unknown error'));
@@ -1713,11 +1724,10 @@ async function submitProofOfPayment() {
             showToast('❌ Error: ' + (data.message || 'Unknown error'));
         }
     } catch (err) {
-        console.error(err);
+        console.error('Upload error:', err);
         showToast('❌ Network error. Please try again.');
     }
 }
-
 
 
 </script>
