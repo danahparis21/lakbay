@@ -357,12 +357,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
                 $year = date('Y');
                 $prefix = $isCamping ? 'CK' : 'BK';
 
-                // Count existing bookings with this prefix to generate number
-                $stmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE booking_number LIKE ?");
-                $stmt->execute([$prefix . '-' . $year . '-%']);
-                $count = $stmt->fetchColumn() + 1;
-                $bookingNumber = $prefix . '-' . $year . '-' . str_pad($count, 3, '0', STR_PAD_LEFT);
+                // Get the highest booking number for this year
+$stmt = $pdo->prepare("
+    SELECT MAX(booking_number) as max_num 
+    FROM bookings 
+    WHERE booking_number LIKE ?
+");
+$stmt->execute([$prefix . '-' . $year . '-%']);
+$maxBooking = $stmt->fetch(PDO::FETCH_ASSOC);
 
+if ($maxBooking && $maxBooking['max_num']) {
+    // Extract the number part (last 3 digits)
+    $lastNum = intval(substr($maxBooking['max_num'], -3));
+    $nextNum = $lastNum + 1;
+    $bookingNumber = $prefix . '-' . $year . '-' . str_pad($nextNum, 3, '0', STR_PAD_LEFT);
+    
+    // Double-check this number isn't already taken (just in case of gaps)
+    $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE booking_number = ?");
+    $checkStmt->execute([$bookingNumber]);
+    if ($checkStmt->fetchColumn() > 0) {
+        // If somehow taken (gap fill issue), find the next available
+        while (true) {
+            $nextNum++;
+            $bookingNumber = $prefix . '-' . $year . '-' . str_pad($nextNum, 3, '0', STR_PAD_LEFT);
+            $checkStmt->execute([$bookingNumber]);
+            if ($checkStmt->fetchColumn() == 0) break;
+        }
+    }
+} else {
+    // First booking of the year
+    $bookingNumber = $prefix . '-' . $year . '-001';
+}
                 // Use the total fee calculated by the frontend to ensure consistency
                 $totalAmount = $bookingData['totalFee'] ?? 0;
 
