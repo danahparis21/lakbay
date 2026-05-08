@@ -2790,7 +2790,7 @@ async function loadTrailForModal(mountainId) {
       trailDifficultyElem.innerHTML = `<span style="background:${diffBg}; color:${diffColor}; padding:4px 12px; border-radius:30px; font-weight:600;">${difficulty}</span>`;
     }
     
-    // Initialize trail map
+    // Initialize trail map with a small delay
     const trailMapContainer = document.getElementById('trailMap');
     if (trailMapContainer) {
       if (trailMap) {
@@ -2801,6 +2801,17 @@ async function loadTrailForModal(mountainId) {
       waypointMarkers.forEach(marker => { if (marker && marker.remove) marker.remove(); });
       waypointMarkers = [];
       
+      // Get the container's dimensions before creating map
+      const containerWidth = trailMapContainer.clientWidth;
+      const containerHeight = trailMapContainer.clientHeight;
+      
+      if (containerWidth === 0 || containerHeight === 0) {
+        console.log('Map container not visible yet, waiting...');
+        // Wait a bit if container is hidden
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // Create map
       trailMap = L.map('trailMap');
       
       // Collect all coordinates for bounds
@@ -2816,6 +2827,7 @@ async function loadTrailForModal(mountainId) {
           lineCap: 'round'
         }).addTo(trailMap);
         allCoords = allCoords.concat(trailCoords);
+        console.log(`Added ${trailCoords.length} trail points`);
       }
       
       // Get icon for waypoint type
@@ -2917,6 +2929,7 @@ async function loadTrailForModal(mountainId) {
             waypointMarkers.push(marker);
           }
         });
+        console.log(`Added ${data.waypoints.length} waypoints`);
       }
       
       // Update waypoints list in right panel
@@ -2999,16 +3012,40 @@ async function loadTrailForModal(mountainId) {
       }
       
       // Add tile layer
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-        subdomains: 'abcd'
+        subdomains: 'abcd',
+        maxZoom: 19
       }).addTo(trailMap);
+      
+      // Force a resize after a short delay
+      setTimeout(() => {
+        if (trailMap) {
+          trailMap.invalidateSize();
+          console.log('Map invalidated size');
+        }
+      }, 100);
       
       // Zoom to bounds if we have coordinates
       if (allCoords.length > 0) {
-        const bounds = L.latLngBounds(allCoords);
-        trailMap.fitBounds(bounds.pad(0.15));
-        console.log(`Zooming to bounds with ${allCoords.length} points`);
+        try {
+          const bounds = L.latLngBounds(allCoords);
+          if (bounds.isValid()) {
+            trailMap.fitBounds(bounds.pad(0.15));
+            console.log(`Zooming to bounds with ${allCoords.length} points`);
+          } else {
+            throw new Error('Invalid bounds');
+          }
+        } catch (e) {
+          console.warn('Bounds calculation failed, using center point');
+          if (data.mountain?.lat && data.mountain?.lng) {
+            trailMap.setView([data.mountain.lat, data.mountain.lng], 14);
+          } else if (allCoords.length > 0) {
+            trailMap.setView(allCoords[0], 14);
+          } else {
+            trailMap.setView([14.0583, 120.8320], 12);
+          }
+        }
       } else if (data.mountain?.lat && data.mountain?.lng) {
         trailMap.setView([data.mountain.lat, data.mountain.lng], 14);
         console.log('Using mountain center point');
@@ -3033,14 +3070,17 @@ async function loadTrailForModal(mountainId) {
     const trailMapContainer = document.getElementById('trailMap');
     if (trailMapContainer && !trailMap) {
       trailMap = L.map('trailMap').setView([14.0583, 120.8320], 12);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-        subdomains: 'abcd'
+        subdomains: 'abcd',
+        maxZoom: 19
       }).addTo(trailMap);
     }
   }
 }
-// Update tab switching - FIXED for modal-tab class
+
+
+// Update tab switching - FIXED for modal-tab class with better map handling
 document.querySelectorAll('.modal-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const tabName = tab.getAttribute('data-tab');
@@ -3049,9 +3089,12 @@ document.querySelectorAll('.modal-tab').forEach(tab => {
     tab.classList.add('active');
     document.getElementById(`tp-${tabName}`).classList.add('active');
     
-    // Refresh trail map if needed
+    // Refresh trail map if needed with better sizing
     if (tabName === 'trail' && trailMap) {
-      setTimeout(() => trailMap.invalidateSize(), 100);
+      setTimeout(() => {
+        trailMap.invalidateSize();
+        console.log('Trail map resized after tab switch');
+      }, 150);
     }
   });
 });
