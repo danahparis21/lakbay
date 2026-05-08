@@ -2609,26 +2609,78 @@ document.querySelector('[data-section="system_review"]').addEventListener('click
         initSystemStars();
     }, 100);
 });
-
 function uploadAvatar(input) {
     if (!input.files || !input.files[0]) return;
     
     const file = input.files[0];
     
-    // Check file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-        showToast('❌ File too large. Maximum 2MB.', 'error');
-        input.value = ''; // Clear the input
-        return;
-    }
-    
-    // Check if it's actually an image
-    if (!file.type.startsWith('image/')) {
-        showToast('❌ Please select an image file (JPG, PNG, GIF, WEBP).', 'error');
+    // Check file size first (max 15MB before compression)
+    if (file.size > 15 * 1024 * 1024) {
+        showToast('❌ File too large. Maximum 15MB before compression.', 'error');
         input.value = '';
         return;
     }
     
+    // Compress large images before upload
+    if (file.size > 1 * 1024 * 1024) { // If larger than 1MB
+        showToast('📦 Compressing image...', 'info');
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                // Max dimension 800px (good for avatars)
+                const maxDim = 800;
+                if (width > maxDim) {
+                    height = (height * maxDim) / width;
+                    width = maxDim;
+                }
+                if (height > maxDim) {
+                    width = (width * maxDim) / height;
+                    height = maxDim;
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Keep PNG as PNG if it has transparency, otherwise convert to JPEG
+                const isPNG = file.type === 'image/png';
+                const mimeType = isPNG ? 'image/png' : 'image/jpeg';
+                const quality = isPNG ? 0.9 : 0.8;
+                
+                canvas.toBlob(function(blob) {
+                    const extension = isPNG ? '.png' : '.jpg';
+                    const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, extension), {
+                        type: mimeType,
+                        lastModified: Date.now()
+                    });
+                    console.log(`Compressed: ${(file.size / 1024).toFixed(1)}KB → ${(blob.size / 1024).toFixed(1)}KB`);
+                    uploadToServer(compressedFile);
+                }, mimeType, quality);
+            };
+            img.onerror = function() {
+                showToast('❌ Failed to load image. Please try another file.', 'error');
+                input.value = '';
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = function() {
+            showToast('❌ Failed to read file. Please try again.', 'error');
+            input.value = '';
+        };
+        reader.readAsDataURL(file);
+    } else {
+        uploadToServer(file);
+    }
+}
+
+function uploadToServer(file) {
     const formData = new FormData();
     formData.append('avatar', file);
     
@@ -2641,24 +2693,12 @@ function uploadAvatar(input) {
     .then(response => response.text())
     .then(() => {
         showToast('✓ Profile picture updated!', 'success');
-        // Add timestamp to force cache refresh
-        const timestamp = Date.now();
-        const avatarDiv = document.getElementById('avatarDisplay');
-        const currentStyle = avatarDiv.style.backgroundImage;
-        // Force reload by updating the URL with a timestamp
-        if (currentStyle && currentStyle.includes('url(')) {
-            const urlMatch = currentStyle.match(/url\(["']?([^"')]+)["']?\)/);
-            if (urlMatch && urlMatch[1]) {
-                const newUrl = urlMatch[1].split('?')[0] + '?t=' + timestamp;
-                avatarDiv.style.backgroundImage = `url('${newUrl}')`;
-            }
-        }
         setTimeout(() => window.location.reload(), 1500);
     })
     .catch(err => {
         console.error('Upload error:', err);
         showToast('❌ Upload failed. Please try again.', 'error');
-        input.value = ''; // Clear the input on error
+        document.getElementById('profilePicInput').value = ''; // Clear the input
     });
 }
 
