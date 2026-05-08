@@ -206,7 +206,9 @@ foreach ($dbGuideReviews as $rev) {
 // --- Guides ---
 $stmt = $pdo->query("
     SELECT g.*, u.name as guide_name, u.avatar, u.phone, u.email, u.hiking_level, u.home_region
-    FROM guides g JOIN users u ON g.user_id = u.id WHERE g.is_available = 1
+    FROM guides g 
+    JOIN users u ON g.user_id = u.id 
+    WHERE g.is_available = 1 AND g.is_approved = 1
 ");
 $dbGuides = $stmt->fetchAll();
 
@@ -244,13 +246,62 @@ foreach ($dbGuides as $dbGuide) {
         'mountains'        => $guideMountains,
         'reviews'          => $guideRevs,
         'reviews_count'    => count($guideRevs),
+        // ===== ADD THESE NEW FIELDS =====
+        'gcash_number'     => $dbGuide['gcash_number'] ?? null,
+        'gcash_name'       => $dbGuide['gcash_name'] ?? null,
+        'gcash_qr_code'    => $dbGuide['gcash_qr_code'] ?? null,
+        'id_type'          => $dbGuide['id_type'] ?? null,
+        'id_image'         => $dbGuide['id_image'] ?? null,
+        'id_image_base64'  => $dbGuide['id_image_base64'] ?? null,
+        'is_approved'      => $dbGuide['is_approved'] ?? 0,
+        'submitted_at'     => $dbGuide['submitted_at'] ?? null,
+        'trail_status'     => $dbGuide['trail_status'] ?? 'safe',
     ];
 }
-
 if (empty($guides)) {
     $guides = [
-        ['id'=>1,'user_id'=>3,'name'=>'Maria Guide','initials'=>'MG','avatar'=>null,'email'=>'guide@lakbay.com','phone'=>null,'hiking_level'=>'Expert','home_region'=>'Batangas','specialization'=>'Mountain Trekking','years_experience'=>5,'rating'=>4.8,'total_trips'=>120,'bio'=>'Experienced mountain guide specializing in Mt. Batulao and surrounding peaks.','is_available'=>true,'mountains'=>[['id'=>1,'name'=>'Mt. Batulao','difficulty'=>'Easy','location'=>'Nasugbu, Batangas']],'reviews'=>[],'reviews_count'=>0],
-        ['id'=>2,'user_id'=>5,'name'=>'John Dela Cruz','initials'=>'JD','avatar'=>null,'email'=>'john@lakbay.com','phone'=>'+639123456789','hiking_level'=>'Expert','home_region'=>'Cavite','specialization'=>'Rock Climbing','years_experience'=>3,'rating'=>4.5,'total_trips'=>45,'bio'=>'Certified rock climbing instructor focused on safety and technique.','is_available'=>true,'mountains'=>[['id'=>2,'name'=>'Mt. Talamitam','difficulty'=>'Moderate','location'=>'Nasugbu, Batangas']],'reviews'=>[],'reviews_count'=>0],
+        [
+            'id' => 1,
+            'user_id' => 3,
+            'name' => 'Maria Guide',
+            'initials' => 'MG',
+            'avatar' => null,
+            'email' => 'guide@lakbay.com',
+            'phone' => null,
+            'hiking_level' => 'Expert',
+            'home_region' => 'Batangas',
+            'specialization' => 'Mountain Trekking',
+            'years_experience' => 5,
+            'rating' => 4.8,
+            'total_trips' => 120,
+            'bio' => 'Experienced mountain guide specializing in Mt. Batulao and surrounding peaks.',
+            'is_available' => true,
+            'mountains' => [['id' => 1, 'name' => 'Mt. Batulao', 'difficulty' => 'Easy', 'location' => 'Nasugbu, Batangas']],
+            'reviews' => [],
+            'reviews_count' => 0,
+            'is_approved' => 1,  // Add this
+        ],
+        [
+            'id' => 2,
+            'user_id' => 5,
+            'name' => 'John Dela Cruz',
+            'initials' => 'JD',
+            'avatar' => null,
+            'email' => 'john@lakbay.com',
+            'phone' => '+639123456789',
+            'hiking_level' => 'Expert',
+            'home_region' => 'Cavite',
+            'specialization' => 'Rock Climbing',
+            'years_experience' => 3,
+            'rating' => 4.5,
+            'total_trips' => 45,
+            'bio' => 'Certified rock climbing instructor focused on safety and technique.',
+            'is_available' => true,
+            'mountains' => [['id' => 2, 'name' => 'Mt. Talamitam', 'difficulty' => 'Moderate', 'location' => 'Nasugbu, Batangas']],
+            'reviews' => [],
+            'reviews_count' => 0,
+            'is_approved' => 1,  // Add this
+        ],
     ];
 }
 
@@ -2141,6 +2192,11 @@ svg{display:block;flex-shrink:0;}
     color: var(--gold);
 }
 
+/* Guide verification badges */
+.status-confirmed { background: #e8f5e9; color: #2e7d32; border: 1px solid rgba(46,125,50,0.2); }
+.status-pending { background: #fff8e1; color: #f57f17; border: 1px solid rgba(245,127,23,0.2); }
+.status-cancelled { background: #fce4ec; color: #c62828; border: 1px solid rgba(198,40,40,0.2); }
+
 </style>
 </head>
 <body>
@@ -2598,7 +2654,6 @@ function renderGuides(){
   track.innerHTML=guides.map((g,i)=>{
     let avatarStyle = '';
     if (g.avatar) {
-      // Use direct path from root - remove /lakbay prefix
       const avatarUrl = '/' + g.avatar;
       avatarStyle = `background-image:url('${avatarUrl}');background-size:cover;background-position:center;`;
     } else {
@@ -2608,7 +2663,10 @@ function renderGuides(){
     return `
     <div class="guide-card" onclick="openGuideModal(guides[${i}])">
       <div class="guide-avatar" style="${avatarStyle}">${g.avatar ? '' : esc(g.initials)}</div>
-      <div class="guide-name">${esc(g.name)}</div>
+      <div class="guide-name">
+        ${esc(g.name)} 
+        <span style="display:inline-block; background:#2e7d32; color:white; font-size:8px; padding:2px 4px; border-radius:10px; margin-left:4px;">✓</span>
+      </div>
       <div class="guide-spec">${esc(g.specialization)}</div>
       <div class="guide-rating">★ ${g.rating}</div>
       <div class="guide-trips">${g.total_trips} trips</div>
@@ -3707,14 +3765,115 @@ const revListHtml = g.reviews.length
   : '<div style="padding:24px;text-align:center;color:var(--stone);font-size:13px;">No reviews yet.</div>';
   document.getElementById('gRevList').innerHTML = revListHtml;
   
-  document.getElementById('gDetails').innerHTML=[
-    {lbl:'Specialization',val:g.specialization},
-    {lbl:'Experience',    val:g.years_experience+' years'},
-    {lbl:'Hiking Level',  val:g.hiking_level},
-    {lbl:'Home Region',   val:g.home_region},
-    {lbl:'Languages',     val:'English, Tagalog'},
-    {lbl:'Certifications',val:'First Aid Certified'},
-  ].map(d=>`<div class="gd-item"><div class="gd-lbl">${d.lbl}</div><div class="gd-val">${esc(d.val)}</div></div>`).join('');
+// Build verification status badge
+const verificationStatus = {
+    0: { text: 'Pending Verification', class: 'status-pending', icon: '⏳' },
+    1: { text: 'Verified Guide', class: 'status-confirmed', icon: '✅' },
+    2: { text: 'Verification Failed', class: 'status-cancelled', icon: '❌' }
+}[g.is_approved] || { text: 'Unknown', class: 'status-pending', icon: '❓' };
+
+// Build ID image HTML
+let idImageHtml = '';
+if (g.id_image) {
+    idImageHtml = `<div style="margin-top:6px;">
+        <a href="/${g.id_image}" target="_blank" style="display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="2" width="20" height="20" rx="2.18"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5-6 6-3-3-4 4"/></svg>
+            View ID Document
+        </a>
+    </div>`;
+} else if (g.id_image_base64) {
+    idImageHtml = `<div style="margin-top:6px;">
+        <a href="${g.id_image_base64}" target="_blank" style="display:inline-flex; align-items:center; gap:6px; color:var(--gold); text-decoration:none;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="2" width="20" height="20" rx="2.18"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5-6 6-3-3-4 4"/></svg>
+            View ID Document
+        </a>
+    </div>`;
+} else {
+    idImageHtml = `<div style="margin-top:6px; color:var(--stone); font-size:10px;">No ID document</div>`;
+}
+
+// GCash info HTML
+let gcashHtml = '';
+if (g.gcash_number && g.gcash_name) {
+    gcashHtml = `
+        <div class="gd-item">
+            <div class="gd-lbl">💳 GCash</div>
+            <div class="gd-val">
+                ${esc(g.gcash_name)}<br>
+                <span style="font-size:11px; color:var(--stone);">${esc(g.gcash_number)}</span>
+            </div>
+            ${g.gcash_qr_code ? `<div style="margin-top:6px;"><img src="${g.gcash_qr_code}" alt="GCash QR" style="max-width:70px; border-radius:8px; cursor:pointer;" onclick="window.open(this.src)"></div>` : ''}
+        </div>
+    `;
+} else {
+    gcashHtml = `<div class="gd-item"><div class="gd-lbl">💳 GCash</div><div class="gd-val" style="color:var(--stone);">Not set up</div></div>`;
+}
+
+// Trail status HTML
+let trailStatusHtml = '';
+const trailStatusMap = {
+    'safe': { icon: '🟢', text: 'Safe', class: 'status-confirmed' },
+    'caution': { icon: '🟡', text: 'Caution', class: 'status-pending' },
+    'danger': { icon: '🔴', text: 'Danger', class: 'status-cancelled' }
+};
+const trailStatus = trailStatusMap[g.trail_status] || trailStatusMap.safe;
+
+// Display all details
+document.getElementById('gDetails').innerHTML = `
+    <div class="gd-item">
+        <div class="gd-lbl">🆔 Guide ID</div>
+        <div class="gd-val">#${g.id}</div>
+    </div>
+    <div class="gd-item">
+        <div class="gd-lbl">📛 Verification</div>
+        <div class="gd-val">
+            <span class="badge ${verificationStatus.class}" style="display:inline-flex; align-items:center; gap:4px;">
+                ${verificationStatus.icon} ${verificationStatus.text}
+            </span>
+        </div>
+    </div>
+    <div class="gd-item">
+        <div class="gd-lbl">🪪 ID Type</div>
+        <div class="gd-val">${g.id_type ? esc(g.id_type) : 'Not provided'}${idImageHtml}</div>
+    </div>
+    ${gcashHtml}
+    <div class="gd-item">
+        <div class="gd-lbl">🏔️ Trail Status</div>
+        <div class="gd-val">
+            <span class="badge ${trailStatus.class}" style="display:inline-flex; align-items:center; gap:4px;">
+                ${trailStatus.icon} ${trailStatus.text}
+            </span>
+        </div>
+    </div>
+    <div class="gd-item">
+        <div class="gd-lbl">📅 Verified Since</div>
+        <div class="gd-val">${g.submitted_at ? new Date(g.submitted_at).toLocaleDateString('en-PH') : 'Not yet'}</div>
+    </div>
+    <div class="gd-item">
+        <div class="gd-lbl">🎯 Specialization</div>
+        <div class="gd-val">${esc(g.specialization) || 'General'}</div>
+    </div>
+    <div class="gd-item">
+        <div class="gd-lbl">📅 Experience</div>
+        <div class="gd-val">${g.years_experience}+ years</div>
+    </div>
+    <div class="gd-item">
+        <div class="gd-lbl">🥾 Hiking Level</div>
+        <div class="gd-val">${esc(g.hiking_level) || 'Expert'}</div>
+    </div>
+    <div class="gd-item">
+        <div class="gd-lbl">📍 Home Region</div>
+        <div class="gd-val">${esc(g.home_region) || 'Philippines'}</div>
+    </div>
+    <div class="gd-item">
+        <div class="gd-lbl">🗣️ Languages</div>
+        <div class="gd-val">English, Tagalog</div>
+    </div>
+    <div class="gd-item">
+        <div class="gd-lbl">📜 Certifications</div>
+        <div class="gd-val">First Aid Certified, Licensed Guide</div>
+    </div>
+`;
   gTab('reviews',document.querySelector('.g-mtab'));
   document.getElementById('guideOverlay').classList.add('open');
   document.body.style.overflow='hidden';
