@@ -438,6 +438,26 @@ function submitPaymentProof($pdo, $hikerId) {
 #proofModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
 #proofModal.open { display: flex; }
 
+.msg-bubble-row {
+    display: block !important;
+    clear: both;
+    overflow: hidden;
+    margin-bottom: 14px;
+}
+
+.msg-bubble-row.mine {
+    text-align: right;
+}
+
+.msg-bubble-row:not(.mine) {
+    text-align: left;
+}
+
+.msg-bubble-row > div {
+    display: inline-block;
+    max-width: 80%;
+}
+
 </style>
 </head>
 <body>
