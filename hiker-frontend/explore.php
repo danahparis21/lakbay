@@ -2790,7 +2790,7 @@ async function loadTrailForModal(mountainId) {
       trailDifficultyElem.innerHTML = `<span style="background:${diffBg}; color:${diffColor}; padding:4px 12px; border-radius:30px; font-weight:600;">${difficulty}</span>`;
     }
     
-    // Initialize trail map with a small delay
+    // Initialize trail map
     const trailMapContainer = document.getElementById('trailMap');
     if (trailMapContainer) {
       if (trailMap) {
@@ -2801,23 +2801,21 @@ async function loadTrailForModal(mountainId) {
       waypointMarkers.forEach(marker => { if (marker && marker.remove) marker.remove(); });
       waypointMarkers = [];
       
-      // Get the container's dimensions before creating map
-      const containerWidth = trailMapContainer.clientWidth;
-      const containerHeight = trailMapContainer.clientHeight;
+      // Set fixed view to Nasugbu, Batangas area (zoomed in)
+      // This covers all mountains: Batulao (14.0583, 120.832), Lantik (14.1057, 120.7636), etc.
+      const nasugbuCenter = [14.07, 120.80];
+      const zoomLevel = 13; // Good zoom level to see all mountains in Nasugbu
       
-      if (containerWidth === 0 || containerHeight === 0) {
-        console.log('Map container not visible yet, waiting...');
-        // Wait a bit if container is hidden
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      trailMap = L.map('trailMap').setView(nasugbuCenter, zoomLevel);
       
-      // Create map
-      trailMap = L.map('trailMap');
+      // Add tile layer - using the same as active-hike.php
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+        subdomains: 'abcd',
+        maxZoom: 19
+      }).addTo(trailMap);
       
-      // Collect all coordinates for bounds
-      let allCoords = [];
-      
-      // Draw trail and collect coordinates
+      // Draw trail if available
       if (data.success && data.trail && data.trail.length > 0) {
         const trailCoords = data.trail.map(c => [c[1], c[0]]);
         L.polyline(trailCoords, {
@@ -2826,11 +2824,9 @@ async function loadTrailForModal(mountainId) {
           opacity: 0.9,
           lineCap: 'round'
         }).addTo(trailMap);
-        allCoords = allCoords.concat(trailCoords);
-        console.log(`Added ${trailCoords.length} trail points`);
       }
       
-      // Get icon for waypoint type
+      // Waypoint icons mapping
       function getIconForType(type) {
         const icons = {
           'summit': 'fa-mountain',
@@ -2882,7 +2878,7 @@ async function loadTrailForModal(mountainId) {
         return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
       }
       
-      // Add waypoints to map and collect their coordinates
+      // Add waypoints to map
       if (data.waypoints && data.waypoints.length > 0) {
         data.waypoints.forEach(wp => {
           const lat = parseFloat(wp.latitude);
@@ -2890,8 +2886,6 @@ async function loadTrailForModal(mountainId) {
           const type = wp.type || 'viewpoint';
           
           if (!isNaN(lat) && !isNaN(lng)) {
-            allCoords.push([lat, lng]);
-            
             const iconClass = getIconForType(type);
             const colorClass = getColorClass(type);
             const displayType = getDisplayType(type);
@@ -2929,7 +2923,6 @@ async function loadTrailForModal(mountainId) {
             waypointMarkers.push(marker);
           }
         });
-        console.log(`Added ${data.waypoints.length} waypoints`);
       }
       
       // Update waypoints list in right panel
@@ -3011,48 +3004,13 @@ async function loadTrailForModal(mountainId) {
         }
       }
       
-      // Add tile layer
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-        subdomains: 'abcd',
-        maxZoom: 19
-      }).addTo(trailMap);
-      
-      // Force a resize after a short delay
+      // Force map to refresh after a short delay
       setTimeout(() => {
         if (trailMap) {
           trailMap.invalidateSize();
-          console.log('Map invalidated size');
+          console.log('Map invalidated and zoomed to Nasugbu');
         }
-      }, 100);
-      
-      // Zoom to bounds if we have coordinates
-      if (allCoords.length > 0) {
-        try {
-          const bounds = L.latLngBounds(allCoords);
-          if (bounds.isValid()) {
-            trailMap.fitBounds(bounds.pad(0.15));
-            console.log(`Zooming to bounds with ${allCoords.length} points`);
-          } else {
-            throw new Error('Invalid bounds');
-          }
-        } catch (e) {
-          console.warn('Bounds calculation failed, using center point');
-          if (data.mountain?.lat && data.mountain?.lng) {
-            trailMap.setView([data.mountain.lat, data.mountain.lng], 14);
-          } else if (allCoords.length > 0) {
-            trailMap.setView(allCoords[0], 14);
-          } else {
-            trailMap.setView([14.0583, 120.8320], 12);
-          }
-        }
-      } else if (data.mountain?.lat && data.mountain?.lng) {
-        trailMap.setView([data.mountain.lat, data.mountain.lng], 14);
-        console.log('Using mountain center point');
-      } else {
-        trailMap.setView([14.0583, 120.8320], 12);
-        console.log('Using default Nasugbu view');
-      }
+      }, 150);
     }
   } catch (error) {
     console.error('Error loading trail data:', error);
@@ -3066,10 +3024,10 @@ async function loadTrailForModal(mountainId) {
     if (trailDifficultyElem) trailDifficultyElem.innerHTML = 'Unavailable';
     if (waypointsContainer) waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">Trail information unavailable at this time.</p>';
     
-    // Still try to show something on the map
+    // Still create a basic map at Nasugbu
     const trailMapContainer = document.getElementById('trailMap');
     if (trailMapContainer && !trailMap) {
-      trailMap = L.map('trailMap').setView([14.0583, 120.8320], 12);
+      trailMap = L.map('trailMap').setView([14.07, 120.80], 13);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
         subdomains: 'abcd',
@@ -3078,7 +3036,6 @@ async function loadTrailForModal(mountainId) {
     }
   }
 }
-
 
 // Update tab switching - FIXED for modal-tab class with better map handling
 document.querySelectorAll('.modal-tab').forEach(tab => {
