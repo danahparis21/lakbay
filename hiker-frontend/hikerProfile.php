@@ -170,12 +170,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
     
     // Create directory if it doesn't exist
     if (!file_exists($uploadDir)) {
-        mkdir($uploadDir, 0755, true);  // Note: 0755 instead of 0777
+        mkdir($uploadDir, 0755, true);
     }
     
     // Check if directory is writable
     if (!is_writable($uploadDir)) {
-        // Try to set permissions
         chmod($uploadDir, 0755);
     }
     
@@ -186,21 +185,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
     $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     
+    $errorMessage = null;
+    $success = false;
+    
     if (in_array($_FILES['avatar']['type'], $allowedTypes) && in_array($fileExt, $allowedExts) && $_FILES['avatar']['error'] === 0) {
-        // Check file size (max 2MB)
         if ($_FILES['avatar']['size'] > 2 * 1024 * 1024) {
             $errorMessage = "File too large. Maximum 2MB.";
         } else {
             if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
                 $avatarPath = '/uploads/avatars/' . $fileName;
                 $stmt = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
-                $stmt->execute([$avatarPath, $currentUserId]);
-                $currentUser['avatar'] = $avatarPath;
-                $_SESSION['user_avatar'] = $avatarPath;
-                
-                // Refresh the page to show new avatar
-                echo "<script>window.location.reload();</script>";
-                exit;
+                if ($stmt->execute([$avatarPath, $currentUserId])) {
+                    $currentUser['avatar'] = $avatarPath;
+                    $_SESSION['user_avatar'] = $avatarPath;
+                    $success = true;
+                } else {
+                    $errorMessage = "Database update failed.";
+                }
             } else {
                 $errorMessage = "Failed to save file. Please check directory permissions.";
                 error_log("Upload failed - couldn't move file to: " . $uploadPath);
@@ -210,9 +211,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
         $errorMessage = "Invalid file type. Use JPG, PNG, GIF, or WEBP.";
     }
     
-    // If we get here, there was an error
-    echo "<script>alert('" . addslashes($errorMessage) . "'); window.location.reload();</script>";
-    exit;
+    if ($success) {
+        // Use JavaScript redirect instead of reload to avoid form resubmission
+        echo "<script>
+            alert('Profile picture updated successfully!');
+            window.location.href = window.location.href.split('?')[0];
+        </script>";
+        exit;
+    } else {
+        echo "<script>
+            alert('" . addslashes($errorMessage) . "');
+            window.location.href = window.location.href.split('?')[0];
+        </script>";
+        exit;
+    }
 }
 
 // Handle profile update (name, email, phone, home_region)
@@ -1708,18 +1720,16 @@ $currentPage = 'hikerProfile'; // Change per page: 'explore', 'bookings', 'quiz'
   <aside class="profile-sidebar">
     <div class="sidebar-avatar">
       <div class="avatar-wrapper">
-        <div class="avatar-circle" id="avatarDisplay" style="<?php echo $currentUser['avatar'] ? 'background-image: url(' . htmlspecialchars($currentUser['avatar']) . '); background-size: cover; background-position: center;' : ''; ?>">
-          <?php if (!$currentUser['avatar']): ?>
-          <span id="avatarInitial"><?php echo htmlspecialchars($userInitial); ?></span>
-          <?php endif; ?>
-        </div>
-        <form method="POST" enctype="multipart/form-data" id="avatarForm">
-          <div class="camera-icon" onclick="document.getElementById('profilePicInput').click()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          </div>
-          <input type="file" id="profilePicInput" name="avatar" accept="image/*" style="display:none" onchange="this.form.submit()">
-        </form>
-      </div>
+    <div class="avatar-circle" id="avatarDisplay" style="<?php echo $currentUser['avatar'] ? 'background-image: url(' . htmlspecialchars($currentUser['avatar']) . '); background-size: cover; background-position: center;' : ''; ?>">
+        <?php if (!$currentUser['avatar']): ?>
+        <span id="avatarInitial"><?php echo htmlspecialchars($userInitial); ?></span>
+        <?php endif; ?>
+    </div>
+    <div class="camera-icon" onclick="document.getElementById('profilePicInput').click()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    </div>
+    <input type="file" id="profilePicInput" name="avatar" accept="image/*" style="display:none" onchange="uploadAvatar(this)">
+</div>
       <div class="sidebar-name"><?php echo htmlspecialchars($currentUser['name']); ?></div>
       <div class="sidebar-email"><?php echo htmlspecialchars($currentUser['email']); ?></div>
     </div>
@@ -2568,6 +2578,30 @@ document.querySelector('[data-section="system_review"]').addEventListener('click
         initSystemStars();
     }, 100);
 });
+
+function uploadAvatar(input) {
+    if (!input.files || !input.files[0]) return;
+    
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
+    showToast('📤 Uploading...', 'info');
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.text())
+    .then(() => {
+        showToast('✓ Profile picture updated!', 'success');
+        setTimeout(() => window.location.reload(), 1500);
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('❌ Upload failed. Please try again.', 'error');
+    });
+}
 
 function viewActivity(bookingId) {
     window.location.href = `view_activity.php?booking_id=${bookingId}`;
