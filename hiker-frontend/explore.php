@@ -3765,8 +3765,6 @@ const revListHtml = g.reviews.length
     {lbl:'Experience',    val:g.years_experience+' years'},
     {lbl:'Hiking Level',  val:g.hiking_level},
     {lbl:'Home Region',   val:g.home_region},
-    {lbl:'Languages',     val:'English, Tagalog'},
-    {lbl:'Certifications',val:'First Aid Certified'},
   ].map(d=>`<div class="gd-item"><div class="gd-lbl">${d.lbl}</div><div class="gd-val">${esc(d.val)}</div></div>`).join('');
   gTab('reviews',document.querySelector('.g-mtab'));
   document.getElementById('guideOverlay').classList.add('open');
