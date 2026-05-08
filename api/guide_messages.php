@@ -38,10 +38,59 @@ try {
         case 'reject_payment': rejectPayment($pdo, $guideId); break;
         case 'get_booking_status': getBookingStatus($pdo, $guideId); break;
         case 'submit_payment_proof':   submitPaymentProof($pdo, $guideId); break;
+        case 'get_proof_image': getProofImage($pdo, $guideId); break;
         default: echo json_encode(['success' => false, 'message' => 'Invalid action: ' . $action]);
     }
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+}
+
+// Add this function at the bottom of the file:
+function getProofImage($pdo, $guideId) {
+    $messageId = $_GET['message_id'] ?? 0;
+    
+    if (!$messageId) {
+        http_response_code(400);
+        echo "Missing message ID";
+        return;
+    }
+    
+    // Get the proof_image from the message
+    $stmt = $pdo->prepare("SELECT proof_image FROM messages WHERE id = ?");
+    $stmt->execute([$messageId]);
+    $result = $stmt->fetch();
+    
+    if (!$result || !$result['proof_image']) {
+        http_response_code(404);
+        echo "Image not found";
+        return;
+    }
+    
+    $imageData = $result['proof_image'];
+    
+    // Extract the base64 data (remove the data:image/xxx;base64, prefix if present)
+    if (strpos($imageData, 'base64,') !== false) {
+        $imageData = substr($imageData, strpos($imageData, 'base64,') + 7);
+    }
+    
+    // Decode and send the image
+    $binaryData = base64_decode($imageData);
+    if ($binaryData === false) {
+        http_response_code(500);
+        echo "Invalid image data";
+        return;
+    }
+    
+    // Detect mime type from the original data
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mimeType = finfo_buffer($finfo, $binaryData);
+    finfo_close($finfo);
+    
+    header("Content-Type: $mimeType");
+    header("Content-Length: " . strlen($binaryData));
+    header("Cache-Control: public, max-age=3600");
+    
+    echo $binaryData;
 }
 
 function getBookingStatus($pdo, $guideId) {

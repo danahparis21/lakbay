@@ -1560,31 +1560,27 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
     const refMatch = bodyText.match(/Reference Number:\s*([^\n]+)/);
     const referenceNumber = refMatch ? refMatch[1] : 'N/A';
     
-    // IMPROVED: Handle proof_image properly
+    // IMPROVED: Handle proof_image via separate endpoint
     let proofImageHtml = '';
     if (msg.proof_image && msg.proof_image !== 'NULL' && msg.proof_image !== 'null') {
-        let imageData = msg.proof_image;
-        
-        // Check if it already has the data:image prefix
-        if (!imageData.startsWith('data:image')) {
-            // Add the prefix if missing
-            imageData = 'data:image/jpeg;base64,' + imageData;
-        }
+        // Use the separate endpoint to serve the image
+        const imageUrl = `../api/guide_messages.php?action=get_proof_image&message_id=${msg.id}`;
         
         proofImageHtml = `
             <div class="proof-image-preview" style="margin-top:8px;text-align:center;">
-                <img src="${imageData}" alt="Payment Proof" style="max-width:100%;max-height:200px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;background:#f8f9fa;" onclick="window.open('${imageData}', '_blank')">
+                <img src="${imageUrl}" alt="Payment Proof" style="max-width:100%;max-height:200px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;background:#f8f9fa;" 
+                     onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23999\' stroke-width=\'1\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Crect x=\'3\' y=\'3\' width=\'18\' height=\'18\' rx=\'2\' ry=\'2\'%3E%3C/rect%3E%3Ccircle cx=\'8.5\' cy=\'8.5\' r=\'1.5\' fill=\'%23999\'%3E%3C/circle%3E%3Cpolyline points=\'21 15 16 10 5 21\'%3E%3C/polyline%3E%3C/svg%3E'; this.style.objectFit='contain'; this.style.height='100px';"
+                     onclick="window.open('${imageUrl}', '_blank')">
                 <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
             </div>
         `;
     } else {
         // Try to extract from body text (legacy format)
-        const imgMatch = bodyText.match(/Proof:\s*(\S+\.(jpg|jpeg|png))/i);
-        const proofImageUrl = imgMatch ? imgMatch[1] : null;
-        if (proofImageUrl) {
+        const imgMatch = bodyText.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
+        if (imgMatch) {
             proofImageHtml = `
                 <div class="proof-image-preview" style="margin-top:8px;text-align:center;">
-                    <img src="${escapeHtml(proofImageUrl)}" alt="Payment Proof" style="max-width:100%;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('${escapeHtml(proofImageUrl)}', '_blank')">
+                    <img src="${imgMatch[0]}" alt="Payment Proof" style="max-width:100%;max-height:200px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('${imgMatch[0]}', '_blank')">
                     <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
                 </div>
             `;
