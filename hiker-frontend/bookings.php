@@ -2945,7 +2945,74 @@ foreach ($dbGuides as $guide) {
 echo "const guideFeeMap = " . json_encode($guideFeeMap) . ";\n";
 
 ?>
-
+function autoSelectMountain() {
+    let mountainId = null;
+    
+    // Check URL parameter first
+    const urlParams = new URLSearchParams(window.location.search);
+    mountainId = urlParams.get('mountain_id');
+    
+    // Fallback to localStorage
+    if (!mountainId) {
+        const savedMtn = localStorage.getItem('bookingMtn');
+        if (savedMtn) {
+            try {
+                const mtn = JSON.parse(savedMtn);
+                mountainId = mtn.id;
+                localStorage.removeItem('bookingMtn');
+            } catch (e) {
+                console.error('Error parsing saved mountain:', e);
+                localStorage.removeItem('bookingMtn');
+            }
+        }
+    }
+    
+    if (mountainId && mountains && mountains.length > 0) {
+        const foundMtn = mountains.find(m => m.id == mountainId);
+        
+        if (foundMtn && foundMtn.status === 'Open') {
+            window.autoSelectMountain = foundMtn;
+            
+            // Wait for DOM and booking modal to be ready
+            const tryAutoSelect = () => {
+                const newBookingBtn = document.querySelector('.btn-glass-primary');
+                if (newBookingBtn && typeof openBookingFlow === 'function') {
+                    newBookingBtn.click();
+                    setTimeout(() => {
+                        if (flowState && typeof selectMtn === 'function') {
+                            selectMtn(foundMtn.id);
+                            // Auto-advance to next step after selection
+                            setTimeout(() => {
+                                if (currentStep === 1 && flowState.mtn) {
+                                    const nextBtn = document.getElementById('nextBtn1');
+                                    if (nextBtn && !nextBtn.disabled) {
+                                        nextStep();
+                                    }
+                                }
+                            }, 400);
+                        }
+                    }, 300);
+                } else {
+                    // Retry if elements aren't ready yet
+                    setTimeout(tryAutoSelect, 200);
+                }
+            };
+            
+            // Start auto-selection process
+            setTimeout(tryAutoSelect, 150);
+        } else if (foundMtn && foundMtn.status !== 'Open') {
+            if (typeof showToast === 'function') {
+                showToast(`❌ ${foundMtn.name} is currently closed for bookings.`);
+            } else {
+                console.log(`❌ ${foundMtn.name} is currently closed for bookings.`);
+            }
+        }
+        
+        // Clean URL without refreshing
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+    }
+}
 
 function loadBookings() {
     // bookings is already populated from PHP/DB at page load.
@@ -5572,6 +5639,7 @@ loadBookings();
 renderBookings();
 initStars();
 setInterval(renderBookings, 60000);
+autoSelectMountain();
 </script>
 </body>
 </html>

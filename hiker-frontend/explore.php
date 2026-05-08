@@ -3131,8 +3131,7 @@ function closeMtnModal() {
 // Update bookMtn function text
 function bookMtn() { 
   if(activeMtn){ 
-    localStorage.setItem('bookingMtn', JSON.stringify(activeMtn)); 
-    window.location.href = 'bookings.php'; 
+    window.location.href = 'bookings.php?mountain_id=' + activeMtn.id; 
   } 
 }
 
