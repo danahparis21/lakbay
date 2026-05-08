@@ -92,17 +92,17 @@ try {
     
     // =============================================
     // 6. RELEASE GUIDES (if they have no active bookings)
+    //    FIXED: Use a temporary table approach to avoid the MySQL error
     // =============================================
     $stmt = $pdo->prepare("
         UPDATE guides g
-        SET is_available = 1,
-            currently_on_hike = 0
-        WHERE user_id IN (
-            SELECT DISTINCT g2.user_id
-            FROM guides g2
-            LEFT JOIN bookings b ON b.guide_id = g2.id
-                AND b.status IN ('active', 'confirmed', 'waiting_payment')
-            WHERE b.id IS NULL
+        SET g.is_available = 1,
+            g.currently_on_hike = 0
+        WHERE NOT EXISTS (
+            SELECT 1 
+            FROM bookings b 
+            WHERE b.guide_id = g.id 
+              AND b.status IN ('active', 'confirmed', 'waiting_payment')
         )
     ");
     $stmt->execute();
