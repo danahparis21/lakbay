@@ -3817,61 +3817,30 @@ const trailStatusMap = {
     'danger': { icon: '🔴', text: 'Danger', class: 'status-cancelled' }
 };
 const trailStatus = trailStatusMap[g.trail_status] || trailStatusMap.safe;
+let idImageHtml = '';
+if (g.id_image) {
+    // Regular image from uploads folder
+    idImageHtml = `<div style="margin-top:8px;">
+        <img src="/${g.id_image}" alt="ID Document" style="max-width:100%; max-height:150px; border-radius:8px; border:1px solid var(--mist); object-fit:contain;">
+    </div>`;
+} else if (g.id_image_base64 && g.id_image_base64.startsWith('data:image')) {
+    // Base64 image
+    idImageHtml = `<div style="margin-top:8px;">
+        <img src="${g.id_image_base64}" alt="ID Document" style="max-width:100%; max-height:150px; border-radius:8px; border:1px solid var(--mist); object-fit:contain;">
+    </div>`;
+} else {
+    idImageHtml = `<div style="margin-top:8px; color:var(--stone); font-size:12px;">No ID document uploaded</div>`;
+}
 
-// Display all details
+// Display only Guide ID and ID Type with image
 document.getElementById('gDetails').innerHTML = `
     <div class="gd-item">
         <div class="gd-lbl">🆔 Guide ID</div>
         <div class="gd-val">#${g.id}</div>
     </div>
     <div class="gd-item">
-        <div class="gd-lbl">📛 Verification</div>
-        <div class="gd-val">
-            <span class="badge ${verificationStatus.class}" style="display:inline-flex; align-items:center; gap:4px;">
-                ${verificationStatus.icon} ${verificationStatus.text}
-            </span>
-        </div>
-    </div>
-    <div class="gd-item">
         <div class="gd-lbl">🪪 ID Type</div>
         <div class="gd-val">${g.id_type ? esc(g.id_type) : 'Not provided'}${idImageHtml}</div>
-    </div>
-    ${gcashHtml}
-    <div class="gd-item">
-        <div class="gd-lbl">🏔️ Trail Status</div>
-        <div class="gd-val">
-            <span class="badge ${trailStatus.class}" style="display:inline-flex; align-items:center; gap:4px;">
-                ${trailStatus.icon} ${trailStatus.text}
-            </span>
-        </div>
-    </div>
-    <div class="gd-item">
-        <div class="gd-lbl">📅 Verified Since</div>
-        <div class="gd-val">${g.submitted_at ? new Date(g.submitted_at).toLocaleDateString('en-PH') : 'Not yet'}</div>
-    </div>
-    <div class="gd-item">
-        <div class="gd-lbl">🎯 Specialization</div>
-        <div class="gd-val">${esc(g.specialization) || 'General'}</div>
-    </div>
-    <div class="gd-item">
-        <div class="gd-lbl">📅 Experience</div>
-        <div class="gd-val">${g.years_experience}+ years</div>
-    </div>
-    <div class="gd-item">
-        <div class="gd-lbl">🥾 Hiking Level</div>
-        <div class="gd-val">${esc(g.hiking_level) || 'Expert'}</div>
-    </div>
-    <div class="gd-item">
-        <div class="gd-lbl">📍 Home Region</div>
-        <div class="gd-val">${esc(g.home_region) || 'Philippines'}</div>
-    </div>
-    <div class="gd-item">
-        <div class="gd-lbl">🗣️ Languages</div>
-        <div class="gd-val">English, Tagalog</div>
-    </div>
-    <div class="gd-item">
-        <div class="gd-lbl">📜 Certifications</div>
-        <div class="gd-val">First Aid Certified, Licensed Guide</div>
     </div>
 `;
   gTab('reviews',document.querySelector('.g-mtab'));
