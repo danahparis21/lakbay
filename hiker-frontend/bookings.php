@@ -158,24 +158,24 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
     
     try {
         // Simplified query - first get all bookings where user is owner
-        $stmt = $pdo->prepare("
-    SELECT 
-        b.id, b.booking_number, b.mountain_id, b.guide_id,
-        b.user_id,
-        b.hike_date as date, b.start_time as start_time, b.hike_type as type, b.status,
-        b.number_of_hikers as pax, b.total_amount as totalFee,
-        b.special_requests as notes, b.created_at,
-        (b.hike_type = 'overnight') as camping,
-        m.name as mountain,
-        COALESCE(u.name, 'Unknown Guide') as guideName,
-        COALESCE(SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2), '??') as guideInitials
-        COALESCE(g.user_id, 0) as guide_user_id
-    FROM bookings b
-    JOIN mountains m ON b.mountain_id = m.id
-    LEFT JOIN guides g ON b.guide_id = g.id      
-    LEFT JOIN users u ON g.user_id = u.id        
-    WHERE b.user_id = ?
-    ORDER BY b.created_at DESC
+       $stmt = $pdo->prepare("
+SELECT 
+    b.id, b.booking_number, b.mountain_id, b.guide_id,
+    b.user_id,
+    b.hike_date as date, b.start_time as start_time, b.hike_type as type, b.status,
+    b.number_of_hikers as pax, b.total_amount as totalFee,
+    b.special_requests as notes, b.created_at,
+    (b.hike_type = 'overnight') as camping,
+    m.name as mountain,
+    COALESCE(u.name, 'Unknown Guide') as guideName,
+    COALESCE(SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2), '??') as guideInitials,
+    COALESCE(g.user_id, 0) as guide_user_id
+FROM bookings b
+JOIN mountains m ON b.mountain_id = m.id
+LEFT JOIN guides g ON b.guide_id = g.id      
+LEFT JOIN users u ON g.user_id = u.id        
+WHERE b.user_id = ?
+ORDER BY b.created_at DESC
 ");
         $stmt->execute([$currentUserId]);
         
@@ -239,24 +239,25 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
         }
         
         // Now get joined bookings (where user is in booking_hikers but not owner)
-        $stmt = $pdo->prepare("
-    SELECT 
-        b.id, b.booking_number, b.mountain_id, b.guide_id,
-        b.user_id,
-        b.hike_date as date, b.start_time as start_time, b.hike_type as type, b.status,
-        b.number_of_hikers as pax, b.total_amount as totalFee,
-        b.special_requests as notes, b.created_at,
-        (b.hike_type = 'overnight') as camping,
-        m.name as mountain,
-        COALESCE(u.name, 'Unknown Guide') as guideName,
-        SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2) as guideInitials
-    FROM booking_hikers bh
-    JOIN bookings b ON bh.booking_id = b.id
-    JOIN mountains m ON b.mountain_id = m.id
+       $stmt = $pdo->prepare("
+SELECT 
+    b.id, b.booking_number, b.mountain_id, b.guide_id,
+    b.user_id,
+    b.hike_date as date, b.start_time as start_time, b.hike_type as type, b.status,
+    b.number_of_hikers as pax, b.total_amount as totalFee,
+    b.special_requests as notes, b.created_at,
+    (b.hike_type = 'overnight') as camping,
+    m.name as mountain,
+    COALESCE(u.name, 'Unknown Guide') as guideName,
+    SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2) as guideInitials,
+    COALESCE(g.user_id, 0) as guide_user_id
+FROM booking_hikers bh
+JOIN bookings b ON bh.booking_id = b.id
+JOIN mountains m ON b.mountain_id = m.id
 LEFT JOIN guides g ON b.guide_id = g.id      
-    LEFT JOIN users u ON g.user_id = u.id        
-    WHERE bh.hiker_name = ? AND b.user_id != ?
-    ORDER BY b.created_at DESC
+LEFT JOIN users u ON g.user_id = u.id        
+WHERE bh.hiker_name = ? AND b.user_id != ?
+ORDER BY b.created_at DESC
 ");
         $stmt->execute([$currentUserName, $currentUserId]);
         
@@ -296,6 +297,7 @@ LEFT JOIN guides g ON b.guide_id = g.id
                 'guideId' => $row['guide_id'],
                 'guideName' => $row['guideName'],
                 'guideInitials' => $row['guideInitials'] ?: substr($row['guideName'], 0, 2),
+                'guide_user_id' => $row['guide_user_id'] ?? 0,
                 'pax' => $row['pax'],
                 'hikers' => $hikers,
                 'totalFee' => 0,
