@@ -165,25 +165,54 @@ $uniqueBadgeCount = count($allUserBadges);
 
 // Handle avatar upload
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['avatar'])) {
+    // Use absolute path based on the current file's directory
     $uploadDir = __DIR__ . '/../uploads/avatars/';
+    
+    // Create directory if it doesn't exist
     if (!file_exists($uploadDir)) {
-        mkdir($uploadDir, 0777, true);
+        mkdir($uploadDir, 0755, true);  // Note: 0755 instead of 0777
     }
     
-    $fileExt = pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION);
+    // Check if directory is writable
+    if (!is_writable($uploadDir)) {
+        // Try to set permissions
+        chmod($uploadDir, 0755);
+    }
+    
+    $fileExt = strtolower(pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION));
     $fileName = 'user_' . $currentUserId . '_' . time() . '.' . $fileExt;
     $uploadPath = $uploadDir . $fileName;
     
     $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (in_array($_FILES['avatar']['type'], $allowedTypes) && $_FILES['avatar']['error'] === 0) {
-        if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
-            $avatarPath = '/uploads/avatars/' . $fileName;
-            $stmt = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
-            $stmt->execute([$avatarPath, $currentUserId]);
-            $currentUser['avatar'] = $avatarPath;
-            $_SESSION['user_avatar'] = $avatarPath;
+    $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    
+    if (in_array($_FILES['avatar']['type'], $allowedTypes) && in_array($fileExt, $allowedExts) && $_FILES['avatar']['error'] === 0) {
+        // Check file size (max 2MB)
+        if ($_FILES['avatar']['size'] > 2 * 1024 * 1024) {
+            $errorMessage = "File too large. Maximum 2MB.";
+        } else {
+            if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
+                $avatarPath = '/uploads/avatars/' . $fileName;
+                $stmt = $pdo->prepare("UPDATE users SET avatar = ? WHERE id = ?");
+                $stmt->execute([$avatarPath, $currentUserId]);
+                $currentUser['avatar'] = $avatarPath;
+                $_SESSION['user_avatar'] = $avatarPath;
+                
+                // Refresh the page to show new avatar
+                echo "<script>window.location.reload();</script>";
+                exit;
+            } else {
+                $errorMessage = "Failed to save file. Please check directory permissions.";
+                error_log("Upload failed - couldn't move file to: " . $uploadPath);
+            }
         }
+    } else {
+        $errorMessage = "Invalid file type. Use JPG, PNG, GIF, or WEBP.";
     }
+    
+    // If we get here, there was an error
+    echo "<script>alert('" . addslashes($errorMessage) . "'); window.location.reload();</script>";
+    exit;
 }
 
 // Handle profile update (name, email, phone, home_region)
