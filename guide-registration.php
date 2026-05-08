@@ -189,16 +189,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($chk->fetch()) $errors[] = "An account with this email or username already exists.";
     }
 
-    $upload_dir  = __DIR__ . '/../uploads/guide_registrations/';
-$id_img_path = '';
-
-// Suppress warnings with @ (not ideal but works)
-if (!is_dir(__DIR__ . '/../uploads/')) {
-    @mkdir(__DIR__ . '/../uploads/', 0755, true);
-}
-if (!is_dir($upload_dir)) {
-    @mkdir($upload_dir, 0755, true);
-}
+   // No directory creation needed! We'll store image as base64 in database
+    $id_img_path = '';      // Keep empty - we won't store file path
+    $id_img_base64 = '';    // This will hold the base64 image
 
     if (empty($errors)) {
         if (isset($_FILES['gov_id']) && $_FILES['gov_id']['error'] === UPLOAD_ERR_OK) {
@@ -206,21 +199,16 @@ if (!is_dir($upload_dir)) {
             $finfo   = finfo_open(FILEINFO_MIME_TYPE);
             $mime    = finfo_file($finfo, $_FILES['gov_id']['tmp_name']);
             finfo_close($finfo);
+            
             if (!in_array($mime, $allowed)) {
                 $errors[] = "ID must be a JPG, PNG, or WEBP image.";
             } elseif ($_FILES['gov_id']['size'] > 5 * 1024 * 1024) {
                 $errors[] = "ID image must be under 5 MB.";
             } else {
-                $ext         = pathinfo($_FILES['gov_id']['name'], PATHINFO_EXTENSION);
-                $fname       = 'id_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
-                $targetPath  = $upload_dir . $fname;
-                
-                if (move_uploaded_file($_FILES['gov_id']['tmp_name'], $targetPath)) {
-                    $id_img_path = '../uploads/guide_registrations/' . $fname;
-                } else {
-                    $errors[] = "Failed to upload ID image. Please check directory permissions.";
-                    error_log("Failed to move uploaded file to: " . $targetPath);
-                }
+                // Read the file and convert to base64
+                $imageData = file_get_contents($_FILES['gov_id']['tmp_name']);
+                $id_img_base64 = 'data:' . $mime . ';base64,' . base64_encode($imageData);
+                $id_img_path = ''; // No file path needed
             }
         } else {
             $errors[] = "A government-issued ID photo is required.";
@@ -239,13 +227,13 @@ if (!is_dir($upload_dir)) {
             $user_id = $pdo->lastInsertId();
 
             $gStmt = $pdo->prepare("
-                INSERT INTO guides
-                    (user_id, specialization, years_experience, rating, total_trips,
-                     is_available, bio, trail_status, currently_on_hike,
-                     id_type, id_image, is_approved, submitted_at)
-                VALUES (?, ?, ?, 0.0, 0, 0, ?, 'safe', 0, ?, ?, 0, NOW())
-            ");
-            $gStmt->execute([$user_id, $specialization, $years_experience, $bio, $id_type, $id_img_path]);
+    INSERT INTO guides
+        (user_id, specialization, years_experience, rating, total_trips,
+         is_available, bio, trail_status, currently_on_hike,
+         id_type, id_image, id_image_base64, is_approved, submitted_at)
+    VALUES (?, ?, ?, 0.0, 0, 0, ?, 'safe', 0, ?, ?, ?, 0, NOW())
+");
+$gStmt->execute([$user_id, $specialization, $years_experience, $bio, $id_type, $id_img_path, $id_img_base64]);
 
             $pdo->commit();
             $success = true;
