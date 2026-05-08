@@ -1560,10 +1560,47 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
     const refMatch = bodyText.match(/Reference Number:\s*([^\n]+)/);
     const referenceNumber = refMatch ? refMatch[1] : 'N/A';
     
+    // Extract booking number
+    const bookingMatch = bodyText.match(/booking #([^\s\.]+)/);
+    let bookingNumber = bookingMatch ? bookingMatch[1] : 'N/A';
+    bookingNumber = bookingNumber.replace(/[.,;:!?]$/, '');
+    
+    // Get booking ID from the message or extract from booking number
+    // First, try to get booking ID from the database using the booking number
+    let showVerifyButtons = true;
+    let paymentStatus = 'pending';
+    
+    try {
+        // First, get the booking ID from the booking number
+        const bookingIdRes = await fetch(`../api/get_booking_id.php?booking_number=${encodeURIComponent(bookingNumber)}`);
+        const bookingIdData = await bookingIdRes.json();
+        
+        if (bookingIdData.success && bookingIdData.booking_id) {
+            // Now use your existing get_booking_status endpoint
+            const statusRes = await fetch(`../api/guide_messages.php?action=get_booking_status&booking_id=${bookingIdData.booking_id}`);
+            const statusData = await statusRes.json();
+            
+            if (statusData.success && statusData.status) {
+                // Check if payment is already processed
+                // You'll need to also get downpayment_status - let's modify the existing endpoint slightly
+                const fullStatusRes = await fetch(`../api/get_booking_full_status.php?booking_id=${bookingIdData.booking_id}`);
+                const fullStatusData = await fullStatusRes.json();
+                
+                if (fullStatusData.success) {
+                    paymentStatus = fullStatusData.downpayment_status;
+                    if (paymentStatus === 'paid' || paymentStatus === 'rejected') {
+                        showVerifyButtons = false;
+                    }
+                }
+            }
+        }
+    } catch(e) {
+        console.error('Error checking booking status:', e);
+    }
+    
     // IMPROVED: Handle proof_image via separate endpoint
     let proofImageHtml = '';
     if (msg.proof_image && msg.proof_image !== 'NULL' && msg.proof_image !== 'null') {
-        // Use the separate endpoint to serve the image
         const imageUrl = `../api/guide_messages.php?action=get_proof_image&message_id=${msg.id}`;
         
         proofImageHtml = `
@@ -1575,7 +1612,6 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
             </div>
         `;
     } else {
-        // Try to extract from body text (legacy format)
         const imgMatch = bodyText.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
         if (imgMatch) {
             proofImageHtml = `
@@ -1589,9 +1625,33 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
         }
     }
     
-    const bookingMatch = bodyText.match(/booking #([^\s\.]+)/);
-    let bookingNumber = bookingMatch ? bookingMatch[1] : 'N/A';
-    bookingNumber = bookingNumber.replace(/[.,;:!?]$/, '');
+    // Determine status badge based on actual booking status
+    let statusBadgeHtml = '';
+    let paymentActionsHtml = '';
+    
+    if (paymentStatus === 'paid') {
+        statusBadgeHtml = `<span class="payment-status-badge" style="background:#059669;padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;color:white;"><i class="fas fa-check-circle"></i> PAYMENT CONFIRMED</span>`;
+        paymentActionsHtml = `<div style="text-align:center;padding:10px;background:#d1fae5;border-radius:8px;color:#059669;font-size:12px;font-weight:600;">
+            <i class="fas fa-check-circle"></i> This payment has already been verified and confirmed.
+        </div>`;
+    } else if (paymentStatus === 'rejected') {
+        statusBadgeHtml = `<span class="payment-status-badge" style="background:#dc2626;padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;color:white;"><i class="fas fa-times-circle"></i> PAYMENT REJECTED</span>`;
+        paymentActionsHtml = `<div style="text-align:center;padding:10px;background:#fee2e2;border-radius:8px;color:#dc2626;font-size:12px;font-weight:600;">
+            <i class="fas fa-times-circle"></i> This payment was rejected. The hiker has been notified to resubmit.
+        </div>`;
+    } else {
+        statusBadgeHtml = `<span class="payment-status-badge" style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">PENDING VERIFICATION</span>`;
+        paymentActionsHtml = `
+            <div class="payment-actions" style="display:flex;gap:10px;margin-top:16px;">
+                <button class="btn-payment primary" onclick="verifyAndConfirmPayment('${escapeHtml(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:none;background:#059669;color:white;cursor:pointer;">
+                    <i class="fas fa-check-circle"></i> Verify & Confirm Payment
+                </button>
+                <button class="btn-payment secondary" onclick="rejectPaymentProof('${escapeHtml(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid #e5e7eb;background:#f3f4f6;cursor:pointer;">
+                    <i class="fas fa-times-circle"></i> Reject
+                </button>
+            </div>
+        `;
+    }
     
     const card = `
         <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
@@ -1601,7 +1661,7 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
                     <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">PAYMENT PROOF SUBMITTED</div>
                     <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${escapeHtml(bookingNumber)}</div>
                 </div>
-                <span class="payment-status-badge" style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">PENDING VERIFICATION</span>
+                ${statusBadgeHtml}
             </div>
             <div class="msg-card-body" style="padding:16px;">
                 <div class="payment-detail-row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
@@ -1617,14 +1677,7 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
                     ${proofImageHtml}
                 </div>
                 
-                <div class="payment-actions" style="display:flex;gap:10px;margin-top:16px;">
-                    <button class="btn-payment primary" onclick="verifyAndConfirmPayment('${escapeHtml(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:none;background:#059669;color:white;cursor:pointer;">
-                        <i class="fas fa-check-circle"></i> Verify & Confirm Payment
-                    </button>
-                    <button class="btn-payment secondary" onclick="rejectPaymentProof('${escapeHtml(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid #e5e7eb;background:#f3f4f6;cursor:pointer;">
-                        <i class="fas fa-times-circle"></i> Reject
-                    </button>
-                </div>
+                ${paymentActionsHtml}
             </div>
         </div>
         <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;

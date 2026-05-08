@@ -107,7 +107,7 @@ function getBookingStatus($pdo, $guideId) {
     }
     
     $stmt = $pdo->prepare("
-        SELECT b.status, b.booking_number 
+        SELECT b.status, b.booking_number, b.downpayment_status 
         FROM bookings b 
         WHERE b.id = ? AND b.guide_id = ?
     ");
@@ -117,10 +117,10 @@ function getBookingStatus($pdo, $guideId) {
     echo json_encode([
         'success' => true, 
         'status' => $booking ? $booking['status'] : 'not_found',
-        'booking_number' => $booking ? $booking['booking_number'] : null
+        'booking_number' => $booking ? $booking['booking_number'] : null,
+        'downpayment_status' => $booking ? $booking['downpayment_status'] : 'unknown'  // Add this line
     ]);
 }
-
 function getConversations($pdo, $guideId) {
     $sql = "
         SELECT DISTINCT
