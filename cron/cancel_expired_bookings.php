@@ -18,7 +18,6 @@ try {
         UPDATE bookings 
         SET status = 'cancelled',
             downpayment_status = 'expired',
-            payment_status = 'cancelled',
             updated_at = NOW()
         WHERE status = 'waiting_payment' 
           AND downpayment_deadline < NOW()
@@ -35,7 +34,6 @@ try {
         UPDATE bookings 
         SET status = 'cancelled',
             downpayment_status = 'expired',
-            payment_status = 'cancelled',
             updated_at = NOW()
         WHERE status = 'pending' 
           AND (downpayment_deadline < NOW() OR created_at < DATE_SUB(NOW(), INTERVAL 1 DAY))
@@ -62,7 +60,6 @@ try {
     
     // =============================================
     // 4. MARK ACTIVE HIKES AS FINISHED (same day, but time passed)
-    //    Example: hike at 6am, now it's 7pm
     // =============================================
     $stmt = $pdo->prepare("
         UPDATE bookings 
@@ -105,7 +102,7 @@ try {
             FROM guides g2
             LEFT JOIN bookings b ON b.guide_id = g2.id
                 AND b.status IN ('active', 'confirmed', 'waiting_payment')
-            WHERE b.id IS NULL  -- No active/confirmed/waiting_payment bookings
+            WHERE b.id IS NULL
         )
     ");
     $stmt->execute();
