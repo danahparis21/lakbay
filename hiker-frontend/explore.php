@@ -1997,6 +1997,123 @@ svg{display:block;flex-shrink:0;}
   transform: scale(1.05);
 }
 
+/* Waypoint Marker Styles */
+.custom-waypoint-icon {
+    background: transparent;
+    border: none;
+}
+.waypoint-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+.waypoint-marker:hover {
+    transform: scale(1.15);
+}
+.waypoint-marker i {
+    font-size: 22px;
+}
+.summit-marker i { color: #E74C3C; text-shadow: 0 0 4px rgba(231,76,60,0.3); }
+.campsite-marker i { color: #F39C12; }
+.viewpoint-marker i { color: #3498DB; }
+.information-marker i { color: #1ABC9C; }
+.peak-marker i { color: #2ECC71; }
+.mountain_pass-marker i { color: #9B59B6; }
+.tree-marker i { color: #27AE60; }
+.water-marker i { color: #3498DB; }
+.rest-marker i { color: #E67E22; }
+.danger-marker i { color: #E74C3C; }
+.start-marker i { color: #1ABC9C; }
+.default-marker i { color: #95A5A6; }
+
+.waypoint-popup {
+    min-width: 180px;
+    max-width: 260px;
+}
+.waypoint-popup strong {
+    font-size: 0.9rem;
+    color: #100600;
+    display: block;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding-bottom: 4px;
+}
+.popup-detail {
+    font-size: 0.72rem;
+    color: #555;
+    padding-top: 4px;
+    line-height: 1.5;
+}
+.popup-desc {
+    font-size: 0.68rem;
+    color: #777;
+    font-style: italic;
+    display: inline-block;
+    margin-top: 4px;
+}
+.popup-coords {
+    font-size: 0.6rem;
+    color: #999;
+    margin-top: 8px;
+    padding-top: 5px;
+    border-top: 1px solid rgba(0,0,0,0.06);
+    font-family: monospace;
+}
+
+.waypoint-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--white);
+    border-radius: 12px;
+    border: 1px solid var(--mist);
+    transition: all 0.2s;
+}
+.waypoint-item:hover {
+    transform: translateX(4px);
+    border-color: var(--gold);
+}
+.waypoint-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(198,164,59,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+.waypoint-icon.summit-marker i { color: #E74C3C; }
+.waypoint-icon.campsite-marker i { color: #F39C12; }
+.waypoint-icon.viewpoint-marker i { color: #3498DB; }
+.waypoint-icon.water-marker i { color: #3498DB; }
+.waypoint-icon.peak-marker i { color: #2ECC71; }
+.waypoint-icon.start-marker i { color: #1ABC9C; }
+.waypoint-icon.danger-marker i { color: #E74C3C; }
+.waypoint-info {
+    flex: 1;
+}
+.waypoint-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.waypoint-type {
+    font-size: 10px;
+    color: var(--stone);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.waypoint-elevation {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--gold);
+}
+
 </style>
 </head>
 <body>
@@ -2703,39 +2820,114 @@ async function loadTrailForModal(mountainId) {
         }
       }
       
-      // Add waypoints
       if (waypointsContainer) {
-        waypointsContainer.innerHTML = '';
+    waypointsContainer.innerHTML = '';
+    
+    if (data.waypoints && data.waypoints.length > 0) {
+        // Function to get icon class based on waypoint type
+        const getIconClass = (type) => {
+            const icons = {
+                'summit': 'fa-mountain',
+                'campsite': 'fa-campground',
+                'viewpoint': 'fa-eye',
+                'information': 'fa-info-circle',
+                'peak': 'fa-flag-checkered',
+                'mountain_pass': 'fa-road',
+                'tree': 'fa-tree',
+                'water_source': 'fa-water',
+                'rest': 'fa-chair',
+                'danger': 'fa-triangle-exclamation',
+                'start': 'fa-flag'
+            };
+            return icons[type] || 'fa-map-pin';
+        };
         
-        if (data.waypoints && data.waypoints.length > 0) {
-          data.waypoints.forEach(wp => {
+        const getMarkerColorClass = (type) => {
+            const colors = {
+                'summit': 'summit-marker',
+                'campsite': 'campsite-marker',
+                'viewpoint': 'viewpoint-marker',
+                'information': 'information-marker',
+                'peak': 'peak-marker',
+                'mountain_pass': 'mountain_pass-marker',
+                'tree': 'tree-marker',
+                'water_source': 'water-marker',
+                'rest': 'rest-marker',
+                'danger': 'danger-marker',
+                'start': 'start-marker'
+            };
+            return colors[type] || 'default-marker';
+        };
+        
+        const getDisplayType = (type) => {
+            const typeMap = {
+                'summit': 'Summit',
+                'campsite': 'Campsite',
+                'viewpoint': 'Viewpoint',
+                'information': 'Information Point',
+                'peak': 'Peak',
+                'mountain_pass': 'Mountain Pass',
+                'tree': 'Tree',
+                'start': 'Starting Point',
+                'rest': 'Rest Area',
+                'danger': 'Danger Zone',
+                'water_source': 'Water Source'
+            };
+            return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
+        };
+        
+        data.waypoints.forEach(wp => {
+            const type = wp.type || 'viewpoint';
+            const colorClass = getMarkerColorClass(type);
+            const iconClass = getIconClass(type);
+            const displayType = getDisplayType(type);
+            
+            // Add to waypoints list on the right
             const waypointDiv = document.createElement('div');
             waypointDiv.className = 'waypoint-item';
             waypointDiv.innerHTML = `
-              <div class="waypoint-icon">${wp.type === 'summit' ? '⛰️' : (wp.type === 'water' ? '💧' : '📍')}</div>
-              <div class="waypoint-info">
-                <div class="waypoint-name">${wp.name}</div>
-                <div class="waypoint-type">${wp.type}</div>
-              </div>
-              <div class="waypoint-elevation">${wp.elevation ? wp.elevation + 'm' : ''}</div>
+                <div class="waypoint-icon ${colorClass}"><i class="fas ${iconClass}"></i></div>
+                <div class="waypoint-info">
+                    <div class="waypoint-name">${wp.name}</div>
+                    <div class="waypoint-type">${displayType}</div>
+                </div>
+                <div class="waypoint-elevation">${wp.elevation ? wp.elevation + 'm' : ''}</div>
             `;
             waypointsContainer.appendChild(waypointDiv);
             
             // Add marker to map if trailMap exists
             if (trailMap) {
-              const marker = L.marker([parseFloat(wp.latitude), parseFloat(wp.longitude)], {
-                icon: L.divIcon({
-                  html: `<div style="background:${wp.type === 'summit' ? '#c6a43b' : '#100600'}; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">${wp.type === 'summit' ? '⛰️' : (wp.type === 'water' ? '💧' : '📍')}</div>`,
-                  iconSize: [28, 28]
-                })
-              }).bindPopup(`<strong>${wp.name}</strong><br>${wp.type}${wp.elevation ? ` · ${wp.elevation}m` : ''}`).addTo(trailMap);
-              waypointMarkers.push(marker);
+                const popupContent = `
+                    <div class="waypoint-popup">
+                        <strong><i class="fas ${iconClass}"></i> ${wp.name}</strong>
+                        <div class="popup-detail">
+                            ${displayType}${wp.elevation ? ` · ${Math.round(wp.elevation)}m` : ''}
+                            ${wp.description ? `<br><span class="popup-desc">📝 ${wp.description}</span>` : ''}
+                        </div>
+                        <div class="popup-coords">
+                            📍 ${parseFloat(wp.latitude).toFixed(5)}, ${parseFloat(wp.longitude).toFixed(5)}
+                        </div>
+                    </div>
+                `;
+                
+                const marker = L.marker([parseFloat(wp.latitude), parseFloat(wp.longitude)], {
+                    icon: L.divIcon({
+                        html: `<div class="waypoint-marker ${colorClass}">
+                                    <i class="fas ${iconClass}"></i>
+                                </div>`,
+                        className: 'custom-waypoint-icon',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15],
+                        popupAnchor: [0, -15]
+                    })
+                }).bindPopup(popupContent).addTo(trailMap);
+                waypointMarkers.push(marker);
             }
-          });
-        } else {
-          waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">No waypoints available for this trail.</p>';
-        }
-      }
+        });
+    } else {
+        waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">No waypoints available for this trail.</p>';
+    }
+}
     } else {
       if (trailLengthElem) trailLengthElem.innerHTML = 'Not available';
       if (trailEstDurationElem) trailEstDurationElem.innerHTML = 'Not available';
