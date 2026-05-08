@@ -262,6 +262,56 @@ $guidesJson       = json_encode($guides);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] === 'XMLHttpRequest') {
     header('Content-Type: application/json');
     
+    // Check for get_heatmap_data action FIRST (uses $_POST, not JSON)
+    if (isset($_POST['action']) && $_POST['action'] === 'get_heatmap_data') {
+        $mountain_id = $_POST['mountain_id'] ?? 0;
+        
+        if (!$mountain_id) {
+            echo json_encode(['success' => false, 'message' => 'Mountain ID is required']);
+            exit;
+        }
+        
+        $stmt = $pdo->prepare("SELECT * FROM mountains WHERE id = ?");
+        $stmt->execute([$mountain_id]);
+        $mountain = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        $trailCoordinates = [];
+        $stmt = $pdo->prepare("SELECT lat, lon, ele, idx FROM tracks WHERE mountain_id = ? OR fileId = ? ORDER BY idx ASC");
+        $fileIdMap = [1 => 'BATULAO', 2 => 'APAYANG', 3 => 'LANTIK', 4 => 'TALAMITAM'];
+        $fileId = $fileIdMap[$mountain_id] ?? null;
+        $stmt->execute([$mountain_id, $fileId]);
+        $trackPoints = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        foreach ($trackPoints as $p) {
+            $trailCoordinates[] = [(float)$p['lon'], (float)$p['lat']];
+        }
+        
+        $stmt = $pdo->prepare("
+            SELECT id, name, type, latitude, longitude, elevation, description 
+            FROM trail_waypoints 
+            WHERE mountain_id = ? AND is_active = 1
+            ORDER BY order_index ASC
+        ");
+        $stmt->execute([$mountain_id]);
+        $waypoints = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        echo json_encode([
+            'success' => true,
+            'trail' => $trailCoordinates,
+            'waypoints' => $waypoints,
+            'mountain' => [
+                'name' => $mountain['name'],
+                'lat' => (float)($mountain['start_point_lat'] ?? ($trailCoordinates[0][1] ?? 14.0583)),
+                'lng' => (float)($mountain['start_point_lng'] ?? ($trailCoordinates[0][0] ?? 120.8320)),
+                'description' => $mountain['description'],
+                'difficulty' => $mountain['difficulty'],
+                'elevation' => $mountain['elevation']
+            ]
+        ]);
+        exit;
+    }
+    
+    // Only proceed with JSON actions if not heatmap request
     if (!isset($_SESSION['user_id'])) {
         echo json_encode(['success' => false, 'message' => 'Please login to save mountains']);
         exit;
@@ -2572,19 +2622,47 @@ async function loadWeatherForModal(mountain) {
 
 async function loadTrailForModal(mountainId) {
   try {
-    const response = await fetch('../api/get_trail_data.php', {
+    // Show loading state
+    const trailLengthElem = document.getElementById('trailLength');
+    const trailEstDurationElem = document.getElementById('trailEstDuration');
+    const trailDifficultyElem = document.getElementById('trailDifficulty');
+    const waypointsContainer = document.getElementById('waypointsContainer');
+    
+    if (trailLengthElem) trailLengthElem.textContent = 'Loading...';
+    if (trailEstDurationElem) trailEstDurationElem.textContent = 'Loading...';
+    if (trailDifficultyElem) trailDifficultyElem.innerHTML = 'Loading...';
+    if (waypointsContainer) waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">Loading trail data...</p>';
+    
+    // Use the same page with POST request (like admin does)
+    const response = await fetch(window.location.href, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'get_heatmap_data', mountain_id: mountainId })
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: new URLSearchParams({
+        action: 'get_heatmap_data',
+        mountain_id: mountainId
+      })
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
     const data = await response.json();
     
     if (data.success && data.trail && data.trail.length > 0) {
       // Update trail stats
       const mountain = mountains.find(m => m.id === mountainId);
-      document.getElementById('trailLength').textContent = mountain.time || '--';
-      document.getElementById('trailEstDuration').textContent = mountain.time || '--';
-      document.getElementById('trailDifficulty').innerHTML = `<span style="background:${mountain.difficulty==='easy'?'#d9ead3':mountain.difficulty==='moderate'?'#ffe0b5':'#ffcfc2'}; padding:4px 12px; border-radius:30px;">${mountain.difficulty}</span>`;
+      if (trailLengthElem) trailLengthElem.textContent = mountain?.time || '--';
+      if (trailEstDurationElem) trailEstDurationElem.textContent = mountain?.time || '--';
+      if (trailDifficultyElem) {
+        const difficulty = mountain?.difficulty || 'moderate';
+        const diffBg = difficulty === 'easy' ? '#d9ead3' : (difficulty === 'moderate' ? '#ffe0b5' : '#ffcfc2');
+        const diffColor = difficulty === 'easy' ? '#2a6b2a' : (difficulty === 'moderate' ? '#8a5a2a' : '#a23b1a');
+        trailDifficultyElem.innerHTML = `<span style="background:${diffBg}; color:${diffColor}; padding:4px 12px; border-radius:30px; font-weight:600;">${difficulty}</span>`;
+      }
       
       // Initialize trail map
       if (trailMap) {
@@ -2592,66 +2670,85 @@ async function loadTrailForModal(mountainId) {
         trailMap = null;
       }
       
-      trailMap = L.map('trailMap').setView([data.mountain.lat, data.mountain.lng], 13);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-        subdomains: 'abcd'
-      }).addTo(trailMap);
-      
-      // Draw trail
-      const trailCoords = data.trail.map(c => [c[1], c[0]]);
-      trailLayer = L.polyline(trailCoords, {
-        color: '#c6a43b',
-        weight: 5,
-        opacity: 0.9,
-        lineCap: 'round'
-      }).addTo(trailMap);
-      trailMap.fitBounds(L.latLngBounds(trailCoords).pad(0.1));
+      const trailMapContainer = document.getElementById('trailMap');
+      if (trailMapContainer) {
+        trailMap = L.map('trailMap').setView([data.mountain.lat, data.mountain.lng], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+          subdomains: 'abcd'
+        }).addTo(trailMap);
+        
+        // Draw trail
+        if (data.trail && data.trail.length > 0) {
+          const trailCoords = data.trail.map(c => [c[1], c[0]]);
+          trailLayer = L.polyline(trailCoords, {
+            color: '#c6a43b',
+            weight: 5,
+            opacity: 0.9,
+            lineCap: 'round'
+          }).addTo(trailMap);
+          trailMap.fitBounds(L.latLngBounds(trailCoords).pad(0.1));
+        }
+      }
       
       // Add waypoints
-      const waypointsContainer = document.getElementById('waypointsContainer');
-      waypointsContainer.innerHTML = '';
-      
-      if (data.waypoints && data.waypoints.length > 0) {
-        data.waypoints.forEach(wp => {
-          const waypointDiv = document.createElement('div');
-          waypointDiv.className = 'waypoint-item';
-          waypointDiv.innerHTML = `
-            <div class="waypoint-icon">${wp.type === 'summit' ? '⛰️' : (wp.type === 'water' ? '💧' : '📍')}</div>
-            <div class="waypoint-info">
-              <div class="waypoint-name">${wp.name}</div>
-              <div class="waypoint-type">${wp.type}</div>
-            </div>
-            <div class="waypoint-elevation">${wp.elevation ? wp.elevation + 'm' : ''}</div>
-          `;
-          waypointsContainer.appendChild(waypointDiv);
-          
-          // Add marker to map
-          const marker = L.marker([parseFloat(wp.latitude), parseFloat(wp.longitude)], {
-            icon: L.divIcon({
-              html: `<div style="background:${wp.type === 'summit' ? '#c6a43b' : '#100600'}; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">${wp.type === 'summit' ? '⛰️' : (wp.type === 'water' ? '💧' : '📍')}</div>`,
-              iconSize: [28, 28]
-            })
-          }).bindPopup(`<strong>${wp.name}</strong><br>${wp.type}${wp.elevation ? ` · ${wp.elevation}m` : ''}`).addTo(trailMap);
-          waypointMarkers.push(marker);
-        });
-      } else {
-        waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">No waypoints available for this trail.</p>';
+      if (waypointsContainer) {
+        waypointsContainer.innerHTML = '';
+        
+        if (data.waypoints && data.waypoints.length > 0) {
+          data.waypoints.forEach(wp => {
+            const waypointDiv = document.createElement('div');
+            waypointDiv.className = 'waypoint-item';
+            waypointDiv.innerHTML = `
+              <div class="waypoint-icon">${wp.type === 'summit' ? '⛰️' : (wp.type === 'water' ? '💧' : '📍')}</div>
+              <div class="waypoint-info">
+                <div class="waypoint-name">${wp.name}</div>
+                <div class="waypoint-type">${wp.type}</div>
+              </div>
+              <div class="waypoint-elevation">${wp.elevation ? wp.elevation + 'm' : ''}</div>
+            `;
+            waypointsContainer.appendChild(waypointDiv);
+            
+            // Add marker to map if trailMap exists
+            if (trailMap) {
+              const marker = L.marker([parseFloat(wp.latitude), parseFloat(wp.longitude)], {
+                icon: L.divIcon({
+                  html: `<div style="background:${wp.type === 'summit' ? '#c6a43b' : '#100600'}; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">${wp.type === 'summit' ? '⛰️' : (wp.type === 'water' ? '💧' : '📍')}</div>`,
+                  iconSize: [28, 28]
+                })
+              }).bindPopup(`<strong>${wp.name}</strong><br>${wp.type}${wp.elevation ? ` · ${wp.elevation}m` : ''}`).addTo(trailMap);
+              waypointMarkers.push(marker);
+            }
+          });
+        } else {
+          waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">No waypoints available for this trail.</p>';
+        }
       }
     } else {
-      document.getElementById('trailStats').innerHTML = '<div class="trail-stat" style="grid-column:1/-1; text-align:center; padding:40px;">Trail data not available for this mountain.</div>';
-      document.getElementById('waypointsContainer').innerHTML = '<p style="color:var(--stone);font-size:13px;">Trail information coming soon.</p>';
+      if (trailLengthElem) trailLengthElem.innerHTML = 'Not available';
+      if (trailEstDurationElem) trailEstDurationElem.innerHTML = 'Not available';
+      if (trailDifficultyElem) trailDifficultyElem.innerHTML = 'Not available';
+      if (waypointsContainer) waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">Trail data not available for this mountain.</p>';
     }
   } catch (error) {
     console.error('Error loading trail data:', error);
+    const trailLengthElem = document.getElementById('trailLength');
+    const trailEstDurationElem = document.getElementById('trailEstDuration');
+    const trailDifficultyElem = document.getElementById('trailDifficulty');
+    const waypointsContainer = document.getElementById('waypointsContainer');
+    
+    if (trailLengthElem) trailLengthElem.innerHTML = 'Unavailable';
+    if (trailEstDurationElem) trailEstDurationElem.innerHTML = 'Unavailable';
+    if (trailDifficultyElem) trailDifficultyElem.innerHTML = 'Unavailable';
+    if (waypointsContainer) waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">Trail information unavailable at this time.</p>';
   }
 }
 
-// Update tab switching
-document.querySelectorAll('.mtn-mtab').forEach(tab => {
+// Update tab switching - FIXED for modal-tab class
+document.querySelectorAll('.modal-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const tabName = tab.getAttribute('data-tab');
-    document.querySelectorAll('.mtn-mtab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById(`tp-${tabName}`).classList.add('active');
