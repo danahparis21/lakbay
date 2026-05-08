@@ -2603,19 +2603,31 @@ function openMtnModal(m){
   if(isLoggedIn) checkSavedStatus(m.id);
 }
 async function loadWeatherForModal(mountain) {
-  const weatherDiv = document.getElementById('mWeatherMini');
   const mountainCoord = mountainCoords.find(m => m.id === mountain.id);
   
   if (mountainCoord) {
-    const weather = await fetchWeather(mountainCoord.lat, mountainCoord.lng);
-    if (weather) {
-      const icon = getWeatherIcon(weather.current.code);
-      const advice = getHikingAdvice(weather.current.code, weather.current.temp);
-      document.getElementById('mWeatherTemp').textContent = `${weather.current.temp}°C`;
-      document.querySelector('.weather-mini-icon').textContent = icon;
-      document.getElementById('mWeatherAdvice').textContent = advice.msg;
-    } else {
-      document.getElementById('mWeatherAdvice').textContent = 'Weather data unavailable';
+    try {
+      const weather = await fetchWeather(mountainCoord.lat, mountainCoord.lng);
+      if (weather) {
+        const icon = getWeatherIcon(weather.current.code);
+        const advice = getHikingAdvice(weather.current.code, weather.current.temp);
+        const tempElem = document.getElementById('mWeatherTemp');
+        const adviceElem = document.getElementById('mWeatherAdvice');
+        const weatherCard = document.querySelector('#mWeatherMini .weather-card-header');
+        
+        if (tempElem) tempElem.textContent = `${weather.current.temp}°C`;
+        if (adviceElem) adviceElem.textContent = advice.msg;
+        if (weatherCard) {
+          weatherCard.innerHTML = `${icon} Current Weather`;
+        }
+      } else {
+        const adviceElem = document.getElementById('mWeatherAdvice');
+        if (adviceElem) adviceElem.textContent = 'Weather data unavailable';
+      }
+    } catch (error) {
+      console.error('Weather fetch error:', error);
+      const adviceElem = document.getElementById('mWeatherAdvice');
+      if (adviceElem) adviceElem.textContent = 'Unable to load weather';
     }
   }
 }
