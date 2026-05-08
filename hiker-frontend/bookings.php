@@ -527,7 +527,6 @@ exit;
     
     if ($mode === 'leave') {
         // LEAVE: Remove hiker from booking_hikers
-        // First, find the booking by its number
         $stmt = $pdo->prepare("SELECT id, booking_number FROM bookings WHERE booking_number = ?");
         $stmt->execute([$bookingId]);
         $booking = $stmt->fetch();
@@ -537,33 +536,43 @@ exit;
             exit;
         }
         
-        // Remove the current user from booking_hikers
         $stmt = $pdo->prepare("DELETE FROM booking_hikers WHERE booking_id = ? AND hiker_name = ?");
         $stmt->execute([$booking['id'], $user_name]);
         
         if ($stmt->rowCount() > 0) {
-            // Decrease the number of hikers in the booking
             $stmt = $pdo->prepare("UPDATE bookings SET number_of_hikers = number_of_hikers - 1 WHERE id = ?");
             $stmt->execute([$booking['id']]);
-            
             echo json_encode(['success' => true, 'message' => 'You left the hike']);
         } else {
             echo json_encode(['success' => false, 'message' => 'You are not part of this hike']);
         }
     } else {
-        // CANCEL: Regular cancellation (owner cancels their own booking)
+        // CANCEL: Regular cancellation
+        // First get the guide's user_id before updating
+        $stmt = $pdo->prepare("
+            SELECT b.guide_id, g.user_id as guide_user_id 
+            FROM bookings b
+            LEFT JOIN guides g ON b.guide_id = g.id
+            WHERE b.booking_number = ? AND b.user_id = ?
+        ");
+        $stmt->execute([$bookingId, $currentUserId]);
+        $bookingInfo = $stmt->fetch();
+        
         $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE booking_number = ? AND user_id = ?");
         $stmt->execute([$currentTime, $bookingId, $currentUserId]);
         
         if ($stmt->rowCount() === 0) {
-            // Try with numeric id
             $numericId = preg_replace('/[^0-9]/', '', $bookingId);
             $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', updated_at = NOW() WHERE id = ? AND user_id = ?");
             $stmt->execute([$numericId, $currentUserId]);
         }
         
         if ($stmt->rowCount() > 0) {
-            echo json_encode(['success' => true, 'message' => 'Booking cancelled']);
+            echo json_encode([
+                'success' => true, 
+                'message' => 'Booking cancelled',
+                'guide_user_id' => $bookingInfo['guide_user_id'] ?? 0  // Return guide's user_id
+            ]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Booking not found or already cancelled']);
         }
@@ -4733,40 +4742,41 @@ function cancelBooking(bookingId, mode) {
         }
         
         fetch(window.location.href, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-            body: `action=cancel_booking&booking_id=${actualBookingId}&mode=${mode}`
-        }).then(response => response.json()).then(result => {
-            if (result.success) {
-                if (mode === 'leave') {
-                    // Remove the joined booking from the local array
-                    const index = bookings.findIndex(x => x.id === bookingId);
-                    if (index !== -1) {
-                        bookings.splice(index, 1);
-                    }
-                    showToast('✓ You left the hike');
-                } else {
-                    const b = bookings.find(x => x.id === bookingId);
-                    if (b) {
-                        b.status = 'cancelled';
-                        showToast('✓ Booking cancelled');
-                        
-                        // Send cancellation message to guide (only if booking exists)
-                        fetch('../api/hiker_messages.php', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: `action=send_system_message&guide_id=${b.guideId}&message=I had to cancel my booking for ${b.mountain} on ${b.date}. Sorry for the inconvenience! ❌`
-                        }).catch(err => console.error('Message error:', err));
-                    }
-                }
-                renderBookings();
-            } else {
-                showToast(result.message || 'Failed to process request.');
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+    body: `action=cancel_booking&booking_id=${actualBookingId}&mode=${mode}`
+}).then(response => response.json()).then(result => {
+    if (result.success) {
+        if (mode === 'leave') {
+            const index = bookings.findIndex(x => x.id === bookingId);
+            if (index !== -1) {
+                bookings.splice(index, 1);
             }
-        }).catch(err => {
-            console.error(err);
-            showToast('Network error.');
-        });
+            showToast('✓ You left the hike');
+        } else {
+            const b = bookings.find(x => x.id === bookingId);
+            if (b) {
+                b.status = 'cancelled';
+                showToast('✓ Booking cancelled');
+                
+                // Use the guide_user_id returned from the server
+                if (result.guide_user_id && result.guide_user_id > 0) {
+                    fetch('../api/hiker_messages.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `action=send_system_message&guide_id=${result.guide_user_id}&message=I had to cancel my booking for ${b.mountain} on ${b.date}. Sorry for the inconvenience! ❌`
+                    }).catch(err => console.error('Message error:', err));
+                }
+            }
+        }
+        renderBookings();
+    } else {
+        showToast(result.message || 'Failed to process request.');
+    }
+}).catch(err => {
+    console.error(err);
+    showToast('Network error.');
+});
       }
     );
 }
