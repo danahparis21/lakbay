@@ -931,11 +931,11 @@ function getCrowdBadge($level) {
 
     <!-- Stats Overview -->
     <div class="stats-grid">
-      <div class="stat-card critical" onclick="scrollToSection('alerts')">
+      <!-- <div class="stat-card critical" onclick="scrollToSection('alerts')">
         <div class="stat-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="22"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
         <div class="stat-value"><?= $critical_count + $warning_count ?></div>
         <div class="stat-label">Active Alerts</div>
-      </div>
+      </div> -->
       <div class="stat-card warning" onclick="scrollToSection('safety')">
         <div class="stat-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="22"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
         <div class="stat-value"><?= $safety_alert_count ?></div>
@@ -1066,7 +1066,7 @@ function getCrowdBadge($level) {
     </div>
 </div>
 
-    <!-- Active Alerts Section -->
+    <!-- Active Alerts Section
     <div class="panel" id="alerts">
       <div class="panel-hdr">
         <div class="panel-title"><svg viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Active Alerts from Guides</div>
@@ -1103,7 +1103,7 @@ function getCrowdBadge($level) {
           </div>
         <?php endif; ?>
       </div>
-    </div>
+    </div> -->
 
    <!-- Safety Alerts (from active hikes) -->
 <div class="panel" id="safety">
