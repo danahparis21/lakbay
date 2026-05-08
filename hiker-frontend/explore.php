@@ -727,6 +727,32 @@ svg{display:block;flex-shrink:0;}
 .mtn-img-overlay{position:absolute;inset:0;background:linear-gradient(transparent 50%,rgba(16,6,0,.55));}
 .mtn-badges{position:absolute;top:10px;left:10px;display:flex;gap:5px;}
 .badge{padding:4px 11px;border-radius:60px;font-size:10.5px;font-weight:700;}
+/* Difficulty Badge Styles */
+.mtn-badges .badge {
+    padding: 4px 11px;
+    border-radius: 60px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.badge-easy {
+    background: #d9ead3;
+    color: #2a6b2a;
+}
+.badge-moderate {
+    background: #ffe0b5;
+    color: #8a5a2a;
+}
+.badge-hard {
+    background: #ffcfc2;
+    color: #a23b1a;
+}
+.badge-difficult {
+    background: #ffcfc2;
+    color: #a23b1a;
+}
+
 .mtn-crowd{
   position:absolute;top:10px;right:10px;
   background:rgba(0,0,0,.6);backdrop-filter:blur(6px);
@@ -2231,7 +2257,7 @@ $currentPage = 'explore'; // Change per page: 'explore', 'bookings', 'quiz', 'me
       <div class="chip active" onclick="filterBy('all',this)">All</div>
       <div class="chip" onclick="filterBy('easy',this)">Easy</div>
       <div class="chip" onclick="filterBy('moderate',this)">Moderate</div>
-      <div class="chip" onclick="filterBy('hard',this)">Hard</div>
+      <div class="chip" onclick="filterBy('hard',this)">Difficult</div>
       <select class="filter-select" onchange="sortBy(this.value)">
         <option value="">Sort by</option>
         <option value="rating">Rating</option>
@@ -2599,7 +2625,12 @@ function scrollGuides(dir){ document.getElementById('guidesTrack').scrollBy({lef
 // ── MOUNTAIN GRID ──
 const crowdLabel={low:'Low',med:'Medium',high:'High'};
 const crowdIcon ={low:'<svg width="8" height="8" viewBox="0 0 24 24" fill="#2a6b2a"><circle cx="12" cy="12" r="10"/></svg>',med:'<svg width="8" height="8" viewBox="0 0 24 24" fill="#8a5a2a"><circle cx="12" cy="12" r="10"/></svg>',high:'<svg width="8" height="8" viewBox="0 0 24 24" fill="#a23b1a"><circle cx="12" cy="12" r="10"/></svg>'};
-const diffLabel ={easy:'Easy',moderate:'Moderate',hard:'Hard'};
+const diffLabel = {
+    easy: 'Easy',
+    moderate: 'Moderate',
+    hard: 'Difficult',  // Changed from 'Hard' to 'Difficult'
+    difficult: 'Difficult'
+};
 
 function renderGrid(list){
   const grid=document.getElementById('mtnGrid');
@@ -2629,8 +2660,7 @@ function renderGrid(list){
       <div class="mtn-img-wrap">
         <div class="mtn-img" style="background-image:url('${m.image}')"></div>
         <div class="mtn-img-overlay"></div>
-       <div class="mtn-badges"><span class="badge badge-${m.difficulty}">${diffLabel[m.difficulty]||m.difficulty}</span></div>
-        
+       <span class="badge ${m.difficulty === 'hard' ? 'badge-difficult' : `badge-${m.difficulty}`}">${diffLabel[m.difficulty] || (m.difficulty === 'hard' ? 'Difficult' : m.difficulty)}</span>
       </div>
       <div class="mtn-body">
         <div class="mtn-name">${esc(m.name)}</div>
