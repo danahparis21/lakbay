@@ -1898,7 +1898,6 @@ async function selectWeatherTab(mtnId, el){
   }
   renderWeatherPanel(mtnId);
 }
-
 function initExploreMap(){
   if(typeof L === 'undefined') return;
   
@@ -1964,7 +1963,6 @@ function initExploreMap(){
     // Make the circle clickable - opens Trilogy modal
     trilogyCircle.on('click', () => {
       openMtnById(trilogyMtn.id);
-      // Also highlight the Trilogy tab in weather panel
       const tab = document.querySelector(`.wtab[data-id="${trilogyMtn.id}"]`);
       if(tab) selectWeatherTab(trilogyMtn.id, tab);
     });
@@ -1979,10 +1977,10 @@ function initExploreMap(){
       document.body.style.cursor = 'default';
     });
     
-    // Add a subtle label for Trilogy area
+    // Add label for Trilogy area
     const trilogyLabel = L.marker([centerLat, centerLng], {
       icon: L.divIcon({
-        html: `<div style="background: rgba(198,164,59,0.9); color: white; padding: 4px 12px; border-radius: 30px; font-size: 11px; font-weight: 700; white-space: nowrap; border: 1px solid var(--gold); backdrop-filter: blur(4px);">🔥 TRILOGY AREA</div>`,
+        html: `<div style="background: rgba(198,164,59,0.9); color: white; padding: 4px 12px; border-radius: 30px; font-size: 11px; font-weight: 700; white-space: nowrap; border: 1px solid var(--gold); backdrop-filter: blur(4px);">⛰ TRILOGY AREA</div>`,
         className: '',
         iconSize: [120, 24],
         iconAnchor: [60, 12]
@@ -1997,19 +1995,17 @@ function initExploreMap(){
     // Skip adding a separate marker for Trilogy since we have the circle
     if (mtn.is_trilogy || mtn.name.includes('Trilogy')) return;
     
-    // Regular marker for each peak
-    const isLantik = mtn.name.includes('Lantik');
-    const isTalamitam = mtn.name.includes('Talamitam');
-    const isApayang = mtn.name.includes('Apayang');
-    
     // Get appropriate icon color based on difficulty
     let markerColor = 'var(--ink)';
     if (mtn.difficulty === 'easy') markerColor = '#2a6b2a';
     else if (mtn.difficulty === 'moderate') markerColor = '#8a5a2a';
     else if (mtn.difficulty === 'hard') markerColor = '#a23b1a';
     
+    // SVG mountain icon instead of emoji
+    const svgIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 22h20L12 2z"/><path d="M12 2v20"/><path d="M2 22h20"/></svg>`;
+    
     const icon = L.divIcon({
-      html: `<div class="lk-marker" style="background: ${markerColor}; border: 3px solid var(--gold); width: 36px; height: 36px; font-size: 14px;">${mtn.name.includes('Lantik') ? '⛰️' : (mtn.name.includes('Talamitam') ? '🏔️' : '🗻')}</div>`,
+      html: `<div class="lk-marker" style="background: ${markerColor}; border: 3px solid var(--gold); width: 36px; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center;">${svgIcon}</div>`,
       className: '',
       iconSize: [36, 36],
       iconAnchor: [18, 36],
@@ -2045,11 +2041,13 @@ function initExploreMap(){
     mapMarkers[mtn.id] = marker;
   });
   
-  // Add Mt. Batulao marker separately (it's far away)
+  // Add Mt. Batulao marker separately
   const batulao = mountainCoords.find(m => m.name.includes('Batulao'));
   if (batulao) {
+    const svgIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 22h20L12 2z"/><path d="M12 2v20"/><path d="M2 22h20"/></svg>`;
+    
     const iconBatulao = L.divIcon({
-      html: `<div class="lk-marker" style="background: #2a6b2a; border: 3px solid var(--gold); width: 36px; height: 36px; font-size: 14px;">🌋</div>`,
+      html: `<div class="lk-marker" style="background: #2a6b2a; border: 3px solid var(--gold); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;">${svgIcon}</div>`,
       className: '',
       iconSize: [36, 36],
       iconAnchor: [18, 36],
@@ -2084,7 +2082,6 @@ function initExploreMap(){
     exploreMap.fitBounds(bounds, { padding: [50, 50] });
   }
 }
-
 function openMtnById(id){
   const m = mountains.find(x=>x.id===id);
   if(m){ 
