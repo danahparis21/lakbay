@@ -74,16 +74,25 @@ if (!empty($mountain_ids)) {
     $crowd_reports = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// Get active safety alerts (from guides during hikes)
+// Get active safety alerts (from guides during hikes) - WITH GUIDE PHONE NUMBER
 $safety_alerts = [];
 if (!empty($mountain_ids)) {
     $stmt = $pdo->prepare("
-        SELECT sa.*, b.booking_number, m.name as mountain_name,
-               u.name as reporter_name
+        SELECT sa.*, 
+               b.booking_number, 
+               m.name as mountain_name,
+               u.name as reporter_name,
+               guide_user.name as guide_name,
+               guide_user.phone as guide_phone,
+               guide_user.id as guide_id,
+               g.gcash_number,
+               g.trail_status
         FROM safety_alerts sa
         INNER JOIN bookings b ON sa.booking_id = b.id
         INNER JOIN mountains m ON b.mountain_id = m.id
         LEFT JOIN users u ON sa.reported_by = u.id
+        LEFT JOIN guides g ON b.guide_id = g.id
+        LEFT JOIN users guide_user ON g.user_id = guide_user.id
         WHERE b.mountain_id IN ($mountain_ids_placeholder) 
           AND sa.status = 'active'
         ORDER BY sa.severity = 'critical' DESC, sa.created_at DESC
@@ -1096,49 +1105,91 @@ function getCrowdBadge($level) {
       </div>
     </div>
 
-    <!-- Safety Alerts (from active hikes) -->
-    <div class="panel" id="safety">
-      <div class="panel-hdr">
+   <!-- Safety Alerts (from active hikes) -->
+<div class="panel" id="safety">
+    <div class="panel-hdr">
         <div class="panel-title"><svg viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Safety Alerts from Active Hikes</div>
-      </div>
-      <div class="panel-body">
-        <?php if(empty($safety_alerts)): ?>
-          <div style="text-align:center;padding:40px;color:var(--ink3);">✅ No active safety alerts. All hikes are proceeding normally.</div>
-        <?php else: ?>
-          <div class="safety-grid">
-            <?php foreach($safety_alerts as $alert): ?>
-              <div class="alert-card <?= $alert['severity'] === 'critical' ? 'critical' : ($alert['severity'] === 'high' ? 'warning' : 'info') ?>">
-                <div class="alert-card-header">
-                  <div class="alert-icon <?= $alert['severity'] === 'critical' ? 'critical' : 'warning' ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20"><path d="M12 8v4l3 3M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                  </div>
-                  <div>
-                    <div class="alert-title"><?= htmlspecialchars($alert['title']) ?></div>
-                    <div class="alert-meta">
-                      <span>🏔 <?= htmlspecialchars($alert['mountain_name']) ?></span>
-                      <span>🎫 <?= htmlspecialchars($alert['booking_number']) ?></span>
-                      <span>🕐 <?= date('M d, g:i A', strtotime($alert['created_at'])) ?></span>
-                    </div>
-                  </div>
-                </div>
-                <div class="alert-body">
-                  <?= nl2br(htmlspecialchars(substr($alert['description'], 0, 150))) ?>
-                  <?php if($alert['hiker_involved']): ?>
-                    <div style="margin-top:8px;padding:6px;background:var(--off);border-radius:8px;">
-                      👤 Affected Hiker: <?= htmlspecialchars($alert['hiker_involved']) ?>
-                    </div>
-                  <?php endif; ?>
-                </div>
-                <div class="alert-footer">
-                  <button class="btn-sm btn-primary-sm" onclick="resolveSafetyAlert(<?= $alert['id'] ?>)">✓ Mark Resolved</button>
-                  <button class="btn-sm btn-outline-sm" onclick="contactGuide(<?= $alert['booking_id'] ?>)">📞 Contact Guide</button>
-                </div>
-              </div>
-            <?php endforeach; ?>
-          </div>
-        <?php endif; ?>
-      </div>
     </div>
+    <div class="panel-body">
+        <?php if(empty($safety_alerts)): ?>
+            <div style="text-align:center;padding:40px;color:var(--ink3);">✅ No active safety alerts. All hikes are proceeding normally.</div>
+        <?php else: ?>
+            <div class="safety-grid">
+                <?php foreach($safety_alerts as $alert): ?>
+                    <div class="alert-card <?= $alert['severity'] === 'critical' ? 'critical' : ($alert['severity'] === 'high' ? 'warning' : 'info') ?>">
+                        <div class="alert-card-header">
+                            <div class="alert-icon <?= $alert['severity'] === 'critical' ? 'critical' : 'warning' ?>">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20"><path d="M12 8v4l3 3M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            </div>
+                            <div>
+                                <div class="alert-title"><?= htmlspecialchars($alert['title']) ?></div>
+                                <div class="alert-meta">
+                                    <span>🏔 <?= htmlspecialchars($alert['mountain_name']) ?></span>
+                                    <span>🎫 <?= htmlspecialchars($alert['booking_number']) ?></span>
+                                    <span>🕐 <?= date('M d, g:i A', strtotime($alert['created_at'])) ?></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="alert-body">
+                            <?= nl2br(htmlspecialchars(substr($alert['description'], 0, 150))) ?>
+                            
+                            <!-- Guide Contact Info - shows phone from users table -->
+                            <?php if(!empty($alert['guide_phone'])): ?>
+                                <div style="margin-top: 14px; padding: 12px; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-radius: 14px; border-left: 4px solid #2e7d32;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 18px;">🥾</span>
+                                            <div>
+                                                <div style="font-weight: 700; font-size: 13px; color: #1b5e20;"><?= htmlspecialchars($alert['guide_name'] ?? 'Guide') ?></div>
+                                                <div style="font-size: 11px; color: #2e7d32;">
+                                                    <?php if($alert['trail_status'] === 'on_hike'): ?>🔴 On trail
+                                                    <?php elseif($alert['trail_status'] === 'safe'): ?>🟢 Safe
+                                                    <?php else: ?>⚪ Available
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                            <!-- Phone number as clickable link (works on mobile) -->
+                                            <a href="tel:<?= preg_replace('/[^0-9+]/', '', $alert['guide_phone']) ?>" 
+                                               style="background: #2e7d32; color: white; text-decoration: none; padding: 8px 14px; border-radius: 40px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                                                📞 <?= htmlspecialchars($alert['guide_phone']) ?>
+                                            </a>
+                                            <!-- Copy button for laptop users -->
+                                            <button onclick="copyToClipboard('<?= htmlspecialchars($alert['guide_phone']) ?>')" 
+                                                    style="background: white; border: 1px solid #2e7d32; color: #2e7d32; cursor: pointer; padding: 8px 12px; border-radius: 40px; font-size: 12px; font-weight: 600;">
+                                                📋 Copy
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <!-- Optional: Show GCash number if available (from guides table) -->
+                                    <?php if(!empty($alert['gcash_number'])): ?>
+                                        <div style="margin-top: 8px; font-size: 11px; color: #1b5e20; background: rgba(255,255,255,0.6); padding: 6px 10px; border-radius: 10px;">
+                                            💰 GCash: <?= htmlspecialchars($alert['gcash_number']) ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php else: ?>
+                                <div style="margin-top: 12px; padding: 8px; background: #ffebee; border-radius: 10px; color: #c62828; font-size: 12px;">
+                                    ⚠️ No phone number registered for this guide
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if($alert['hiker_involved']): ?>
+                                <div style="margin-top:8px;padding:6px;background:var(--off);border-radius:8px;">
+                                    👤 Affected Hiker: <?= htmlspecialchars($alert['hiker_involved']) ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="alert-footer">
+                            <button class="btn-sm btn-primary-sm" onclick="resolveSafetyAlert(<?= $alert['id'] ?>)">✓ Mark Resolved</button>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
 
     <!-- Crowd Reports -->
     <div class="panel" id="crowd">
@@ -1488,6 +1539,32 @@ function markBroadcastRead(broadcastId, element) {
 function refreshWeather() {
   showToast('Refreshing weather data...', 'info');
   setTimeout(() => location.reload(), 500);
+}
+
+function copyToClipboard(text) {
+    // Clean the number
+    const cleanText = text.toString().trim();
+    
+    // Modern way
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cleanText).then(() => {
+            showToast(`📋 ${cleanText} copied! You can now dial from your mobile.`, 'success');
+        }).catch(() => fallbackCopy(cleanText));
+    } else {
+        fallbackCopy(cleanText);
+    }
+}
+
+function fallbackCopy(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    showToast(`📋 ${text} copied to clipboard!`, 'success');
 }
 
 // Update time
