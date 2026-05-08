@@ -241,10 +241,7 @@ function denyBookingRequest($pdo, $hikerId) {
    GET MESSAGES
 ────────────────────────────────────────────── */
 function getMessages($pdo, $hikerId, $otherUserId) {
-  
-    
     if (!$otherUserId) { 
-       
         echo json_encode(['success'=>false,'message'=>'User ID required']); 
         return; 
     }
@@ -259,7 +256,7 @@ function getMessages($pdo, $hikerId, $otherUserId) {
         return;
     }
 
-    // Get messages between the two users (using user IDs directly)
+    // Get messages between the two users - ADD proof_image to SELECT
     $sql = "
         SELECT
             m.id,
@@ -277,6 +274,7 @@ function getMessages($pdo, $hikerId, $otherUserId) {
             m.is_read,
             m.action_data,
             m.is_system_announcement,
+            m.proof_image,  -- ADD THIS LINE
             (SELECT name FROM users WHERE id = m.sender_id) as sender_name,
             'message' as source_type
         FROM messages m
@@ -288,6 +286,7 @@ function getMessages($pdo, $hikerId, $otherUserId) {
     $stmt = $pdo->prepare($sql);
     $stmt->execute([':otherUserId'=>$otherUserId, ':hikerId'=>$hikerId, ':key'=>MSG_AES_KEY]);
     $messages = $stmt->fetchAll();
+    
     // Now fetch nudges from booking_nudges table for bookings with this guide
     $nudgeSql = "
     SELECT 

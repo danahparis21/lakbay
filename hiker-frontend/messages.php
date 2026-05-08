@@ -693,82 +693,83 @@ function renderMessages(messages) {
             lastDate = dateStr;
         }
 
-        // 0. CHECK FOR PAYMENT PROOF SUBMITTED MESSAGE FIRST (regular text message, not action_data)
-        if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
-            const bodyText = msg.body || '';
-            const refMatch = bodyText.match(/Reference Number:\s*([^\n]+)/);
-            const referenceNumber = refMatch ? refMatch[1] : 'N/A';
-            const imgMatch = bodyText.match(/Proof:\s*(\S+\.(jpg|jpeg|png))/i);
-            const proofImageUrl = imgMatch ? imgMatch[1] : null;
-            const bookingMatch = bodyText.match(/booking #([^\s]+)/);
-            const bookingNumber = bookingMatch ? bookingMatch[1] : 'N/A';
-            const isGuide = String(msg.receiver_id) === String(CURRENT_USER_ID);
-            
-            let actionButtons = '';
-            if (isGuide && !isMine) {
-                actionButtons = `
-                    <div class="payment-actions" style="display:flex;gap:10px;margin-top:16px;">
-                        <button class="btn-payment primary" onclick="verifyAndConfirmPayment('${esc(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:none;background:#059669;color:white;cursor:pointer;">
-                            <i class="fas fa-check-circle"></i> Verify & Confirm Payment
-                        </button>
-                        <button class="btn-payment secondary" onclick="rejectPaymentProof('${esc(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid #e5e7eb;background:#f3f4f6;cursor:pointer;">
-                            <i class="fas fa-times-circle"></i> Reject
-                        </button>
-                    </div>
-                `;
-            }
-            
-            let statusText = 'PENDING VERIFICATION';
-            if (!isGuide && !isMine) {
-                statusText = '⏳ AWAITING GUIDE VERIFICATION';
-            } else if (isGuide && !isMine) {
-                statusText = 'ACTION REQUIRED';
-            }
-            
-            const card = `
-                <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
-                    <div class="msg-card-hdr" style="background:linear-gradient(135deg, #059669 0%, #047857 100%);padding:12px 16px;display:flex;align-items:center;gap:10px;color:white;">
-                        <span class="msg-card-icon" style="font-size:20px;">💵</span>
-                        <div class="msg-card-hdr-label" style="flex:1;">
-                            <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">PAYMENT PROOF SUBMITTED</div>
-                            <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${esc(bookingNumber)}</div>
-                        </div>
-                        <span class="payment-status-badge" style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">${statusText}</span>
-                    </div>
-                    <div class="msg-card-body" style="padding:16px;">
-                        <div class="payment-detail-row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
-                            <span class="payment-label" style="font-size:12px;color:#6b7280;">📝 Reference Number</span>
-                            <span class="payment-value" style="font-size:13px;font-weight:700;color:#1f2937;">${esc(referenceNumber)}</span>
-                        </div>
-                        <div class="gcash-details" style="background:#f0fdf4;border-radius:12px;padding:12px;margin:12px 0;">
-                            <div class="gcash-row" style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;">
-                                <i class="fas fa-receipt" style="color:#059669;width:20px;"></i>
-                                <span><strong>Payment Proof:</strong></span>
-                            </div>
-                            ${proofImageUrl ? `
-                                <div class="proof-image-preview" style="margin-top:8px;text-align:center;">
-                                    <img src="${esc(proofImageUrl)}" alt="Payment Proof" style="max-width:100%;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('${esc(proofImageUrl)}', '_blank')">
-                                    <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
-                                </div>
-                            ` : '<div style="font-size:12px;color:#6b7280;">No image uploaded</div>'}
-                        </div>
-                        ${actionButtons}
-                        ${!isGuide && !isMine ? `
-                        <div class="info-note" style="background:#fef3c7;border-radius:8px;padding:10px;margin-top:12px;text-align:center;">
-                            <span style="font-size:11px;color:#d97706;">⏳ Your payment proof is being reviewed by the guide. You'll be notified once verified.</span>
-                        </div>
-                        ` : ''}
-                    </div>
+        // 0. CHECK FOR PAYMENT PROOF SUBMITTED MESSAGE (using proof_image column)
+if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
+    const bodyText = msg.body || '';
+    const refMatch = bodyText.match(/Reference Number:\s*([^\n]+)/);
+    const referenceNumber = refMatch ? refMatch[1] : 'N/A';
+    const bookingMatch = bodyText.match(/booking #([^\s]+)/);
+    const bookingNumber = bookingMatch ? bookingMatch[1] : 'N/A';
+    const isGuide = String(msg.receiver_id) === String(CURRENT_USER_ID);
+    
+    // Get image from proof_image column (base64 data)
+    const proofImageBase64 = msg.proof_image || null;
+    
+    let actionButtons = '';
+    if (isGuide && !isMine) {
+        actionButtons = `
+            <div class="payment-actions" style="display:flex;gap:10px;margin-top:16px;">
+                <button class="btn-payment primary" onclick="verifyAndConfirmPayment('${esc(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:none;background:#059669;color:white;cursor:pointer;">
+                    <i class="fas fa-check-circle"></i> Verify & Confirm Payment
+                </button>
+                <button class="btn-payment secondary" onclick="rejectPaymentProof('${esc(bookingNumber)}', ${msg.id})" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid #e5e7eb;background:#f3f4f6;cursor:pointer;">
+                    <i class="fas fa-times-circle"></i> Reject
+                </button>
+            </div>
+        `;
+    }
+    
+    let statusText = 'PENDING VERIFICATION';
+    if (!isGuide && !isMine) {
+        statusText = '⏳ AWAITING GUIDE VERIFICATION';
+    } else if (isGuide && !isMine) {
+        statusText = 'ACTION REQUIRED';
+    }
+    
+    const card = `
+        <div class="msg-card payment-instructions-card" style="width:360px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.1);background:white;">
+            <div class="msg-card-hdr" style="background:linear-gradient(135deg, #059669 0%, #047857 100%);padding:12px 16px;display:flex;align-items:center;gap:10px;color:white;">
+                <span class="msg-card-icon" style="font-size:20px;">💵</span>
+                <div class="msg-card-hdr-label" style="flex:1;">
+                    <div class="msg-card-hdr-title" style="font-size:11px;font-weight:800;letter-spacing:0.5px;">PAYMENT PROOF SUBMITTED</div>
+                    <div class="msg-card-hdr-sub" style="font-size:10px;opacity:0.85;">Booking #${esc(bookingNumber)}</div>
                 </div>
-                <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
-            
-            if (isMine) {
-                html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
-            } else {
-                html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
-            }
-            return;
-        }
+                <span class="payment-status-badge" style="background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;">${statusText}</span>
+            </div>
+            <div class="msg-card-body" style="padding:16px;">
+                <div class="payment-detail-row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                    <span class="payment-label" style="font-size:12px;color:#6b7280;">📝 Reference Number</span>
+                    <span class="payment-value" style="font-size:13px;font-weight:700;color:#1f2937;">${esc(referenceNumber)}</span>
+                </div>
+                <div class="gcash-details" style="background:#f0fdf4;border-radius:12px;padding:12px;margin:12px 0;">
+                    <div class="gcash-row" style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;">
+                        <i class="fas fa-receipt" style="color:#059669;width:20px;"></i>
+                        <span><strong>Payment Proof:</strong></span>
+                    </div>
+                    ${proofImageBase64 ? `
+                        <div class="proof-image-preview" style="margin-top:8px;text-align:center;">
+                            <img src="${proofImageBase64}" alt="Payment Proof" style="max-width:100%;max-height:300px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('${proofImageBase64}', '_blank')">
+                            <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
+                        </div>
+                    ` : '<div style="font-size:12px;color:#6b7280;">No image uploaded</div>'}
+                </div>
+                ${actionButtons}
+                ${!isGuide && !isMine ? `
+                <div class="info-note" style="background:#fef3c7;border-radius:8px;padding:10px;margin-top:12px;text-align:center;">
+                    <span style="font-size:11px;color:#d97706;">⏳ Your payment proof is being reviewed by the guide. You'll be notified once verified.</span>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+        <div class="msg-time" style="margin-top:4px;">${timeStr}</div>`;
+    
+    if (isMine) {
+        html += `<div class="msg-bubble-row mine"><div>${card}</div></div>`;
+    } else {
+        html += `<div class="msg-bubble-row"><div class="msg-av-xs">${senderInitial}</div><div>${card}</div></div>`;
+    }
+    return;
+}
 
         // 0.5. PAYMENT CONFIRMED / REJECTED CARDS (for hiker view)
 if (msg.body && (msg.body.includes('PAYMENT CONFIRMED') || msg.body.includes('PAYMENT PROOF REJECTED') || msg.body.includes('PAYMENT REJECTED'))) {
