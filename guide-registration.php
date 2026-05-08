@@ -189,9 +189,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($chk->fetch()) $errors[] = "An account with this email or username already exists.";
     }
 
-    $upload_dir  = __DIR__ . '/uploads/guide_registrations/';
+       $upload_dir  = __DIR__ . '/../uploads/guide_registrations/';
     $id_img_path = '';
-    if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+    
+    // Create directories if they don't exist
+    if (!is_dir(__DIR__ . '/../uploads/')) {
+        mkdir(__DIR__ . '/../uploads/', 0755, true);
+    }
+    if (!is_dir($upload_dir)) {
+        mkdir($upload_dir, 0755, true);
+    }
 
     if (empty($errors)) {
         if (isset($_FILES['gov_id']) && $_FILES['gov_id']['error'] === UPLOAD_ERR_OK) {
@@ -206,14 +213,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $ext         = pathinfo($_FILES['gov_id']['name'], PATHINFO_EXTENSION);
                 $fname       = 'id_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
-                move_uploaded_file($_FILES['gov_id']['tmp_name'], $upload_dir . $fname);
-                $id_img_path = 'uploads/guide_registrations/' . $fname;
+                $targetPath  = $upload_dir . $fname;
+                
+                if (move_uploaded_file($_FILES['gov_id']['tmp_name'], $targetPath)) {
+                    $id_img_path = '../uploads/guide_registrations/' . $fname;
+                } else {
+                    $errors[] = "Failed to upload ID image. Please check directory permissions.";
+                    error_log("Failed to move uploaded file to: " . $targetPath);
+                }
             }
         } else {
             $errors[] = "A government-issued ID photo is required.";
         }
     }
-
     if (empty($errors)) {
         try {
             $pdo->beginTransaction();
