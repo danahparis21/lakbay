@@ -2,11 +2,18 @@
 require_once __DIR__ . '/../config/db.php';
 date_default_timezone_set('Asia/Manila');
 
-// Start transaction to ensure both updates happen together
+// Add this debug line to verify timezone is correct
+error_log("Cron running at: " . date('Y-m-d H:i:s') . " (Asia/Manila)");
+
+// Start transaction
 $pdo->beginTransaction();
 
 try {
-    // Cancel expired waiting_payment bookings
+    $totalUpdated = 0;
+    
+    // =============================================
+    // 1. CANCEL EXPIRED WAITING_PAYMENT BOOKINGS
+    // =============================================
     $stmt = $pdo->prepare("
         UPDATE bookings 
         SET status = 'cancelled',
@@ -19,47 +26,107 @@ try {
     ");
     $stmt->execute();
     $cancelledCount = $stmt->rowCount();
+    $totalUpdated += $cancelledCount;
     
-    // For each cancelled booking, release the guide if they're not on any active hike
-    if ($cancelledCount > 0) {
-        $stmt2 = $pdo->prepare("
-            UPDATE guides g
-            SET is_available = 1,
-                currently_on_hike = 0
-            WHERE user_id IN (
-                SELECT DISTINCT g.user_id
-                FROM guides g
-                JOIN bookings b ON b.guide_id = g.id
-                WHERE b.status = 'cancelled'
-                  AND b.downpayment_status = 'expired'
-                  AND NOT EXISTS (
-                      SELECT 1 FROM bookings b2 
-                      WHERE b2.guide_id = g.id 
-                        AND b2.status IN ('active', 'confirmed', 'waiting_payment')
-                  )
-            )
-        ");
-        $stmt2->execute();
-    }
+    // =============================================
+    // 2. CANCEL EXPIRED PENDING BOOKINGS (not accepted by guide)
+    // =============================================
+    $stmt = $pdo->prepare("
+        UPDATE bookings 
+        SET status = 'cancelled',
+            downpayment_status = 'expired',
+            payment_status = 'cancelled',
+            updated_at = NOW()
+        WHERE status = 'pending' 
+          AND (downpayment_deadline < NOW() OR created_at < DATE_SUB(NOW(), INTERVAL 1 DAY))
+          AND downpayment_status != 'paid'
+    ");
+    $stmt->execute();
+    $pendingCancelled = $stmt->rowCount();
+    $totalUpdated += $pendingCancelled;
     
-    // Also expire any unpaid but not yet confirmed bookings (safety)
-    $stmt3 = $pdo->prepare("
+    // =============================================
+    // 3. MARK ACTIVE HIKES AS FINISHED (hike date has passed)
+    // =============================================
+    $stmt = $pdo->prepare("
+        UPDATE bookings 
+        SET status = 'finished',
+            updated_at = NOW(),
+            completed_at = NOW()
+        WHERE status = 'active' 
+          AND hike_date < CURDATE()
+    ");
+    $stmt->execute();
+    $finishedCount = $stmt->rowCount();
+    $totalUpdated += $finishedCount;
+    
+    // =============================================
+    // 4. MARK ACTIVE HIKES AS FINISHED (same day, but time passed)
+    //    Example: hike at 6am, now it's 7pm
+    // =============================================
+    $stmt = $pdo->prepare("
+        UPDATE bookings 
+        SET status = 'finished',
+            updated_at = NOW(),
+            completed_at = NOW()
+        WHERE status = 'active' 
+          AND hike_date = CURDATE()
+          AND CONCAT(hike_date, ' ', start_time) < NOW()
+    ");
+    $stmt->execute();
+    $finishedTodayCount = $stmt->rowCount();
+    $totalUpdated += $finishedTodayCount;
+    
+    // =============================================
+    // 5. CANCEL EXPIRED CONFIRMED BOOKINGS (confirmed but never paid)
+    // =============================================
+    $stmt = $pdo->prepare("
         UPDATE bookings 
         SET status = 'cancelled',
             downpayment_status = 'expired',
             updated_at = NOW()
-        WHERE status = 'pending' 
+        WHERE status = 'confirmed' 
           AND downpayment_deadline < NOW()
-          AND downpayment_deadline IS NOT NULL
+          AND downpayment_status != 'paid'
     ");
-    $stmt3->execute();
+    $stmt->execute();
+    $confirmedCancelled = $stmt->rowCount();
+    $totalUpdated += $confirmedCancelled;
+    
+    // =============================================
+    // 6. RELEASE GUIDES (if they have no active bookings)
+    // =============================================
+    $stmt = $pdo->prepare("
+        UPDATE guides g
+        SET is_available = 1,
+            currently_on_hike = 0
+        WHERE user_id IN (
+            SELECT DISTINCT g2.user_id
+            FROM guides g2
+            LEFT JOIN bookings b ON b.guide_id = g2.id
+                AND b.status IN ('active', 'confirmed', 'waiting_payment')
+            WHERE b.id IS NULL  -- No active/confirmed/waiting_payment bookings
+        )
+    ");
+    $stmt->execute();
+    $guidesReleased = $stmt->rowCount();
     
     $pdo->commit();
     
-    echo "[" . date('Y-m-d H:i:s') . "] Cancelled " . $cancelledCount . " expired bookings\n";
-    echo "[" . date('Y-m-d H:i:s') . "] Also cancelled " . $stmt3->rowCount() . " pending expired bookings\n";
+    // Output results
+    echo "[" . date('Y-m-d H:i:s') . "] ========== CRON SUMMARY ==========\n";
+    echo "📍 Current time (Asia/Manila): " . date('Y-m-d H:i:s') . "\n";
+    echo "1️⃣ Expired waiting_payment cancelled: {$cancelledCount}\n";
+    echo "2️⃣ Expired pending cancelled: {$pendingCancelled}\n";
+    echo "3️⃣ Past date active → finished: {$finishedCount}\n";
+    echo "4️⃣ Past time active → finished: {$finishedTodayCount}\n";
+    echo "5️⃣ Expired confirmed cancelled: {$confirmedCancelled}\n";
+    echo "6️⃣ Guides released: {$guidesReleased}\n";
+    echo "📊 Total bookings updated: {$totalUpdated}\n";
+    echo "========================================\n";
     
 } catch (Exception $e) {
     $pdo->rollBack();
-    echo "Error: " . $e->getMessage() . "\n";
+    error_log("Cron error: " . $e->getMessage());
+    echo "❌ Error: " . $e->getMessage() . "\n";
 }
