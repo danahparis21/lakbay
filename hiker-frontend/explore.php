@@ -1902,50 +1902,128 @@ async function selectWeatherTab(mtnId, el){
 function initExploreMap(){
   if(typeof L === 'undefined') return;
   
-  // Use Satellite/Imagery layer (ESRI World Imagery)
+  // Use Satellite/Imagery layer
   exploreMap = L.map('exploreMap',{
-    center:[14.07, 120.80],
-    zoom:12,
+    center:[14.08, 120.76],
+    zoom:13,
     zoomControl:true,
     attributionControl:false
   });
 
-  // Add satellite imagery
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+    attribution: 'Tiles &copy; Esri',
     maxZoom: 19
   }).addTo(exploreMap);
   
-  // Add a semi-transparent overlay to make markers pop (optional)
+  // Add semi-transparent overlay
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
     attribution: '© OpenStreetMap',
     maxZoom: 19,
     opacity: 0.3
   }).addTo(exploreMap);
 
-  mountainCoords.forEach(mtn=>{
-    // Special larger marker for Trilogy
-    const isTrilogy = mtn.is_trilogy || mtn.name.includes('Trilogy');
+  // First, find the Trilogy mountain
+  const trilogyMtn = mountainCoords.find(m => m.is_trilogy || m.name.includes('Trilogy'));
+  
+  // Find the three peaks
+  const lantik = mountainCoords.find(m => m.name.includes('Lantik'));
+  const talamitam = mountainCoords.find(m => m.name.includes('Talamitam'));
+  const apayang = mountainCoords.find(m => m.name.includes('Apayang'));
+  
+  // Calculate bounds for the Trilogy area
+  const peakLats = [];
+  const peakLngs = [];
+  if (lantik) { peakLats.push(lantik.lat); peakLngs.push(lantik.lng); }
+  if (talamitam) { peakLats.push(talamitam.lat); peakLngs.push(talamitam.lng); }
+  if (apayang) { peakLats.push(apayang.lat); peakLngs.push(apayang.lng); }
+  
+  // Calculate center of the three peaks
+  const centerLat = peakLats.reduce((a,b) => a + b, 0) / peakLats.length;
+  const centerLng = peakLngs.reduce((a,b) => a + b, 0) / peakLngs.length;
+  
+  // Calculate radius to cover all peaks (in meters)
+  let maxDistance = 0;
+  peakLats.forEach((lat, i) => {
+    const distance = Math.sqrt(Math.pow(lat - centerLat, 2) + Math.pow(peakLngs[i] - centerLng, 2)) * 111000;
+    if (distance > maxDistance) maxDistance = distance;
+  });
+  const radius = maxDistance + 300; // Add 300m buffer
+  
+  // Add Trilogy area circle (behind all markers)
+  if (trilogyMtn && lantik && talamitam && apayang) {
+    const trilogyCircle = L.circle([centerLat, centerLng], {
+      color: '#c6a43b',
+      fillColor: '#c6a43b',
+      fillOpacity: 0.15,
+      radius: radius,
+      weight: 3,
+      opacity: 0.6,
+      className: 'trilogy-area'
+    }).addTo(exploreMap);
+    
+    // Make the circle clickable - opens Trilogy modal
+    trilogyCircle.on('click', () => {
+      openMtnById(trilogyMtn.id);
+      // Also highlight the Trilogy tab in weather panel
+      const tab = document.querySelector(`.wtab[data-id="${trilogyMtn.id}"]`);
+      if(tab) selectWeatherTab(trilogyMtn.id, tab);
+    });
+    
+    // Add hover effect for the circle
+    trilogyCircle.on('mouseover', () => {
+      trilogyCircle.setStyle({ fillOpacity: 0.3, weight: 4 });
+      document.body.style.cursor = 'pointer';
+    });
+    trilogyCircle.on('mouseout', () => {
+      trilogyCircle.setStyle({ fillOpacity: 0.15, weight: 3 });
+      document.body.style.cursor = 'default';
+    });
+    
+    // Add a subtle label for Trilogy area
+    const trilogyLabel = L.marker([centerLat, centerLng], {
+      icon: L.divIcon({
+        html: `<div style="background: rgba(198,164,59,0.9); color: white; padding: 4px 12px; border-radius: 30px; font-size: 11px; font-weight: 700; white-space: nowrap; border: 1px solid var(--gold); backdrop-filter: blur(4px);">🔥 TRILOGY AREA</div>`,
+        className: '',
+        iconSize: [120, 24],
+        iconAnchor: [60, 12]
+      })
+    }).addTo(exploreMap);
+    
+    mapMarkers[trilogyMtn.id] = trilogyLabel;
+  }
+  
+  // Now add individual markers for all mountains
+  mountainCoords.forEach(mtn => {
+    // Skip adding a separate marker for Trilogy since we have the circle
+    if (mtn.is_trilogy || mtn.name.includes('Trilogy')) return;
+    
+    // Regular marker for each peak
+    const isLantik = mtn.name.includes('Lantik');
+    const isTalamitam = mtn.name.includes('Talamitam');
+    const isApayang = mtn.name.includes('Apayang');
+    
+    // Get appropriate icon color based on difficulty
+    let markerColor = 'var(--ink)';
+    if (mtn.difficulty === 'easy') markerColor = '#2a6b2a';
+    else if (mtn.difficulty === 'moderate') markerColor = '#8a5a2a';
+    else if (mtn.difficulty === 'hard') markerColor = '#a23b1a';
     
     const icon = L.divIcon({
-      html:`<div class="lk-marker" style="width:${isTrilogy ? '52px' : '38px'}; height:${isTrilogy ? '52px' : '38px'}; background:${isTrilogy ? '#c6a43b' : 'var(--ink)'}; border:${isTrilogy ? '3px solid #ffd700' : '3px solid var(--gold)'}; font-size:${isTrilogy ? '24px' : '16px'};">⛰</div>`,
-      className:'',
-      iconSize:[isTrilogy ? 52 : 38, isTrilogy ? 52 : 38],
-      iconAnchor:[isTrilogy ? 26 : 19, isTrilogy ? 52 : 38],
-      popupAnchor:[0,-(isTrilogy ? 55 : 42)]
+      html: `<div class="lk-marker" style="background: ${markerColor}; border: 3px solid var(--gold); width: 36px; height: 36px; font-size: 14px;">${mtn.name.includes('Lantik') ? '⛰️' : (mtn.name.includes('Talamitam') ? '🏔️' : '🗻')}</div>`,
+      className: '',
+      iconSize: [36, 36],
+      iconAnchor: [18, 36],
+      popupAnchor: [0, -40]
     });
 
     const crowdInfo = getCrowdLabel(mtn.crowd);
     const diffBg = mtn.difficulty==='easy'?'var(--g-easy);color:var(--t-easy)':mtn.difficulty==='moderate'?'var(--g-mod);color:var(--t-mod)':'var(--g-hard);color:var(--t-hard)';
-    
-    // Special popup message for Trilogy
-    const trilogyNote = isTrilogy ? '<div style="background:#c6a43b20; border-radius:8px; padding:6px; margin-top:6px; font-size:11px; text-align:center;">🔥 Combines 3 peaks: Apayang + Lantik + Talamitam</div>' : '';
 
     const popup = L.popup({className:'lk-popup', maxWidth:260, minWidth:220})
       .setContent(`
         <div class="popup-img" style="background-image:url('${mtn.image}'); height:100px;"></div>
         <div class="popup-inner">
-          <div class="popup-name" style="font-size:${isTrilogy ? '17px' : '15px'};">${mtn.name}</div>
+          <div class="popup-name" style="font-size:15px;">${mtn.name}</div>
           <div class="popup-row">
             <span class="popup-badge" style="background:${diffBg}">${mtn.difficulty_display || mtn.difficulty}</span>
             ★ ${mtn.rating.toFixed(1)}
@@ -1955,20 +2033,56 @@ function initExploreMap(){
             <span class="popup-crowd-dot" style="background:${crowdInfo.dot}"></span>
             <span class="popup-crowd-label">${crowdInfo.label}</span>
           </div>
-          ${trilogyNote}
         </div>
         <button class="popup-btn" onclick="openMtnById(${mtn.id})">View Details →</button>
       `);
 
     const marker = L.marker([mtn.lat, mtn.lng], {icon}).addTo(exploreMap).bindPopup(popup);
-
     marker.on('click', ()=>{
       const tab = document.querySelector(`.wtab[data-id="${mtn.id}"]`);
       if(tab) selectWeatherTab(mtn.id, tab);
     });
-
     mapMarkers[mtn.id] = marker;
   });
+  
+  // Add Mt. Batulao marker separately (it's far away)
+  const batulao = mountainCoords.find(m => m.name.includes('Batulao'));
+  if (batulao) {
+    const iconBatulao = L.divIcon({
+      html: `<div class="lk-marker" style="background: #2a6b2a; border: 3px solid var(--gold); width: 36px; height: 36px; font-size: 14px;">🌋</div>`,
+      className: '',
+      iconSize: [36, 36],
+      iconAnchor: [18, 36],
+      popupAnchor: [0, -40]
+    });
+    
+    const crowdInfo = getCrowdLabel(batulao.crowd);
+    const popup = L.popup({className:'lk-popup', maxWidth:260})
+      .setContent(`
+        <div class="popup-img" style="background-image:url('${batulao.image}'); height:100px;"></div>
+        <div class="popup-inner">
+          <div class="popup-name">${batulao.name}</div>
+          <div class="popup-row"><span class="popup-badge" style="background:var(--g-easy);color:var(--t-easy)">Easy</span> ★ ${batulao.rating.toFixed(1)}</div>
+          <div class="popup-row">📍 ${batulao.elevation} · ⏱ ${batulao.duration}</div>
+          <div class="popup-crowd"><span class="popup-crowd-dot" style="background:${crowdInfo.dot}"></span> ${crowdInfo.label}</div>
+        </div>
+        <button class="popup-btn" onclick="openMtnById(${batulao.id})">View Details →</button>
+      `);
+      
+    const marker = L.marker([batulao.lat, batulao.lng], {icon: iconBatulao}).addTo(exploreMap).bindPopup(popup);
+    marker.on('click', () => {
+      const tab = document.querySelector(`.wtab[data-id="${batulao.id}"]`);
+      if(tab) selectWeatherTab(batulao.id, tab);
+    });
+    mapMarkers[batulao.id] = marker;
+  }
+  
+  // Fit bounds to show all markers
+  const allMarkers = Object.values(mapMarkers).filter(m => m.getLatLng);
+  if (allMarkers.length > 0) {
+    const bounds = L.latLngBounds(allMarkers.map(m => m.getLatLng()));
+    exploreMap.fitBounds(bounds, { padding: [50, 50] });
+  }
 }
 
 function openMtnById(id){
