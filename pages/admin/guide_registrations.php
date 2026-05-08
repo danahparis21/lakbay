@@ -56,6 +56,7 @@ $stmt = $pdo->prepare("
         g.bio,
         g.id_type,
         g.id_image,
+        g.id_image_base64,
         g.submitted_at,
         u.name,
         u.email,
@@ -80,6 +81,8 @@ $stmt = $pdo->prepare("
         g.years_experience,
         g.rating,
         g.total_trips,
+        g.id_image,
+        g.id_image_base64,
         g.submitted_at,
         u.created_at
     FROM guides g 
@@ -545,16 +548,23 @@ $approvedGuides = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </div>
                         </div>
                         <div class="id-preview">
-                            <?php if (!empty($reg['id_image']) && file_exists('../../' . $reg['id_image'])): ?>
-                                <img src="../../<?= htmlspecialchars($reg['id_image']) ?>" alt="Government ID" onclick="this.requestFullscreen()" style="cursor: pointer;">
-                            <?php else: ?>
-                                <div style="padding: 60px; text-align: center; color: var(--ink-4);">
-                                    <i class="fas fa-image" style="font-size: 48px; margin-bottom: 12px; display: block;"></i>
-                                    No ID image uploaded
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
+    <?php 
+    // Check for base64 image first (new submissions), then fallback to file path (old submissions)
+    $hasBase64 = !empty($reg['id_image_base64']);
+    $hasFile = !empty($reg['id_image']) && file_exists('../../' . $reg['id_image']);
+    
+    if ($hasBase64): 
+    ?>
+        <img src="<?= htmlspecialchars($reg['id_image_base64']) ?>" alt="Government ID" onclick="this.requestFullscreen()" style="cursor: pointer;">
+    <?php elseif ($hasFile): ?>
+        <img src="../../<?= htmlspecialchars($reg['id_image']) ?>" alt="Government ID" onclick="this.requestFullscreen()" style="cursor: pointer;">
+    <?php else: ?>
+        <div style="padding: 60px; text-align: center; color: var(--ink-4);">
+            <i class="fas fa-image" style="font-size: 48px; margin-bottom: 12px; display: block;"></i>
+            No ID image uploaded
+        </div>
+    <?php endif; ?>
+</div>
                     <div class="reg-actions">
                         <button class="btn btn-danger" onclick="rejectRegistration(<?= $reg['guide_id'] ?>, '<?= htmlspecialchars(addslashes($reg['name'])) ?>')">
                             <i class="fas fa-times"></i> Reject
