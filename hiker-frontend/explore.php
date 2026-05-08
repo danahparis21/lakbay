@@ -305,6 +305,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
 <link rel="stylesheet" href="shared.css">
  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 /* ── RESET & TOKENS ── */
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
@@ -939,6 +940,163 @@ svg{display:block;flex-shrink:0;}
 }
 .toast.show{opacity:1;}
 .icon{display:inline-flex;align-items:center;justify-content:center;}
+
+/* ── MAP + WEATHER PANEL ── */
+.map-weather-section{margin-bottom:40px;}
+.map-weather-grid{
+  display:grid;
+  grid-template-columns:1fr 360px;
+  gap:20px;
+  align-items:start;
+}
+@media(max-width:900px){.map-weather-grid{grid-template-columns:1fr;}}
+
+/* Map Card */
+.map-card{
+  background:var(--white);border-radius:var(--r);
+  overflow:hidden;box-shadow:var(--sh-md);
+  border:1px solid rgba(16,6,0,.05);
+  display:flex;flex-direction:column;
+}
+.map-card-header{
+  padding:16px 20px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border-bottom:1px solid var(--mist);
+}
+.map-header-left{}
+.map-hint{font-size:11.5px;color:var(--stone);margin-top:3px;}
+#exploreMap{
+  height:420px;width:100%;
+}
+@media(max-width:600px){#exploreMap{height:300px;}}
+
+/* Leaflet marker customisation */
+.lk-marker{
+  width:38px;height:38px;border-radius:50%;
+  background:var(--ink);border:3px solid var(--gold);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:.2s;
+  box-shadow:0 4px 16px rgba(16,6,0,.35);
+  color:var(--cream);font-size:16px;
+}
+.lk-marker.hovered{background:var(--gold);color:var(--ink);transform:scale(1.15);}
+.lk-popup .leaflet-popup-content-wrapper{
+  background:var(--ink);color:var(--cream);
+  border-radius:14px;padding:0;overflow:hidden;
+  box-shadow:0 8px 32px rgba(16,6,0,.35);
+  border:1px solid rgba(198,164,59,.25);
+  min-width:200px;
+}
+.lk-popup .leaflet-popup-tip{background:var(--ink);}
+.lk-popup .leaflet-popup-content{margin:0;}
+.popup-inner{padding:14px 16px;}
+.popup-img{height:90px;background-size:cover;background-position:center;width:100%;}
+.popup-name{font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--white);margin-bottom:4px;}
+.popup-row{display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,.65);margin-bottom:3px;}
+.popup-badge{
+  font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:60px;display:inline-block;margin-right:4px;
+}
+.popup-crowd{display:flex;align-items:center;gap:5px;font-size:11px;margin-top:6px;}
+.popup-crowd-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.crowd-low .popup-crowd-dot{background:#4caf50;}
+.crowd-med .popup-crowd-dot{background:#ff9800;}
+.crowd-high .popup-crowd-dot{background:#f44336;}
+.crowd-low .popup-crowd-label{color:#4caf50;}
+.crowd-med .popup-crowd-label{color:#ff9800;}
+.crowd-high .popup-crowd-label{color:#f44336;}
+.popup-btn{
+  display:block;width:100%;padding:9px;
+  background:rgba(198,164,59,.15);border:none;border-top:1px solid rgba(255,255,255,.07);
+  color:var(--gold);font-size:11.5px;font-weight:600;font-family:'DM Sans',sans-serif;
+  cursor:pointer;text-align:center;transition:.2s;letter-spacing:.3px;
+}
+.popup-btn:hover{background:rgba(198,164,59,.3);}
+
+/* Weather Panel */
+.weather-panel{
+  background:var(--white);border-radius:var(--r);
+  box-shadow:var(--sh-md);border:1px solid rgba(16,6,0,.05);
+  overflow:hidden;display:flex;flex-direction:column;
+}
+.weather-panel-header{
+  padding:16px 20px;border-bottom:1px solid var(--mist);
+}
+.weather-tabs-row{
+  display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--mist);
+  scrollbar-width:none;
+}
+.weather-tabs-row::-webkit-scrollbar{display:none;}
+.wtab{
+  padding:9px 14px;font-size:11.5px;font-weight:600;
+  color:var(--stone);cursor:pointer;border-bottom:2px solid transparent;
+  transition:.15s;white-space:nowrap;flex-shrink:0;
+}
+.wtab:hover{color:var(--ink);}
+.wtab.active{color:var(--ink);border-color:var(--ink);}
+
+.weather-content-wrap{padding:16px 18px;flex:1;}
+
+/* Current weather block */
+.weather-current-block{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;
+}
+.weather-temp-main{font-size:40px;font-weight:700;font-family:'DM Mono',monospace;line-height:1;}
+.weather-icon-main{font-size:44px;line-height:1;}
+.weather-desc-row{font-size:12.5px;color:var(--stone);margin-top:4px;}
+.weather-advice-banner{
+  padding:10px 14px;border-radius:var(--r-sm);
+  font-size:12px;font-weight:600;margin-bottom:14px;
+  display:flex;align-items:center;gap:8px;
+  line-height:1.4;
+}
+.advice-great{background:rgba(76,175,80,.1);color:#2a7a2a;border:1px solid rgba(76,175,80,.2);}
+.advice-ok{background:rgba(255,152,0,.1);color:#8a5a00;border:1px solid rgba(255,152,0,.2);}
+.advice-bad{background:rgba(244,67,54,.1);color:#9a1a1a;border:1px solid rgba(244,67,54,.2);}
+.advice-caution{background:rgba(33,150,243,.1);color:#0a4a7a;border:1px solid rgba(33,150,243,.2);}
+
+.weather-details-row{
+  display:flex;gap:8px;margin-bottom:14px;
+}
+.weather-detail-chip{
+  flex:1;background:var(--cream);border-radius:var(--r-sm);
+  padding:10px;text-align:center;
+  border:1px solid rgba(16,6,0,.05);
+}
+.weather-chip-val{font-size:14px;font-weight:700;font-family:'DM Mono',monospace;color:var(--ink);}
+.weather-chip-lbl{font-size:9.5px;color:var(--stone);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;}
+
+/* Forecast row */
+.forecast-label{font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--stone);margin-bottom:8px;font-family:'DM Mono',monospace;}
+.forecast-row{display:flex;gap:6px;}
+.forecast-day-chip{
+  flex:1;background:var(--cream);border-radius:10px;
+  padding:8px 4px;text-align:center;
+  border:1px solid rgba(16,6,0,.05);
+}
+.fc-day-name{font-size:9.5px;font-weight:700;color:var(--stone);text-transform:uppercase;margin-bottom:4px;}
+.fc-icon{font-size:18px;margin-bottom:4px;}
+.fc-temps{font-size:10px;font-weight:600;}
+.fc-high{color:var(--ink);}
+.fc-low{color:var(--stone);}
+
+.weather-loading-state{
+  padding:40px 20px;text-align:center;color:var(--stone);font-size:13px;
+}
+.weather-loading-state .spin{
+  display:inline-block;font-size:24px;
+  animation:spin .8s linear infinite;margin-bottom:10px;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Crowd inline badge on map popup */
+.crowd-status-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 10px;border-radius:60px;font-size:10px;font-weight:700;
+}
+.crowd-low-chip{background:rgba(76,175,80,.12);color:#2a7a2a;}
+.crowd-med-chip{background:rgba(255,152,0,.12);color:#8a5a00;}
+.crowd-high-chip{background:rgba(244,67,54,.12);color:#9a1a1a;}
 </style>
 </head>
 <body>
@@ -983,77 +1141,50 @@ $currentPage = 'explore'; // Change per page: 'explore', 'bookings', 'quiz', 'me
     </a>
   </div>
 
-  <!-- Featured Mountain -->
-  <?php if ($featuredMountain && !empty($mountains)): ?>
-  <div class="sec-hd">
-    <div><div class="sec-eyebrow">Most Visited</div><div class="sec-title">Top Pick This Season</div></div>
-  </div>
-  <div class="featured-card" id="featuredCard">
-    <div class="featured-img-col">
-      <div class="featured-img" style="background-image:url('<?= htmlspecialchars($featuredMountain['image']) ?>')"></div>
-      <div class="featured-img-grad">
-        <div class="featured-tag">
-          <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-          Most Visited
-        </div>
-        <div class="featured-img-stats">
-          <div class="featured-img-stat">
-            <div class="featured-img-stat-val"><?= htmlspecialchars($featuredMountain['elevation']) ?></div>
-            <div class="featured-img-stat-lbl">Elevation</div>
-          </div>
-          <div class="featured-img-stat">
-            <div class="featured-img-stat-val"><?= htmlspecialchars($featuredMountain['time']) ?></div>
-            <div class="featured-img-stat-lbl">Duration</div>
-          </div>
-          <div class="featured-img-stat">
-            <div class="featured-img-stat-val">★ <?= $featuredMountain['rating'] ?></div>
-            <div class="featured-img-stat-lbl">Rating</div>
-          </div>
-        </div>
+  <!-- ── MAP + WEATHER SECTION ── -->
+  <div class="map-weather-section">
+    <div class="sec-hd">
+      <div>
+        <div class="sec-eyebrow">Live Overview</div>
+        <div class="sec-title">Mountains of Nasugbu</div>
       </div>
     </div>
-    <div class="featured-body">
-      <div class="featured-name">
-        <?= htmlspecialchars($featuredMountain['name']) ?>
-        <span class="featured-pill">★ <?= $featuredMountain['rating'] ?></span>
+
+    <div class="map-weather-grid">
+      <!-- Leaflet Map -->
+      <div class="map-card">
+        <div class="map-card-header">
+          <div class="map-header-left">
+            <div style="font-size:13px;font-weight:600;color:var(--ink);">Interactive Trail Map</div>
+            <div class="map-hint">Click a pin to explore details &amp; open mountain info</div>
+          </div>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div id="exploreMap"></div>
       </div>
-      <div class="featured-loc">
-        <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        <?= htmlspecialchars($featuredMountain['location']) ?>
-      </div>
-      <p class="featured-desc"><?= htmlspecialchars(substr($featuredMountain['desc'], 0, 220)) ?>…</p>
-      <div class="featured-divider"></div>
-      <div class="featured-quick-row">
-        <div><div class="featured-qs-val"><?= $featuredMountain['reviewsCount'] ?></div><div class="featured-qs-lbl">Reviews</div></div>
-        <?php if (!empty($featuredMountain['peakTimes'])): ?>
-        <div><div class="featured-qs-val" style="font-size:12px;font-family:'DM Sans',sans-serif;"><?= htmlspecialchars(substr($featuredMountain['peakTimes'],0,18)) ?></div><div class="featured-qs-lbl">Peak Times</div></div>
-        <?php endif; ?>
-      </div>
-      <div class="mini-reviews">
-        <div class="mini-track" id="miniTrack">
-          <?php foreach (array_slice($featuredMountain['reviewsList'],0,3) as $rev): ?>
-          <div class="mini-slide">
-            <div class="mini-text">"<?= htmlspecialchars(substr($rev['text'],0,120)) ?>…"</div>
-            <div class="mini-author">— <?= htmlspecialchars($rev['author']) ?> <?= str_repeat('★',$rev['stars']) ?></div>
+
+      <!-- Weather Panel -->
+      <div class="weather-panel">
+        <div class="weather-panel-header">
+          <div class="sec-eyebrow" style="margin-bottom:3px;">Real-time Conditions</div>
+          <div style="font-size:13px;font-weight:600;color:var(--ink);">Mountain Weather</div>
+        </div>
+        <div class="weather-tabs-row" id="weatherTabsRow">
+          <?php foreach ($mountains as $i => $mtn): ?>
+          <div class="wtab <?= $i===0?'active':'' ?>" onclick="selectWeatherTab(<?= $mtn['id'] ?>, this)" data-id="<?= $mtn['id'] ?>">
+            <?= htmlspecialchars(str_replace(['Mt.','Mountain','Mountain Trilogy'],['','Mtns.','Trilogy'], $mtn['name'])) ?>
           </div>
           <?php endforeach; ?>
         </div>
-        <div class="mini-dots" id="miniDots"></div>
-      </div>
-      <div class="featured-btns">
-        <button class="btn-primary-sm" onclick="openMtnModal(mountains[0])">View Details</button>
-        <button class="btn-ghost-sm" onclick="scrollToAll()">Browse All →</button>
+        <div class="weather-content-wrap" id="weatherContentWrap">
+          <div class="weather-loading-state">
+            <div class="spin">⛅</div>
+            <div>Loading weather…</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <?php elseif (empty($mountains)): ?>
-  <div class="quiz-banner" style="background:var(--gold);">
-    <div>
-      <h3 style="color:var(--ink);">No mountains found</h3>
-      <p style="color:var(--ink);">Please check your database connection or add some mountains to get started.</p>
-    </div>
-  </div>
-  <?php endif; ?>
 
   <!-- Guides Carousel -->
   <div class="guides-section">
@@ -1217,6 +1348,7 @@ $currentPage = 'explore'; // Change per page: 'explore', 'bookings', 'quiz', 'me
 </div>
 
 <div class="toast" id="toast"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ── DATA from PHP ──
 const mountains = <?= json_encode($mountains) ?>;
@@ -1543,6 +1675,222 @@ async function checkSavedStatus(mountainId) {
 
 function bookMtn(){ if(activeMtn){ localStorage.setItem('bookingMtn',JSON.stringify(activeMtn)); window.location.href='bookings.php'; } }
 
+// ── MAP + WEATHER ──
+// Mountain coords from DB via PHP
+const mountainCoords = <?php
+  $coords = [];
+  foreach ($dbMountains as $m) {
+    $coords[] = [
+      'id'         => (int)$m['id'],
+      'name'       => $m['name'],
+      'lat'        => floatval($m['start_point_lat'] ?? 14.0583),
+      'lng'        => floatval($m['start_point_lng'] ?? 120.8320),
+      'elevation'  => $m['elevation'] ?? '—',
+      'difficulty' => strtolower($m['difficulty'] ?? 'moderate'),
+      'crowd'      => strtolower($m['crowdLevel'] ?? 'medium'),
+      'image'      => $m['image'] ?? '',
+      'duration'   => $m['duration'] ?? '—',
+      'rating'     => $m['rating'] ?? 4.0,
+    ];
+  }
+  echo json_encode($coords);
+?>;
+
+// Weather state
+const mountainWeatherCache = {};
+let activeWeatherMtnId = mountainCoords.length > 0 ? mountainCoords[0].id : null;
+let exploreMap = null;
+let mapMarkers = {};
+
+function getWeatherIcon(code){
+  if(code===0) return '☀️';
+  if(code>=1&&code<=2) return '🌤️';
+  if(code===3) return '☁️';
+  if(code>=45&&code<=48) return '🌫️';
+  if(code>=51&&code<=55) return '🌦️';
+  if(code>=61&&code<=65) return '🌧️';
+  if(code>=80&&code<=82) return '🌧️';
+  if(code>=95) return '⛈️';
+  return '🌡️';
+}
+function getWeatherDesc(code){
+  const d={0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Foggy',48:'Foggy',51:'Light drizzle',53:'Moderate drizzle',55:'Dense drizzle',61:'Light rain',63:'Moderate rain',65:'Heavy rain',80:'Rain showers',81:'Heavy showers',82:'Violent showers',95:'Thunderstorm',96:'Thunderstorm',99:'Thunderstorm'};
+  return d[code]||'Variable';
+}
+function getHikingAdvice(code, temp){
+  if(code>=95) return {cls:'advice-bad', msg:'⛈️ Typhoon / Thunderstorm — Do NOT hike. Follow local advisories.'};
+  if(code>=80) return {cls:'advice-bad', msg:'🌧️ Heavy rain expected — Trail conditions may be hazardous.'};
+  if(code>=61) return {cls:'advice-caution', msg:'🌧️ Rain forecast — Bring rain gear and check with guides before going.'};
+  if(code>=45) return {cls:'advice-ok', msg:'🌫️ Foggy conditions — Visibility may be low on ridges.'};
+  if(temp >= 32) return {cls:'advice-ok', msg:'🥵 Very hot today — Start very early and bring extra water.'};
+  if(code===0 && temp >= 20 && temp <= 30) return {cls:'advice-great', msg:'✅ Perfect conditions — A great day to hit the trail!'};
+  if(code<=3) return {cls:'advice-great', msg:'🌤️ Good hiking weather — Conditions look favourable today.'};
+  return {cls:'advice-ok', msg:'🌥️ Check trail conditions before heading out.'};
+}
+function getCrowdLabel(crowd){
+  const c = (crowd||'').toLowerCase();
+  if(c==='high'||c==='very high') return {chip:'crowd-high-chip',label:'High Crowd',dot:'#f44336'};
+  if(c==='medium'||c==='moderate'||c==='med') return {chip:'crowd-med-chip',label:'Moderate Crowd',dot:'#ff9800'};
+  return {chip:'crowd-low-chip',label:'Low Crowd',dot:'#4caf50'};
+}
+
+async function fetchWeather(lat, lng){
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=Asia%2FManila&windspeed_unit=kmh`;
+  try{
+    const r = await fetch(url);
+    const d = await r.json();
+    return {
+      current: { temp: Math.round(d.current_weather.temperature), wind: Math.round(d.current_weather.windspeed), code: d.current_weather.weathercode },
+      daily: { times: d.daily.time.slice(1,6), maxTemps: d.daily.temperature_2m_max.slice(1,6).map(t=>Math.round(t)), minTemps: d.daily.temperature_2m_min.slice(1,6).map(t=>Math.round(t)), codes: d.daily.weathercode.slice(1,6) }
+    };
+  } catch(e){ return null; }
+}
+
+function renderWeatherPanel(mtnId){
+  const mtn = mountainCoords.find(m=>m.id===mtnId);
+  const data = mountainWeatherCache[mtnId];
+  const wrap = document.getElementById('weatherContentWrap');
+  if(!wrap) return;
+  if(!data){
+    wrap.innerHTML=`<div class="weather-loading-state"><div class="spin">⛅</div><div>Loading weather…</div></div>`;
+    return;
+  }
+  const {current, daily} = data;
+  const icon = getWeatherIcon(current.code);
+  const desc = getWeatherDesc(current.code);
+  const advice = getHikingAdvice(current.code, current.temp);
+  const crowd = getCrowdLabel(mtn.crowd);
+  const tempColor = current.temp>=32?'#ef4444':current.temp>=27?'#f97316':current.temp>=22?'#eab308':'#06b6d4';
+
+  const dayNames = daily.times.map(t=>{
+    const day = new Date(t+'T00:00:00');
+    return day.toLocaleDateString('en-PH',{weekday:'short'});
+  });
+
+  wrap.innerHTML = `
+    <div class="weather-current-block">
+      <div>
+        <div class="weather-temp-main" style="color:${tempColor}">${current.temp}°C</div>
+        <div class="weather-desc-row">${desc}</div>
+      </div>
+      <div class="weather-icon-main">${icon}</div>
+    </div>
+    <div class="weather-advice-banner ${advice.cls}">${advice.msg}</div>
+    <div class="weather-details-row">
+      <div class="weather-detail-chip"><div class="weather-chip-val">${current.wind}</div><div class="weather-chip-lbl">km/h Wind</div></div>
+      <div class="weather-detail-chip"><div class="weather-chip-val">${mtn.elevation}</div><div class="weather-chip-lbl">Elevation</div></div>
+      <div class="weather-detail-chip"><div class="weather-chip-val"><span class="crowd-status-chip ${crowd.chip}">${crowd.label}</span></div><div class="weather-chip-lbl" style="margin-top:4px;">Trail Crowd</div></div>
+    </div>
+    <div class="forecast-label">5-Day Forecast</div>
+    <div class="forecast-row">
+      ${dayNames.map((day,i)=>`
+        <div class="forecast-day-chip">
+          <div class="fc-day-name">${day}</div>
+          <div class="fc-icon">${getWeatherIcon(daily.codes[i])}</div>
+          <div class="fc-temps"><span class="fc-high">${daily.maxTemps[i]}°</span><span class="fc-low"> / ${daily.minTemps[i]}°</span></div>
+        </div>`).join('')}
+    </div>
+  `;
+}
+
+async function selectWeatherTab(mtnId, el){
+  // Update tabs
+  document.querySelectorAll('.wtab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  activeWeatherMtnId = mtnId;
+  // Highlight map marker
+  Object.keys(mapMarkers).forEach(id=>{
+    const el2 = mapMarkers[id]._icon?.querySelector('.lk-marker');
+    if(el2) el2.classList.toggle('hovered', parseInt(id)===mtnId);
+  });
+  if(!mountainWeatherCache[mtnId]){
+    renderWeatherPanel(mtnId);
+    const mtn = mountainCoords.find(m=>m.id===mtnId);
+    if(mtn){
+      const data = await fetchWeather(mtn.lat, mtn.lng);
+      if(data) mountainWeatherCache[mtnId] = data;
+    }
+  }
+  renderWeatherPanel(mtnId);
+}
+
+function initExploreMap(){
+  if(typeof L === 'undefined') return;
+  // Center on Nasugbu
+  exploreMap = L.map('exploreMap',{
+    center:[14.07, 120.80],
+    zoom:12,
+    zoomControl:true,
+    attributionControl:false
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+    attribution:'© OpenStreetMap © CARTO',
+    subdomains:'abcd',maxZoom:19
+  }).addTo(exploreMap);
+
+  mountainCoords.forEach(mtn=>{
+    const icon = L.divIcon({
+      html:`<div class="lk-marker" title="${mtn.name}">⛰</div>`,
+      className:'',
+      iconSize:[38,38],
+      iconAnchor:[19,38],
+      popupAnchor:[0,-42]
+    });
+
+    const crowdInfo = getCrowdLabel(mtn.crowd);
+    const diffBg = mtn.difficulty==='easy'?'var(--g-easy);color:var(--t-easy)':mtn.difficulty==='hard'?'var(--g-hard);color:var(--t-hard)':'var(--g-mod);color:var(--t-mod)';
+
+    const popup = L.popup({className:'lk-popup', maxWidth:220, minWidth:200})
+      .setContent(`
+        <div class="popup-img" style="background-image:url('${mtn.image}')"></div>
+        <div class="popup-inner">
+          <div class="popup-name">${mtn.name}</div>
+          <div class="popup-row">
+            <span class="popup-badge" style="background:${diffBg}">${mtn.difficulty}</span>
+            ★ ${parseFloat(mtn.rating).toFixed(1)}
+          </div>
+          <div class="popup-row">📍 ${mtn.elevation} &nbsp;·&nbsp; ⏱ ${mtn.duration}</div>
+          <div class="popup-crowd">
+            <span class="popup-crowd-dot" style="background:${crowdInfo.dot}"></span>
+            <span class="popup-crowd-label">${crowdInfo.label} right now</span>
+          </div>
+        </div>
+        <button class="popup-btn" onclick="openMtnById(${mtn.id})">View Details →</button>
+      `);
+
+    const marker = L.marker([mtn.lat, mtn.lng], {icon}).addTo(exploreMap).bindPopup(popup);
+
+    marker.on('click', ()=>{
+      // Also switch weather tab
+      const tab = document.querySelector(`.wtab[data-id="${mtn.id}"]`);
+      if(tab) selectWeatherTab(mtn.id, tab);
+    });
+
+    mapMarkers[mtn.id] = marker;
+  });
+}
+
+function openMtnById(id){
+  const m = mountains.find(x=>x.id===id);
+  if(m){ 
+    // Close any leaflet popups
+    if(exploreMap) exploreMap.closePopup();
+    openMtnModal(m);
+  }
+}
+
+// Load all weather on page load, starting with the first mountain
+async function loadAllWeather(){
+  for(const mtn of mountainCoords){
+    const data = await fetchWeather(mtn.lat, mtn.lng);
+    if(data) mountainWeatherCache[mtn.id] = data;
+    // Render immediately if this is the active one
+    if(mtn.id === activeWeatherMtnId) renderWeatherPanel(mtn.id);
+  }
+}
+
+
 // ── GUIDE MODAL ──
 const covers=['https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1200&q=60','https://images.unsplash.com/photo-1454496522485-0a69b2730d75?w=1200&q=60','https://images.unsplash.com/photo-1465919292275-c60ad29da028?w=1200&q=60'];
 function openGuideModal(g){
@@ -1665,6 +2013,9 @@ document.addEventListener('DOMContentLoaded', function() {
       grid.innerHTML='<div class="empty-state"><h3>Unable to load mountains</h3><p>Please check your database connection and make sure the mountains table exists.</p></div>';
     }
   }
+  // Init map & weather
+  initExploreMap();
+  loadAllWeather();
 });
 </script>
 </body>
