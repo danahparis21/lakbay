@@ -1259,213 +1259,339 @@ svg{display:block;flex-shrink:0;}
   height: 14px;
   stroke: var(--gold);
 }
+.overlay {
+  z-index: 2000 !important;
+  backdrop-filter: blur(12px);
+  background: rgba(16,6,0,0.75);
+}
 
-.mtn-modal-tabs {
+.split-modal {
+  display: flex;
+  flex-direction: row;
+  max-width: 1200px;
+  width: 90%;
+  height: 80vh;
+  max-height: 700px;
+  background: var(--cream);
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.3);
+  position: relative;
+  animation: modalIn 0.3s var(--ease);
+}
+
+@media (max-width: 800px) {
+  .split-modal {
+    flex-direction: column;
+    height: 85vh;
+  }
+}
+
+/* LEFT SIDE - IMAGE */
+.modal-left {
+  flex: 1.2;
+  position: relative;
+  overflow: hidden;
+  background: var(--ink);
+}
+
+.modal-hero-image {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  transition: transform 0.5s var(--ease);
+}
+
+.split-modal:hover .modal-hero-image {
+  transform: scale(1.05);
+}
+
+.modal-image-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24px;
+  background: linear-gradient(to top, rgba(16,6,0,0.85) 0%, transparent 100%);
+}
+
+.modal-badge {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 30px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.modal-quick-info {
+  display: flex;
+  gap: 16px;
+}
+
+.quick-info-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(8px);
+  padding: 6px 12px;
+  border-radius: 30px;
+  font-size: 12px;
+  color: white;
+  font-weight: 500;
+}
+
+.quick-info-item svg {
+  stroke: var(--gold);
+}
+
+/* RIGHT SIDE - CONTENT */
+.modal-right {
+  flex: 1.8;
+  display: flex;
+  flex-direction: column;
+  background: var(--cream);
+  overflow: hidden;
+}
+
+.modal-header-info {
+  padding: 24px 28px 16px;
+  border-bottom: 1px solid var(--mist);
+}
+
+.modal-mountain-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 6px;
+  letter-spacing: -0.3px;
+}
+
+.modal-mountain-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--stone);
+  margin-bottom: 10px;
+}
+
+.modal-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rating-stars {
+  color: var(--gold);
+  font-size: 13px;
+  letter-spacing: 2px;
+}
+
+.rating-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.rating-count {
+  font-size: 12px;
+  color: var(--stone);
+}
+
+/* Tabs */
+.modal-tabs {
   display: flex;
   gap: 0;
-  padding: 0 24px;
+  padding: 0 28px;
   border-bottom: 1px solid var(--mist);
-  background: var(--white);
-  flex-shrink: 0;
+  background: var(--cream);
 }
-.mtn-mtab {
-  padding: 14px 20px;
+
+.modal-tab {
+  padding: 12px 0;
+  margin-right: 24px;
   font-size: 13px;
   font-weight: 600;
   color: var(--stone);
-  cursor: pointer;
+  background: none;
+  border: none;
   border-bottom: 2px solid transparent;
+  cursor: pointer;
   transition: all 0.2s;
-  position: relative;
 }
-.mtn-mtab:hover {
+
+.modal-tab:hover {
   color: var(--ink);
 }
-.mtn-mtab.active {
+
+.modal-tab.active {
   color: var(--ink);
   border-bottom-color: var(--gold);
 }
-.tab-badge {
-  display: inline-block;
-  background: var(--mist);
-  color: var(--stone);
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 20px;
-  margin-left: 6px;
+
+/* Tab Content */
+.modal-tab-content {
+  flex: 1;
+  overflow: hidden;
+  padding: 20px 28px;
 }
 
-.mtn-modal-body {
-  flex: 1;
+.tab-pane {
+  display: none;
+  height: 100%;
   overflow-y: auto;
-  padding: 24px;
-  scroll-behavior: smooth;
 }
-.mtn-modal-body::-webkit-scrollbar {
+
+.tab-pane.active {
+  display: block;
+}
+
+.tab-pane::-webkit-scrollbar {
   width: 4px;
 }
-.mtn-modal-body::-webkit-scrollbar-track {
+
+.tab-pane::-webkit-scrollbar-track {
   background: var(--mist);
   border-radius: 4px;
 }
-.mtn-modal-body::-webkit-scrollbar-thumb {
+
+.tab-pane::-webkit-scrollbar-thumb {
   background: var(--gold);
   border-radius: 4px;
 }
 
 /* Overview Tab */
-.overview-grid {
-  display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 28px;
+.overview-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
 }
-@media (max-width: 700px) {
-  .overview-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.modal-desc {
+
+.modal-description {
   font-size: 14px;
   line-height: 1.7;
   color: var(--stone);
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
-.info-cards {
+
+.info-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
-.info-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
+
+.info-grid-item {
   background: var(--white);
   border-radius: 16px;
+  padding: 14px;
+  text-align: center;
   border: 1px solid var(--mist);
   transition: all 0.2s;
 }
-.info-card:hover {
+
+.info-grid-item:hover {
   transform: translateY(-2px);
   box-shadow: var(--sh);
 }
-.info-card-icon {
+
+.info-grid-icon {
   font-size: 24px;
+  margin-bottom: 6px;
 }
-.info-card-content {
-  flex: 1;
-}
-.info-card-label {
+
+.info-grid-label {
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--stone);
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
-.info-card-value {
-  font-size: 16px;
+
+.info-grid-value {
+  font-size: 15px;
   font-weight: 700;
   color: var(--ink);
 }
-.fees-section {
+
+.weather-card-modal {
+  background: linear-gradient(135deg, #2c5f2d, #1a3a1a);
+  border-radius: 20px;
+  padding: 16px;
+  margin-bottom: 20px;
+  color: white;
+}
+
+.weather-card-header {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.8;
+  margin-bottom: 10px;
+}
+
+.weather-card-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.weather-temp {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+}
+
+.weather-advice {
+  font-size: 11px;
+  max-width: 60%;
+  text-align: right;
+  line-height: 1.4;
+}
+
+.fees-card {
   background: var(--white);
   border-radius: 20px;
-  padding: 20px;
+  padding: 16px;
   border: 1px solid var(--mist);
 }
-.fees-section h4 {
-  font-size: 13px;
+
+.fees-card h4 {
+  font-size: 12px;
   font-weight: 700;
   color: var(--gold);
   margin-bottom: 12px;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
-.fees-body {
+
+.fees-card p {
   font-size: 13px;
   line-height: 1.8;
   color: var(--stone);
 }
 
-.overview-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.weather-mini-card, .best-time-card {
-  background: linear-gradient(135deg, var(--white) 0%, var(--cream) 100%);
-  border-radius: 20px;
-  padding: 18px;
-  border: 1px solid var(--mist);
-}
-.weather-mini-header {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--stone);
-  margin-bottom: 12px;
-}
-.weather-mini-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.weather-mini-icon {
-  font-size: 36px;
-}
-.weather-mini-temp {
-  font-size: 24px;
-  font-weight: 700;
-  font-family: 'DM Mono', monospace;
-  color: var(--ink);
-}
-.weather-mini-advice {
-  font-size: 11px;
-  color: var(--stone);
-  padding: 8px 10px;
-  background: rgba(198,164,59,0.1);
-  border-radius: 12px;
-}
-.best-time-card h4 {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--gold);
-  margin-bottom: 8px;
-}
-.best-time-card p {
-  font-size: 13px;
-  color: var(--ink);
-  font-weight: 500;
+/* Trail Tab */
+.trail-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
 }
 
-/* Trail Tab */
-.trail-header {
-  margin-bottom: 20px;
-}
-.trail-header h3 {
-  font-family: 'Playfair Display', serif;
-  font-size: 20px;
-  margin-bottom: 6px;
-}
-.trail-subtitle {
-  font-size: 12px;
-  color: var(--stone);
-}
-.trail-map-container {
-  margin-bottom: 20px;
-}
-.trail-stats-grid {
+.trail-stats-row {
   display: flex;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
-.trail-stat {
+
+.trail-stat-card {
   flex: 1;
   background: var(--white);
   border-radius: 16px;
@@ -1473,11 +1599,13 @@ svg{display:block;flex-shrink:0;}
   text-align: center;
   border: 1px solid var(--mist);
 }
+
 .trail-stat-icon {
   font-size: 20px;
   display: block;
   margin-bottom: 6px;
 }
+
 .trail-stat-label {
   font-size: 10px;
   text-transform: uppercase;
@@ -1486,25 +1614,33 @@ svg{display:block;flex-shrink:0;}
   display: block;
   margin-bottom: 4px;
 }
+
 .trail-stat-value {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--ink);
   font-family: 'DM Mono', monospace;
 }
-.waypoints-list h4 {
-  font-size: 13px;
+
+.trail-map-container {
+  margin-bottom: 20px;
+}
+
+.waypoints-section h4 {
+  font-size: 12px;
   font-weight: 700;
   color: var(--gold);
   margin-bottom: 12px;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
-#waypointsContainer {
+
+.waypoints-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+
 .waypoint-item {
   display: flex;
   align-items: center;
@@ -1515,34 +1651,40 @@ svg{display:block;flex-shrink:0;}
   border: 1px solid var(--mist);
   transition: all 0.2s;
 }
+
 .waypoint-item:hover {
   transform: translateX(4px);
   border-color: var(--gold);
 }
+
 .waypoint-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: rgba(198,164,59,0.15);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 16px;
 }
+
 .waypoint-info {
   flex: 1;
 }
+
 .waypoint-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);
 }
+
 .waypoint-type {
   font-size: 10px;
   color: var(--stone);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
 .waypoint-elevation {
   font-size: 11px;
   font-family: 'DM Mono', monospace;
@@ -1550,35 +1692,23 @@ svg{display:block;flex-shrink:0;}
 }
 
 /* Reviews Tab */
-.reviews-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 20px;
+.reviews-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
 }
-.reviews-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+
+.reviews-summary-header {
+  margin-bottom: 16px;
 }
-.reviews-summary .big-rating {
-  font-size: 36px;
-  font-weight: 700;
-  font-family: 'Playfair Display', serif;
-  color: var(--gold);
-}
-.reviews-summary .reviews-count {
-  font-size: 13px;
-  color: var(--stone);
-}
+
 .rev-filter-bar {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 0;
+  margin-bottom: 20px;
 }
+
 .rev-chip {
   padding: 6px 14px;
   border-radius: 30px;
@@ -1589,30 +1719,36 @@ svg{display:block;flex-shrink:0;}
   cursor: pointer;
   transition: all 0.2s;
 }
+
 .rev-chip:hover {
   border-color: var(--gold);
   color: var(--gold);
 }
+
 .rev-chip.active {
   background: var(--ink);
   color: var(--cream);
   border-color: var(--ink);
 }
+
 .revs-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
+
 .rev-item {
   background: var(--white);
   border-radius: 20px;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--mist);
   transition: all 0.2s;
 }
+
 .rev-item:hover {
   box-shadow: var(--sh);
 }
+
 .rev-hd {
   display: flex;
   align-items: center;
@@ -1620,48 +1756,55 @@ svg{display:block;flex-shrink:0;}
   margin-bottom: 12px;
   flex-wrap: wrap;
 }
+
 .rev-av {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--ink);
   color: var(--cream);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
+
 .rev-name {
   font-size: 14px;
   font-weight: 600;
 }
+
 .rev-stars {
   color: var(--gold);
-  font-size: 12px;
+  font-size: 11px;
   margin-top: 2px;
 }
+
 .rev-date {
   font-size: 10px;
   color: var(--stone);
   margin-left: auto;
   font-family: 'DM Mono', monospace;
 }
+
 .rev-text {
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.65;
   color: var(--stone);
 }
+
 .rev-media {
   display: flex;
   gap: 8px;
   margin-top: 12px;
   flex-wrap: wrap;
 }
+
 .rev-thumb {
-  width: 70px;
-  height: 70px;
+  width: 65px;
+  height: 65px;
   border-radius: 12px;
   background-size: cover;
   background-position: center;
@@ -1669,30 +1812,41 @@ svg{display:block;flex-shrink:0;}
   border: 2px solid var(--mist);
   transition: all 0.2s;
 }
+
 .rev-thumb:hover {
   transform: scale(1.05);
   border-color: var(--gold);
 }
 
-/* Tips & Advisories Tab */
-.tips-advisories-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+.no-revs {
+  padding: 40px;
+  text-align: center;
+  color: var(--stone);
+  font-size: 13px;
+  background: var(--white);
+  border-radius: 20px;
 }
-@media (max-width: 600px) {
-  .tips-advisories-grid {
-    grid-template-columns: 1fr;
-  }
+
+/* Tips Tab */
+.tips-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
 }
+
+.tips-section, .advisories-section {
+  margin-bottom: 24px;
+}
+
 .tips-section h3, .advisories-section h3 {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   padding-bottom: 8px;
   border-bottom: 2px solid var(--gold);
   display: inline-block;
 }
+
 .tip-item {
   display: flex;
   gap: 12px;
@@ -1702,13 +1856,17 @@ svg{display:block;flex-shrink:0;}
   line-height: 1.6;
   color: var(--stone);
 }
+
 .tip-item:last-child {
   border-bottom: none;
 }
+
 .tip-icon {
   color: var(--gold);
   flex-shrink: 0;
+  font-size: 16px;
 }
+
 .adv-item {
   padding: 12px 16px;
   border-radius: 14px;
@@ -1719,17 +1877,18 @@ svg{display:block;flex-shrink:0;}
   line-height: 1.6;
 }
 
-.mtn-modal-footer {
+/* Footer */
+.modal-footer-actions {
   display: flex;
   gap: 12px;
-  padding: 16px 24px;
+  padding: 16px 28px;
   border-top: 1px solid var(--mist);
-  background: var(--white);
-  flex-shrink: 0;
+  background: var(--cream);
 }
-.m-action {
+
+.action-btn {
   flex: 1;
-  padding: 14px 20px;
+  padding: 12px 20px;
   border-radius: 60px;
   font-size: 13px;
   font-weight: 600;
@@ -1739,24 +1898,53 @@ svg{display:block;flex-shrink:0;}
   justify-content: center;
   gap: 8px;
   transition: all 0.2s;
+  font-family: 'DM Sans', sans-serif;
 }
-.m-save {
+
+.action-save {
   background: transparent;
   color: var(--ink);
   border: 2px solid var(--mist);
 }
-.m-save:hover {
+
+.action-save:hover {
   border-color: var(--gold);
   background: rgba(198,164,59,0.05);
 }
-.m-book {
+
+.action-book {
   background: var(--ink);
   color: var(--cream);
   border: none;
 }
-.m-book:hover {
+
+.action-book:hover {
   background: var(--gold);
   color: var(--ink);
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: rgba(0,0,0,0.8);
+  transform: scale(1.05);
 }
 
 </style>
@@ -1887,164 +2075,164 @@ $currentPage = 'explore'; // Change per page: 'explore', 'bookings', 'quiz', 'me
   </div>
 </div>
 
-<!-- MOUNTAIN DETAIL MODAL -->
+<!-- MOUNTAIN DETAIL MODAL - SPLIT SCREEN DESIGN -->
 <div class="overlay" id="mtnOverlay">
-  <div class="mtn-modal-box">
+  <div class="mtn-modal-box split-modal">
     <button class="modal-close" onclick="closeMtnModal()">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
     
-    <!-- Hero Section with Parallax -->
-    <div class="mtn-modal-hero" id="mtnHeroSection">
-      <div class="mtn-modal-hero-img" id="mHeroImg"></div>
-      <div class="mtn-modal-hero-grad">
-        <div class="mtn-modal-breadcrumb">
-          <span>Explore</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg>
-          <span id="mBreadcrumbName"></span>
-        </div>
-        <div class="mtn-modal-name-section">
-          <h1 class="mtn-modal-name" id="mName"></h1>
-          <div class="mtn-modal-location">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            <span id="mLoc"></span>
+    <!-- LEFT: Hero Image Side -->
+    <div class="modal-left">
+      <div class="modal-hero-image" id="mHeroImg"></div>
+      <div class="modal-image-overlay">
+        <div class="modal-badge" id="mDifficultyBadge"></div>
+        <div class="modal-quick-info">
+          <div class="quick-info-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="mQuickTime"></span>
           </div>
-        </div>
-        <div class="mtn-modal-quick-stats" id="mQuickStats"></div>
-      </div>
-    </div>
-
-    <!-- Content Tabs -->
-    <div class="mtn-modal-tabs">
-      <div class="mtn-mtab active" data-tab="overview">Overview</div>
-      <div class="mtn-mtab" data-tab="trail">Trail Map</div>
-      <div class="mtn-mtab" data-tab="reviews">Reviews <span class="tab-badge" id="mRevBadge"></span></div>
-      <div class="mtn-mtab" data-tab="tips">Tips & Advisories</div>
-    </div>
-
-    <div class="mtn-modal-body">
-      <!-- Overview Tab -->
-      <div class="tab-pane active" id="tp-overview">
-        <div class="overview-grid">
-          <div class="overview-main">
-            <p class="modal-desc" id="mDesc"></p>
-            <div class="info-cards">
-              <div class="info-card">
-                <div class="info-card-icon">🏔️</div>
-                <div class="info-card-content">
-                  <div class="info-card-label">Elevation</div>
-                  <div class="info-card-value" id="mElevation"></div>
-                </div>
-              </div>
-              <div class="info-card">
-                <div class="info-card-icon">⏱️</div>
-                <div class="info-card-content">
-                  <div class="info-card-label">Duration</div>
-                  <div class="info-card-value" id="mDuration"></div>
-                </div>
-              </div>
-              <div class="info-card">
-                <div class="info-card-icon">⭐</div>
-                <div class="info-card-content">
-                  <div class="info-card-label">Rating</div>
-                  <div class="info-card-value" id="mRating"></div>
-                </div>
-              </div>
-              <div class="info-card">
-                <div class="info-card-icon">👥</div>
-                <div class="info-card-content">
-                  <div class="info-card-label">Crowd Level</div>
-                  <div class="info-card-value" id="mCrowd"></div>
-                </div>
-              </div>
-            </div>
-            <div class="fees-section">
-              <h4>Fees & Requirements</h4>
-              <div class="fees-body" id="mFees"></div>
-            </div>
-          </div>
-          <div class="overview-sidebar">
-            <div class="weather-mini-card" id="mWeatherMini">
-              <div class="weather-mini-header">Current Weather</div>
-              <div class="weather-mini-content">
-                <div class="weather-mini-icon">⛅</div>
-                <div class="weather-mini-temp" id="mWeatherTemp">--°C</div>
-              </div>
-              <div class="weather-mini-advice" id="mWeatherAdvice">Loading...</div>
-            </div>
-            <div class="best-time-card">
-              <h4>Best Time to Visit</h4>
-              <p id="mPeakTimes">December to May</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Trail Map Tab -->
-      <div class="tab-pane" id="tp-trail">
-        <div class="trail-header">
-          <h3>Trail Overview</h3>
-          <p class="trail-subtitle">Interactive map showing the hiking route, waypoints, and elevation</p>
-        </div>
-        <div class="trail-map-container">
-          <div id="trailMap" style="height: 350px; width: 100%; border-radius: 16px;"></div>
-        </div>
-        <div class="trail-stats-grid" id="trailStats">
-          <div class="trail-stat">
-            <span class="trail-stat-icon">📏</span>
-            <span class="trail-stat-label">Trail Length</span>
-            <span class="trail-stat-value" id="trailLength">-- km</span>
-          </div>
-          <div class="trail-stat">
-            <span class="trail-stat-icon">⏱️</span>
-            <span class="trail-stat-label">Est. Duration</span>
-            <span class="trail-stat-value" id="trailEstDuration">-- hrs</span>
-          </div>
-          <div class="trail-stat">
-            <span class="trail-stat-icon">📈</span>
-            <span class="trail-stat-label">Difficulty</span>
-            <span class="trail-stat-value" id="trailDifficulty">--</span>
-          </div>
-        </div>
-        <div class="waypoints-list" id="waypointsList">
-          <h4>Trail Waypoints</h4>
-          <div id="waypointsContainer"></div>
-        </div>
-      </div>
-
-      <!-- Reviews Tab -->
-      <div class="tab-pane" id="tp-reviews">
-        <div class="reviews-header">
-          <div class="reviews-summary" id="reviewsSummary"></div>
-          <div class="rev-filter-bar" id="mRevFilter"></div>
-        </div>
-        <div class="revs-list" id="mRevList"></div>
-      </div>
-
-      <!-- Tips & Advisories Tab -->
-      <div class="tab-pane" id="tp-tips">
-        <div class="tips-advisories-grid">
-          <div class="tips-section">
-            <h3>💡 Hiking Tips</h3>
-            <div id="mTips"></div>
-          </div>
-          <div class="advisories-section">
-            <h3>⚠️ Safety Advisories</h3>
-            <div id="mAdv"></div>
+          <div class="quick-info-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2L2 22h20L12 2z"/></svg>
+            <span id="mQuickElevation"></span>
           </div>
         </div>
       </div>
     </div>
+    
+    <!-- RIGHT: Content Side -->
+    <div class="modal-right">
+      <div class="modal-header-info">
+        <h1 class="modal-mountain-name" id="mName"></h1>
+        <div class="modal-mountain-location">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="mLoc"></span>
+        </div>
+        <div class="modal-rating-row">
+          <div class="rating-stars" id="mRatingStars"></div>
+          <span class="rating-value" id="mRatingValue"></span>
+          <span class="rating-count">(<span id="mRevCount">0</span> reviews)</span>
+        </div>
+      </div>
 
-    <div class="mtn-modal-footer">
-      <button class="m-action m-save" onclick="saveMtn()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-        Save
-      </button>
-      <button class="m-action m-book" onclick="bookMtn()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        Book a Hike
-      </button>
+      <!-- Tabs -->
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-tab="overview">Overview</button>
+        <button class="modal-tab" data-tab="trail">Trail Map</button>
+        <button class="modal-tab" data-tab="reviews">Reviews</button>
+        <button class="modal-tab" data-tab="tips">Tips & Safety</button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="modal-tab-content">
+        <!-- Overview Tab -->
+        <div class="tab-pane active" id="tp-overview">
+          <div class="overview-scroll">
+            <p class="modal-description" id="mDesc"></p>
+            
+            <div class="info-grid">
+              <div class="info-grid-item">
+                <div class="info-grid-icon">⏱️</div>
+                <div class="info-grid-label">Duration</div>
+                <div class="info-grid-value" id="mDuration"></div>
+              </div>
+              <div class="info-grid-item">
+                <div class="info-grid-icon">🏔️</div>
+                <div class="info-grid-label">Elevation</div>
+                <div class="info-grid-value" id="mElevation"></div>
+              </div>
+              <div class="info-grid-item">
+                <div class="info-grid-icon">👥</div>
+                <div class="info-grid-label">Crowd Level</div>
+                <div class="info-grid-value" id="mCrowd"></div>
+              </div>
+              <div class="info-grid-item">
+                <div class="info-grid-icon">💧</div>
+                <div class="info-grid-label">Best Season</div>
+                <div class="info-grid-value" id="mPeakTimes"></div>
+              </div>
+            </div>
+
+            <div class="weather-card-modal" id="mWeatherMini">
+              <div class="weather-card-header">🌤️ Current Weather</div>
+              <div class="weather-card-body">
+                <div class="weather-temp" id="mWeatherTemp">--°C</div>
+                <div class="weather-advice" id="mWeatherAdvice">Loading...</div>
+              </div>
+            </div>
+
+            <div class="fees-card">
+              <h4>📋 Fees & Requirements</h4>
+              <div id="mFees"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Trail Map Tab -->
+        <div class="tab-pane" id="tp-trail">
+          <div class="trail-scroll">
+            <div class="trail-stats-row">
+              <div class="trail-stat-card">
+                <span class="trail-stat-icon">📏</span>
+                <span class="trail-stat-label">Trail Length</span>
+                <span class="trail-stat-value" id="trailLength">-- km</span>
+              </div>
+              <div class="trail-stat-card">
+                <span class="trail-stat-icon">⏱️</span>
+                <span class="trail-stat-label">Est. Duration</span>
+                <span class="trail-stat-value" id="trailEstDuration">-- hrs</span>
+              </div>
+              <div class="trail-stat-card">
+                <span class="trail-stat-icon">📈</span>
+                <span class="trail-stat-label">Difficulty</span>
+                <span class="trail-stat-value" id="trailDifficulty">--</span>
+              </div>
+            </div>
+            <div class="trail-map-container">
+              <div id="trailMap" style="height: 280px; width: 100%; border-radius: 16px;"></div>
+            </div>
+            <div class="waypoints-section">
+              <h4>📍 Trail Waypoints</h4>
+              <div id="waypointsContainer" class="waypoints-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reviews Tab -->
+        <div class="tab-pane" id="tp-reviews">
+          <div class="reviews-scroll">
+            <div class="reviews-summary-header" id="reviewsSummaryHeader"></div>
+            <div class="rev-filter-bar" id="mRevFilter"></div>
+            <div class="revs-list" id="mRevList"></div>
+          </div>
+        </div>
+
+        <!-- Tips & Safety Tab -->
+        <div class="tab-pane" id="tp-tips">
+          <div class="tips-scroll">
+            <div class="tips-section">
+              <h3>💡 Hiking Tips</h3>
+              <div id="mTips"></div>
+            </div>
+            <div class="advisories-section">
+              <h3>⚠️ Safety Advisories</h3>
+              <div id="mAdv"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Actions -->
+      <div class="modal-footer-actions">
+        <button class="action-btn action-save" onclick="saveMtn()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          Save
+        </button>
+        <button class="action-btn action-book" onclick="bookMtn()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          Book a Hike
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -2307,31 +2495,37 @@ function openMtnModal(m){
   activeMtn = m;
   activeRevF = 'all';
   
-  // Update hero section
+  // Update left side
   document.getElementById('mHeroImg').style.backgroundImage = `url('${m.image}')`;
+  document.getElementById('mDifficultyBadge').innerHTML = m.difficulty.charAt(0).toUpperCase() + m.difficulty.slice(1);
+  document.getElementById('mDifficultyBadge').style.background = 
+    m.difficulty === 'easy' ? '#2a6b2a' : (m.difficulty === 'moderate' ? '#8a5a2a' : '#a23b1a');
+  document.getElementById('mQuickTime').textContent = m.time;
+  document.getElementById('mQuickElevation').textContent = m.elevation;
+  
+  // Update right side header
   document.getElementById('mName').textContent = m.name;
-  document.getElementById('mBreadcrumbName').textContent = m.name;
   document.getElementById('mLoc').textContent = m.location;
   
-  // Update quick stats
-  document.getElementById('mQuickStats').innerHTML = `
-    <div class="quick-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2L2 22h20L12 2z"/><path d="M12 2v20"/></svg> ${m.elevation}</div>
-    <div class="quick-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${m.time}</div>
-    <div class="quick-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> ★ ${m.rating}</div>
-  `;
+  // Update rating stars
+  const fullStars = Math.floor(m.rating);
+  const hasHalf = m.rating - fullStars >= 0.5;
+  let starsHtml = '';
+  for(let i = 0; i < fullStars; i++) starsHtml += '★';
+  if(hasHalf) starsHtml += '½';
+  for(let i = 0; i < 5 - fullStars - (hasHalf ? 1 : 0); i++) starsHtml += '☆';
+  document.getElementById('mRatingStars').innerHTML = starsHtml;
+  document.getElementById('mRatingValue').textContent = m.rating;
+  document.getElementById('mRevCount').textContent = m.reviewsCount;
   
-  // Update info cards
-  document.getElementById('mElevation').textContent = m.elevation;
   document.getElementById('mDuration').textContent = m.time;
-  document.getElementById('mRating').textContent = `★ ${m.rating}`;
-  
-  const crowdClass = m.crowd === 'low' ? '😌 Low' : (m.crowd === 'med' ? '👥 Moderate' : '⚠️ High');
-  document.getElementById('mCrowd').innerHTML = crowdClass;
+  document.getElementById('mElevation').textContent = m.elevation;
+  const crowdText = m.crowd === 'low' ? '😌 Low' : (m.crowd === 'med' ? '👥 Moderate' : '⚠️ High');
+  document.getElementById('mCrowd').innerHTML = crowdText;
+  document.getElementById('mPeakTimes').textContent = m.peakTimes || 'December to May';
   
   document.getElementById('mDesc').textContent = m.desc;
   document.getElementById('mFees').innerHTML = m.fees;
-  document.getElementById('mPeakTimes').textContent = m.peakTimes || 'December to May (Dry Season)';
-  document.getElementById('mRevBadge').textContent = `(${m.reviewsList.length})`;
   
   // Tips & Advisories
   document.getElementById('mTips').innerHTML = (m.tips || []).map(t => `<div class="tip-item"><span class="tip-icon">💡</span><span>${esc(t)}</span></div>`).join('') || '<p style="color:var(--stone);font-size:13px;">No tips yet.</p>';
@@ -2348,9 +2542,9 @@ function openMtnModal(m){
   loadTrailForModal(m.id);
   
   // Set active tab
-  document.querySelectorAll('.mtn-mtab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  document.querySelector('.mtn-mtab[data-tab="overview"]').classList.add('active');
+  document.querySelector('.modal-tab[data-tab="overview"]').classList.add('active');
   document.getElementById('tp-overview').classList.add('active');
   
   // Open modal
@@ -2358,7 +2552,6 @@ function openMtnModal(m){
   document.body.style.overflow = 'hidden';
   if(isLoggedIn) checkSavedStatus(m.id);
 }
-
 async function loadWeatherForModal(mountain) {
   const weatherDiv = document.getElementById('mWeatherMini');
   const mountainCoord = mountainCoords.find(m => m.id === mountain.id);
