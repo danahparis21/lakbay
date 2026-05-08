@@ -1663,70 +1663,48 @@ async function submitProofOfPayment() {
     const fileInput = document.getElementById('proofFile');
     const file = fileInput.files[0];
     
-    if (!refNumber) {
-        showToast('❌ Please enter the reference number');
-        return;
-    }
-    if (!file) {
-        showToast('❌ Please upload a proof of payment screenshot');
+    if (!refNumber || !file) {
+        showToast('❌ Please fill in all fields');
         return;
     }
     
-    showToast('📤 Submitting payment proof...');
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        showToast('❌ File size must be less than 2MB');
+        return;
+    }
     
-    // Upload file first
-    const formData = new FormData();
-    formData.append('proof_image', file);
-    formData.append('booking_number', currentPaymentBookingNumber);
+    showToast('📤 Processing payment proof...');
     
-    try {
-        const uploadRes = await fetch('../api/upload_proof.php', {
-            method: 'POST',
-            body: formData
-        });
+    // Convert image to base64
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        const base64Image = e.target.result;
         
-        const responseText = await uploadRes.text();
-        console.log('Upload response:', responseText);
-        
-        let uploadData;
         try {
-            uploadData = JSON.parse(responseText);
-        } catch (e) {
-            console.error('Failed to parse JSON:', responseText);
-            showToast('❌ Server error: Invalid response from upload');
-            return;
+            const fd = new FormData();
+            fd.append('action', 'submit_payment_proof');
+            fd.append('booking_number', currentPaymentBookingNumber);
+            fd.append('message_id', currentPaymentMessageId);
+            fd.append('reference_number', refNumber);
+            fd.append('proof_image_base64', base64Image);
+            
+            const res = await fetch('../api/hiker_messages.php', { method: 'POST', body: fd });
+            const data = await res.json();
+            
+            if (data.success) {
+                showToast('✅ Payment proof submitted! Guide will verify.');
+                closeProofModal();
+                if (activeThread) loadMessages(activeThread);
+            } else {
+                showToast('❌ Error: ' + (data.message || 'Unknown error'));
+            }
+        } catch (err) {
+            console.error(err);
+            showToast('❌ Network error');
         }
-        
-        if (!uploadData.success) {
-            showToast('❌ Failed to upload image: ' + (uploadData.message || 'Unknown error'));
-            return;
-        }
-        
-        const imageUrl = uploadData.image_url;
-        
-        // Submit payment proof data
-        const fd = new FormData();
-        fd.append('action', 'submit_payment_proof');
-        fd.append('booking_number', currentPaymentBookingNumber);
-        fd.append('message_id', currentPaymentMessageId);
-        fd.append('reference_number', refNumber);
-        fd.append('proof_image_url', imageUrl);
-        
-        const res = await fetch('../api/hiker_messages.php', { method: 'POST', body: fd });
-        const data = await res.json();
-        
-        if (data.success) {
-            showToast('✅ Payment proof submitted! Guide will verify and confirm.');
-            closeProofModal();
-            // Reload messages to show updated status
-            if (activeThread) loadMessages(activeThread);
-        } else {
-            showToast('❌ Error: ' + (data.message || 'Unknown error'));
-        }
-    } catch (err) {
-        console.error('Upload error:', err);
-        showToast('❌ Network error. Please try again.');
-    }
+    };
+    reader.readAsDataURL(file);
 }
 
 

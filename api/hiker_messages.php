@@ -586,10 +586,16 @@ function submitPaymentProof($pdo, $hikerId) {
     $bookingNumber = $_POST['booking_number'] ?? '';
     $messageId = $_POST['message_id'] ?? 0;
     $referenceNumber = $_POST['reference_number'] ?? '';
-    $proofImageUrl = $_POST['proof_image_url'] ?? '';
+    $proofImageBase64 = $_POST['proof_image_base64'] ?? '';
     
-    if (!$bookingNumber || !$referenceNumber || !$proofImageUrl) {
+    if (!$bookingNumber || !$referenceNumber || !$proofImageBase64) {
         echo json_encode(['success' => false, 'message' => 'Missing required fields']);
+        return;
+    }
+    
+    // Validate base64 image (optional - check size)
+    if (strlen($proofImageBase64) > 5 * 1024 * 1024) { // Max 5MB base64 string
+        echo json_encode(['success' => false, 'message' => 'Image too large (max 2MB)']);
         return;
     }
     
@@ -621,7 +627,7 @@ function submitPaymentProof($pdo, $hikerId) {
         $ad = json_decode($msg['action_data'], true) ?: [];
         $ad['payment_status'] = 'pending_approval';
         $ad['payment_reference'] = $referenceNumber;
-        $ad['proof_image_url'] = $proofImageUrl;
+        $ad['proof_image_base64'] = $proofImageBase64; // Store base64 in action_data
         $stmt = $pdo->prepare("UPDATE messages SET action_data = ? WHERE id = ?");
         $stmt->execute([json_encode($ad), $messageId]);
     }
@@ -629,16 +635,19 @@ function submitPaymentProof($pdo, $hikerId) {
     // Send message to guide with proof
     $proofMessage = "💵 **PAYMENT PROOF SUBMITTED**\n\n";
     $proofMessage .= "Hiker has paid the downpayment for booking #{$bookingNumber}.\n\n";
-    $proofMessage .= "📝 Reference Number: {$referenceNumber}\n";
-    $proofMessage .= "🖼️ Proof: {$proofImageUrl}\n\n";
-    $proofMessage .= "Please verify and confirm the payment.";
+    $proofMessage .= "📝 Reference Number: {$referenceNumber}\n\n";
+    $proofMessage .= "Please check the attached proof image and verify the payment.";
     
     date_default_timezone_set('Asia/Manila');
+    
+    // Add proof_image column if not exists (run this SQL once)
+    // ALTER TABLE messages ADD COLUMN proof_image LONGTEXT NULL AFTER body;
+    
     $stmt = $pdo->prepare("
-        INSERT INTO messages (sender_id, receiver_id, body, sender_role, receiver_role, created_at)
-        VALUES (?, ?, AES_ENCRYPT(?, ?), 'hiker', 'guide', NOW())
+        INSERT INTO messages (sender_id, receiver_id, body, sender_role, receiver_role, proof_image, created_at)
+        VALUES (?, ?, AES_ENCRYPT(?, ?), 'hiker', 'guide', ?, NOW())
     ");
-    $stmt->execute([$hikerId, $guideUserId, $proofMessage, MSG_AES_KEY]);
+    $stmt->execute([$hikerId, $guideUserId, $proofMessage, MSG_AES_KEY, $proofImageBase64]);
     
     echo json_encode(['success' => true, 'message' => 'Payment proof submitted. Guide will verify.']);
 }
