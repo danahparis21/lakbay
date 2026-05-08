@@ -356,6 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23254A5A' d='M8 3 3 20h18L14 8l-2 4z'/></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
 /* ── RESET & TOKENS ── */
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
@@ -2762,7 +2763,6 @@ async function loadTrailForModal(mountainId) {
     if (trailDifficultyElem) trailDifficultyElem.innerHTML = 'Loading...';
     if (waypointsContainer) waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">Loading trail data...</p>';
     
-    // Use the same page with POST request
     const response = await fetch(window.location.href, {
       method: 'POST',
       headers: {
@@ -2775,9 +2775,7 @@ async function loadTrailForModal(mountainId) {
       })
     });
     
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     
     const data = await response.json();
     
@@ -2795,18 +2793,14 @@ async function loadTrailForModal(mountainId) {
     // Initialize trail map
     const trailMapContainer = document.getElementById('trailMap');
     if (trailMapContainer) {
-      // Clean up existing map
       if (trailMap) {
         trailMap.remove();
         trailMap = null;
       }
-      // Clear previous waypoint markers
-      waypointMarkers.forEach(marker => {
-        if (marker && marker.remove) marker.remove();
-      });
+      
+      waypointMarkers.forEach(marker => { if (marker && marker.remove) marker.remove(); });
       waypointMarkers = [];
       
-      // Set initial view to mountain's location or default Nasugbu
       const initialLat = data.mountain?.lat || 14.0583;
       const initialLng = data.mountain?.lng || 120.8320;
       
@@ -2816,25 +2810,22 @@ async function loadTrailForModal(mountainId) {
         subdomains: 'abcd'
       }).addTo(trailMap);
       
-      let hasTrail = false;
       let trailBounds = [];
       
-      // Draw trail if available and zoom to it
+      // Draw trail
       if (data.success && data.trail && data.trail.length > 0) {
         const trailCoords = data.trail.map(c => [c[1], c[0]]);
-        trailLayer = L.polyline(trailCoords, {
+        L.polyline(trailCoords, {
           color: '#c6a43b',
           weight: 5,
           opacity: 0.9,
           lineCap: 'round'
         }).addTo(trailMap);
         trailBounds = L.latLngBounds(trailCoords);
-        hasTrail = true;
-        console.log(`Trail drawn with ${trailCoords.length} points`);
       }
       
-      // Map icons for waypoint types
-      const getIconClass = (type) => {
+      // Get icon for waypoint type (same as active_hike.php)
+      function getIconForType(type) {
         const icons = {
           'summit': 'fa-mountain',
           'campsite': 'fa-campground',
@@ -2843,15 +2834,15 @@ async function loadTrailForModal(mountainId) {
           'peak': 'fa-flag-checkered',
           'mountain_pass': 'fa-road',
           'tree': 'fa-tree',
-          'water_source': 'fa-water',
+          'start': 'fa-flag',
           'rest': 'fa-chair',
           'danger': 'fa-triangle-exclamation',
-          'start': 'fa-flag'
+          'water_source': 'fa-water'
         };
         return icons[type] || 'fa-map-pin';
-      };
+      }
       
-      const getMarkerColorClass = (type) => {
+      function getColorClass(type) {
         const colors = {
           'summit': 'summit-marker',
           'campsite': 'campsite-marker',
@@ -2866,9 +2857,9 @@ async function loadTrailForModal(mountainId) {
           'start': 'start-marker'
         };
         return colors[type] || 'default-marker';
-      };
+      }
       
-      const getDisplayType = (type) => {
+      function getDisplayType(type) {
         const typeMap = {
           'summit': 'Summit',
           'campsite': 'Campsite',
@@ -2883,35 +2874,37 @@ async function loadTrailForModal(mountainId) {
           'water_source': 'Water Source'
         };
         return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
-      };
+      }
       
-      // Add waypoints to map if they exist
+      // Add waypoints to map
       if (data.waypoints && data.waypoints.length > 0) {
-        console.log(`Adding ${data.waypoints.length} waypoints to map`);
-        
         data.waypoints.forEach(wp => {
-          const type = wp.type || 'viewpoint';
           const lat = parseFloat(wp.latitude);
           const lng = parseFloat(wp.longitude);
+          const type = wp.type || 'viewpoint';
           
           if (!isNaN(lat) && !isNaN(lng)) {
-            // Add to bounds if we have waypoints
+            // Extend bounds
             if (trailBounds.length === 0) {
               trailBounds = L.latLngBounds([[lat, lng]]);
             } else {
               trailBounds.extend([lat, lng]);
             }
-            hasTrail = true;
             
-            const iconClass = getIconClass(type);
-            const colorClass = getMarkerColorClass(type);
+            const iconClass = getIconForType(type);
+            const colorClass = getColorClass(type);
             const displayType = getDisplayType(type);
+            
+            let elevationText = '';
+            if (wp.elevation) {
+              elevationText = ` · ${Math.round(wp.elevation)}m`;
+            }
             
             const popupContent = `
               <div class="waypoint-popup">
                 <strong><i class="fas ${iconClass}"></i> ${wp.name || 'Waypoint'}</strong>
                 <div class="popup-detail">
-                  ${displayType}${wp.elevation ? ` · ${Math.round(wp.elevation)}m` : ''}
+                  ${displayType}${elevationText}
                   ${wp.description ? `<br><span class="popup-desc">📝 ${wp.description}</span>` : ''}
                 </div>
                 <div class="popup-coords">
@@ -2920,11 +2913,11 @@ async function loadTrailForModal(mountainId) {
               </div>
             `;
             
-            // Create marker with Font Awesome icon
+            // Create marker with Font Awesome icon (same as active_hike.php)
             const marker = L.marker([lat, lng], {
               icon: L.divIcon({
-                html: `<div class="waypoint-marker ${colorClass} style="cursor:pointer;">
-                          <i class="fas ${iconClass}" style="font-size:22px;"></i>
+                html: `<div class="waypoint-marker ${colorClass}">
+                          <i class="fas ${iconClass}"></i>
                         </div>`,
                 className: 'custom-waypoint-icon',
                 iconSize: [30, 30],
@@ -2934,28 +2927,16 @@ async function loadTrailForModal(mountainId) {
             }).bindPopup(popupContent).addTo(trailMap);
             
             waypointMarkers.push(marker);
-            
-            // Also add a small circle marker as fallback
-            L.circleMarker([lat, lng], {
-              radius: 6,
-              fillColor: '#c6a43b',
-              color: '#fff',
-              weight: 2,
-              opacity: 1,
-              fillOpacity: 0.8
-            }).addTo(trailMap).bindPopup(popupContent);
           }
         });
-        
-        console.log(`Added ${waypointMarkers.length} waypoint markers to map`);
       }
       
-      // Update waypoints list in the right panel
+      // Update waypoints list in right panel
       if (waypointsContainer) {
         waypointsContainer.innerHTML = '';
         
         if (data.waypoints && data.waypoints.length > 0) {
-          const getIconClass = (type) => {
+          function getIconForTypeList(type) {
             const icons = {
               'summit': 'fa-mountain',
               'campsite': 'fa-campground',
@@ -2964,15 +2945,15 @@ async function loadTrailForModal(mountainId) {
               'peak': 'fa-flag-checkered',
               'mountain_pass': 'fa-road',
               'tree': 'fa-tree',
-              'water_source': 'fa-water',
+              'start': 'fa-flag',
               'rest': 'fa-chair',
               'danger': 'fa-triangle-exclamation',
-              'start': 'fa-flag'
+              'water_source': 'fa-water'
             };
             return icons[type] || 'fa-map-pin';
-          };
+          }
           
-          const getMarkerColorClass = (type) => {
+          function getColorClassList(type) {
             const colors = {
               'summit': 'summit-marker',
               'campsite': 'campsite-marker',
@@ -2987,9 +2968,9 @@ async function loadTrailForModal(mountainId) {
               'start': 'start-marker'
             };
             return colors[type] || 'default-marker';
-          };
+          }
           
-          const getDisplayType = (type) => {
+          function getDisplayTypeList(type) {
             const typeMap = {
               'summit': 'Summit',
               'campsite': 'Campsite',
@@ -3004,13 +2985,13 @@ async function loadTrailForModal(mountainId) {
               'water_source': 'Water Source'
             };
             return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
-          };
+          }
           
           data.waypoints.forEach(wp => {
             const type = wp.type || 'viewpoint';
-            const colorClass = getMarkerColorClass(type);
-            const iconClass = getIconClass(type);
-            const displayType = getDisplayType(type);
+            const colorClass = getColorClassList(type);
+            const iconClass = getIconForTypeList(type);
+            const displayType = getDisplayTypeList(type);
             
             const waypointDiv = document.createElement('div');
             waypointDiv.className = 'waypoint-item';
@@ -3029,8 +3010,8 @@ async function loadTrailForModal(mountainId) {
         }
       }
       
-      // Zoom to the trail bounds if we have any trail data or waypoints
-      if (hasTrail && trailBounds.isValid()) {
+      // Zoom to trail bounds
+      if (trailBounds.isValid()) {
         trailMap.fitBounds(trailBounds.pad(0.15));
         console.log('Zooming to trail bounds');
       } else if (data.mountain?.lat && data.mountain?.lng) {
@@ -3052,7 +3033,6 @@ async function loadTrailForModal(mountainId) {
     if (waypointsContainer) waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">Trail information unavailable at this time.</p>';
   }
 }
-
 // Update tab switching - FIXED for modal-tab class
 document.querySelectorAll('.modal-tab').forEach(tab => {
   tab.addEventListener('click', () => {
