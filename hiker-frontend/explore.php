@@ -3817,7 +3817,7 @@ const trailStatusMap = {
     'danger': { icon: '🔴', text: 'Danger', class: 'status-cancelled' }
 };
 const trailStatus = trailStatusMap[g.trail_status] || trailStatusMap.safe;
-let idImageHtml = '';
+
 if (g.id_image) {
     // Regular image from uploads folder
     idImageHtml = `<div style="margin-top:8px;">
