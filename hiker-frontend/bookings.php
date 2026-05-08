@@ -4689,6 +4689,9 @@ document.getElementById('confirmBtn').onclick = () => {
 function cancelBooking(bookingId, mode) {
     const label = mode === 'leave' ? 'leave this hike' : 'cancel this booking';
     
+    // Find the booking first to store guide info for message
+    const booking = bookings.find(x => x.id === bookingId);
+    
     openConfirmModal(
       mode === 'leave' ? 'Leave Hike?' : 'Cancel Booking?',
       `Are you sure you want to ${label}?`,
@@ -4722,17 +4725,16 @@ function cancelBooking(bookingId, mode) {
                     if (b) {
                         b.status = 'cancelled';
                         showToast('✓ Booking cancelled');
+                        
+                        // Send cancellation message to guide (only if booking exists)
+                        fetch('../api/hiker_messages.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: `action=send_system_message&guide_id=${b.guideId}&message=I had to cancel my booking for ${b.mountain} on ${b.date}. Sorry for the inconvenience! ❌`
+                        }).catch(err => console.error('Message error:', err));
                     }
                 }
                 renderBookings();
-                
-                if (mode !== 'leave' && b) {
-                    fetch('../api/hiker_messages.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `action=send_system_message&guide_id=${b.guideId}&message=I had to cancel my booking for ${b.mountain} on ${b.date}. Sorry for the inconvenience! ❌`
-                    });
-                }
             } else {
                 showToast(result.message || 'Failed to process request.');
             }
@@ -4743,6 +4745,7 @@ function cancelBooking(bookingId, mode) {
       }
     );
 }
+
 function switchTab(tab, el, keepSearch = false){
   if (!el) {
     const tabs = document.querySelectorAll('.page-tab');
