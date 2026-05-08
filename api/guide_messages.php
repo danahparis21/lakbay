@@ -37,6 +37,7 @@ try {
         case 'verify_payment': verifyPayment($pdo, $guideId); break;
         case 'reject_payment': rejectPayment($pdo, $guideId); break;
         case 'get_booking_status': getBookingStatus($pdo, $guideId); break;
+        case 'submit_payment_proof':   submitPaymentProof($pdo, $guideId); break;
         default: echo json_encode(['success' => false, 'message' => 'Invalid action: ' . $action]);
     }
 } catch (Exception $e) {
@@ -133,7 +134,7 @@ function getMessages($pdo, $guideId, $hikerUserId) {
         return;
     }
 
-    // Get regular messages with source_type field
+    // Get regular messages with source_type field and proof_image
     $sql = "
         SELECT
             m.id,
@@ -150,6 +151,7 @@ function getMessages($pdo, $guideId, $hikerUserId) {
             m.is_read,
             m.action_data,
             m.is_system_announcement,
+            m.proof_image,  -- ADD THIS LINE
             (SELECT name FROM users WHERE id = m.sender_id) as sender_name,
             'message' as source_type
         FROM messages m
