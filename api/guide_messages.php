@@ -39,10 +39,45 @@ try {
         case 'get_booking_status': getBookingStatus($pdo, $guideId); break;
         case 'submit_payment_proof':   submitPaymentProof($pdo, $guideId); break;
         case 'get_proof_image': getProofImage($pdo, $guideId); break;
+        case 'get_booking_by_number': getBookingByNumber($pdo, $guideId); break;
         default: echo json_encode(['success' => false, 'message' => 'Invalid action: ' . $action]);
     }
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+}
+
+function getBookingByNumber($pdo, $guideId) {
+    $bookingNumber = $_GET['booking_number'] ?? '';
+    
+    if (!$bookingNumber) {
+        echo json_encode(['success' => false, 'message' => 'Missing booking number']);
+        return;
+    }
+    
+    // Get guide's database ID
+    $stmt = $pdo->prepare("SELECT id FROM guides WHERE user_id = ?");
+    $stmt->execute([$guideId]);
+    $guide = $stmt->fetch();
+    
+    if (!$guide) {
+        echo json_encode(['success' => false, 'message' => 'Guide not found']);
+        return;
+    }
+    
+    $stmt = $pdo->prepare("
+        SELECT id, status, downpayment_status, booking_number 
+        FROM bookings 
+        WHERE booking_number = ? AND guide_id = ?
+    ");
+    $stmt->execute([$bookingNumber, $guide['id']]);
+    $booking = $stmt->fetch();
+    
+    echo json_encode([
+        'success' => true,
+        'booking_id' => $booking ? $booking['id'] : null,
+        'status' => $booking ? $booking['status'] : 'not_found',
+        'downpayment_status' => $booking ? $booking['downpayment_status'] : 'unknown'
+    ]);
 }
 
 // Add this function at the bottom of the file:

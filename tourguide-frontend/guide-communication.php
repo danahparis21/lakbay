@@ -1565,33 +1565,18 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
     let bookingNumber = bookingMatch ? bookingMatch[1] : 'N/A';
     bookingNumber = bookingNumber.replace(/[.,;:!?]$/, '');
     
-    // Get booking ID from the message or extract from booking number
-    // First, try to get booking ID from the database using the booking number
+    // Check booking status using the new endpoint
     let showVerifyButtons = true;
     let paymentStatus = 'pending';
     
     try {
-        // First, get the booking ID from the booking number
-        const bookingIdRes = await fetch(`../api/get_booking_id.php?booking_number=${encodeURIComponent(bookingNumber)}`);
-        const bookingIdData = await bookingIdRes.json();
+        const statusRes = await fetch(`../api/guide_messages.php?action=get_booking_by_number&booking_number=${encodeURIComponent(bookingNumber)}`);
+        const statusData = await statusRes.json();
         
-        if (bookingIdData.success && bookingIdData.booking_id) {
-            // Now use your existing get_booking_status endpoint
-            const statusRes = await fetch(`../api/guide_messages.php?action=get_booking_status&booking_id=${bookingIdData.booking_id}`);
-            const statusData = await statusRes.json();
-            
-            if (statusData.success && statusData.status) {
-                // Check if payment is already processed
-                // You'll need to also get downpayment_status - let's modify the existing endpoint slightly
-                const fullStatusRes = await fetch(`../api/get_booking_full_status.php?booking_id=${bookingIdData.booking_id}`);
-                const fullStatusData = await fullStatusRes.json();
-                
-                if (fullStatusData.success) {
-                    paymentStatus = fullStatusData.downpayment_status;
-                    if (paymentStatus === 'paid' || paymentStatus === 'rejected') {
-                        showVerifyButtons = false;
-                    }
-                }
+        if (statusData.success) {
+            paymentStatus = statusData.downpayment_status;
+            if (paymentStatus === 'paid' || paymentStatus === 'rejected') {
+                showVerifyButtons = false;
             }
         }
     } catch(e) {
@@ -1689,7 +1674,6 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
     }
     continue;
 }
-
         // 0.5. PAYMENT CONFIRMED / REJECTED / RESUBMIT REQUIRED CARDS
 if (msg.body && (msg.body.includes('PAYMENT CONFIRMED') || 
                  msg.body.includes('PAYMENT PROOF REJECTED') ||
