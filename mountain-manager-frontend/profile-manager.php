@@ -570,15 +570,15 @@ hr {
         <div class="profile-hero">
             <div class="profile-hero-content">
                 <div class="profile-avatar-large" id="heroAvatar" onclick="openAvatarModal()">
-                    <?php if ($manager_avatar): ?>
-                        <img src="<?= htmlspecialchars($manager_avatar) ?>" alt="Avatar">
-                    <?php else: ?>
-                        <?= $manager_initials ?>
-                    <?php endif; ?>
-                    <div class="profile-avatar-edit">
-                        <i class="fas fa-camera"></i>
-                    </div>
-                </div>
+    <?php if ($manager_avatar): ?>
+        <img src="../<?= htmlspecialchars($manager_avatar) ?>" alt="Avatar">
+    <?php else: ?>
+        <?= $manager_initials ?>
+    <?php endif; ?>
+    <div class="profile-avatar-edit">
+        <i class="fas fa-camera"></i>
+    </div>
+</div>
                 <div class="profile-hero-info">
                     <h1><?= htmlspecialchars($manager_name) ?></h1>
                     <div class="profile-role">
@@ -769,12 +769,12 @@ hr {
         <div class="modal-body">
             <div class="avatar-preview">
                 <div class="avatar-preview-image" id="avatarPreview">
-                    <?php if ($manager_avatar): ?>
-                        <img src="<?= htmlspecialchars($manager_avatar) ?>" alt="Avatar" id="previewImg">
-                    <?php else: ?>
-                        <span id="previewInitial"><?= $manager_initials ?></span>
-                    <?php endif; ?>
-                </div>
+    <?php if ($manager_avatar): ?>
+        <img src="../<?= htmlspecialchars($manager_avatar) ?>" alt="Avatar" id="previewImg">
+    <?php else: ?>
+        <span id="previewInitial"><?= $manager_initials ?></span>
+    <?php endif; ?>
+</div>
                 <input type="file" id="avatarInput" class="hidden-file" accept="image/jpeg,image/png,image/webp">
                 <button class="btn-primary btn-outline btn-sm" onclick="document.getElementById('avatarInput').click()">
                     <i class="fas fa-folder-open"></i> Choose File
