@@ -250,7 +250,38 @@ function fmtMoney($amount) {
 /* Analytics page specific styles only - NO sidebar styles */
 
 /* ── CHART CONTAINERS ── */
-.chart-wrap { position:relative; width:100%; }
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  /* Responsive aspect-ratio box: 16:5 ratio keeps chart readable */
+  padding-bottom: 31.25%; /* 200/640 */
+  height: 0;
+  overflow: hidden;
+}
+.chart-wrap svg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+}
+/* Fallback for tab panels that need a visible chart area */
+.tab-content .chart-wrap {
+  padding-bottom: 0;
+  height: 240px;
+  overflow: visible;
+}
+.tab-content .chart-wrap svg {
+  position: static;
+  width: 100%; height: 100%;
+  display: block;
+  overflow: visible;
+}
+/* Chart text labels */
+.chart-label {
+  font-size: 11px;
+  fill: #6b6355;
+  font-family: 'DM Mono', 'Courier New', monospace;
+  font-weight: 600;
+}
 .chart-svg { width:100%; overflow:visible; }
 .chart-tooltip {
   position:fixed; background:var(--ink); color:var(--white);
@@ -524,9 +555,9 @@ function renderAnalytics() {
                     <div class="section-tab" onclick="switchTab('hikers',this)">Hikers</div>
                     <div class="section-tab" onclick="switchTab('revenue',this)">Revenue</div>
                 </div>
-                <div class="tab-content active" id="tab-bookings"><div class="chart-wrap" style="height:220px;">${drawLineChart('bookings')}</div></div>
-                <div class="tab-content" id="tab-hikers"><div class="chart-wrap" style="height:220px;">${drawLineChart('hikers')}</div></div>
-                <div class="tab-content" id="tab-revenue"><div class="chart-wrap" style="height:220px;">${drawLineChart('revenue')}</div></div>
+                <div class="tab-content active" id="tab-bookings"><div class="chart-wrap">${drawLineChart('bookings')}</div></div>
+                <div class="tab-content" id="tab-hikers"><div class="chart-wrap">${drawLineChart('hikers')}</div></div>
+                <div class="tab-content" id="tab-revenue"><div class="chart-wrap">${drawLineChart('revenue')}</div></div>
                 <div style="display:flex;gap:20px;margin-top:14px;flex-wrap:wrap;">
                     ${myMtns.map((m, i) => `<div style="display:flex;align-items:center;gap:7px;"><div style="width:24px;height:3px;background:${i === 0 ? 'var(--ink)' : 'var(--gold)'}"></div>${escapeHtml(m.name)}</div>`).join('')}
                 </div>
@@ -601,53 +632,80 @@ function drawLineChart(metric) {
     if (metric === 'bookings') data = BOOKING_TRENDS;
     else if (metric === 'hikers') data = HIKER_TRENDS;
     else data = REVENUE_TRENDS;
-    
+
     const labels = LAST_6_MONTHS;
-    const W = 600, H = 180, padL = 40, padR = 10, padT = 16, padB = 30;
+
+    // Wider left padding for revenue labels (e.g. ₱10,000)
+    const W = 640, H = 220;
+    const padL = metric === 'revenue' ? 72 : 44;
+    const padR = 16, padT = 20, padB = 36;
     const iW = W - padL - padR, iH = H - padT - padB;
-    
+
     let allVals = [];
     myMtns.forEach(m => { if (data[m.id]) allVals = allVals.concat(data[m.id]); });
     const maxV = Math.max(...allVals, 1);
     const minV = 0;
+
+    // Nice round ceiling for y-axis
+    const rawStep = (maxV - minV) / 4;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep || 1)));
+    const niceStep = Math.ceil(rawStep / magnitude) * magnitude;
+    const niceMax = Math.ceil(maxV / niceStep) * niceStep || niceStep;
+
     const colors = ['#100600', '#c9a84c'];
-    const x = (i) => padL + i / (labels.length - 1) * iW;
-    const y = (v) => padT + iH - (v - minV) / (maxV - minV) * iH;
-    
+    const xFn = (i) => padL + (labels.length > 1 ? i / (labels.length - 1) : 0.5) * iW;
+    const yFn = (v) => padT + iH - (v / niceMax) * iH;
+
     let grid = '', yLabels = '', xLabels = '', areas = '', paths = '', dots = '';
-    
+
+    // Y-axis grid lines & labels (5 lines: 0%, 25%, 50%, 75%, 100%)
     [0, 25, 50, 75, 100].forEach(pct => {
-        const yy = padT + iH * (1 - pct / 100);
-        const val = Math.round(minV + (maxV - minV) * pct / 100);
+        const val = Math.round(niceMax * pct / 100);
+        const yy = yFn(val);
         const lbl = metric === 'revenue' ? fmtMoney(val) : val;
         grid += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="rgba(16,6,0,.06)" stroke-width="1"/>`;
-        yLabels += `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end" class="chart-label">${lbl}</text>`;
+        yLabels += `<text x="${padL - 8}" y="${yy + 4}" text-anchor="end" class="chart-label">${lbl}</text>`;
     });
-    
-    labels.forEach((l, i) => { xLabels += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" class="chart-label">${l}</text>`; });
-    
+
+    // X-axis labels
+    labels.forEach((l, i) => {
+        xLabels += `<text x="${xFn(i)}" y="${H - 8}" text-anchor="middle" class="chart-label">${l}</text>`;
+    });
+
+    // Lines, areas, dots per mountain
     myMtns.forEach((m, mi) => {
         const vals = data[m.id];
         if (!vals) return;
         const color = colors[mi] || '#888';
-        const pts = vals.map((_, i) => ({ px: x(i), py: y(vals[i]) }));
-        let aPath = `M${pts[0].px},${y(0)}`;
+        const pts = vals.map((v, i) => ({ px: xFn(i), py: yFn(v) }));
+
+        // Area fill
+        let aPath = `M${pts[0].px},${yFn(0)}`;
         pts.forEach(p => aPath += ` L${p.px},${p.py}`);
-        aPath += ` L${pts[pts.length - 1].px},${y(0)} Z`;
-        areas += `<path d="${aPath}" fill="${color}" opacity=".05"/>`;
+        aPath += ` L${pts[pts.length - 1].px},${yFn(0)} Z`;
+        areas += `<path d="${aPath}" fill="${color}" opacity=".07"/>`;
+
+        // Smooth bezier line
         let lPath = `M${pts[0].px},${pts[0].py}`;
         for (let i = 1; i < pts.length; i++) {
             const cpx = (pts[i - 1].px + pts[i].px) / 2;
             lPath += ` C${cpx},${pts[i - 1].py} ${cpx},${pts[i].py} ${pts[i].px},${pts[i].py}`;
         }
         paths += `<path d="${lPath}" stroke="${color}" stroke-width="2.5" fill="none" class="line-path"/>`;
+
+        // Dots with tooltip
         pts.forEach((p, i) => {
             const lbl = metric === 'revenue' ? fmtMoney(vals[i]) : vals[i];
-            dots += `<circle cx="${p.px}" cy="${p.py}" r="4" fill="${color}" stroke="white" stroke-width="2" class="line-dot" onmouseenter="showTooltip(event,'${escapeHtml(m.name)} · ${labels[i]} · ${lbl}')" onmouseleave="hideTooltip()"/>`;
+            dots += `<circle cx="${p.px}" cy="${p.py}" r="4.5" fill="${color}" stroke="white" stroke-width="2" class="line-dot" onmouseenter="showTooltip(event,'${escapeHtml(m.name)} · ${labels[i]} · ${lbl}')" onmouseleave="hideTooltip()"/>`;
         });
     });
-    
-    return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg" preserveAspectRatio="none">${grid}${xLabels}${yLabels}${areas}${paths}${dots}</svg>`;
+
+    // Clipping rect to keep lines inside plot area (labels remain outside)
+    const clipId = 'clip-' + metric;
+    const clipDef = `<defs><clipPath id="${clipId}"><rect x="${padL}" y="${padT}" width="${iW}" height="${iH}"/></clipPath></defs>`;
+    const plotGroup = `<g clip-path="url(#${clipId})">${areas}${paths}</g>`;
+
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;overflow:visible;">${clipDef}${grid}${yLabels}${xLabels}${plotGroup}${dots}</svg>`;
 }
 
 function drawDonut() {

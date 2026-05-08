@@ -1192,79 +1192,78 @@ function getCrowdBadge($level) {
 </div>
 
     <!-- Crowd Reports -->
-    <div class="panel" id="crowd">
-      <div class="panel-hdr">
-        <div class="panel-title"><svg viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Live Crowd Reports</div>
-      </div>
-      <div class="panel-body">
-        <?php if(empty($crowd_reports)): ?>
-          <div style="text-align:center;padding:40px;color:var(--ink3);">📊 No recent crowd reports. Trails are likely quiet.</div>
-        <?php else: ?>
-          <div class="crowd-grid">
-            <?php foreach($crowd_reports as $report): 
-              $badge = getCrowdBadge($report['crowd_level']);
-            ?>
-              <div class="alert-card">
-                <div class="alert-card-header">
-                  <div class="alert-icon" style="background:<?= $badge['bg'] ?>">
-                    <span style="font-size:20px"><?= $badge['icon'] ?></span>
-                  </div>
-                  <div>
-                    <div class="alert-title"><?= htmlspecialchars($report['mountain_name']) ?></div>
-                    <div class="alert-meta">
-                      <span class="crowd-badge" style="background:<?= $badge['bg'] ?>;color:<?= $badge['color'] ?>">
-                        <?= $badge['icon'] ?> <?= $report['crowd_level'] ?> Crowd
-                      </span>
-                      <span>🕐 <?= $report['minutes_ago'] ?> min ago</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="alert-body">
-                  <?= htmlspecialchars($report['notes'] ?? 'No additional notes') ?>
-                  <?php if($report['latitude'] && $report['longitude']): ?>
-                    <div style="margin-top:8px;font-size:11px;color:var(--ink4);">
-                      📍 <?= number_format($report['latitude'], 6) ?>, <?= number_format($report['longitude'], 6) ?>
-                    </div>
-                  <?php endif; ?>
-                </div>
-                <div class="alert-footer">
-                  <button class="btn-sm btn-outline-sm" onclick="reportCrowd(<?= $report['mountain_id'] ?>)">➕ Add Report</button>
-                </div>
+<div class="panel" id="crowd">
+  <div class="panel-hdr">
+    <div class="panel-title"><svg viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Live Crowd Reports</div>
+  </div>
+  <div class="panel-body">
+    <?php if(empty($crowd_reports)): ?>
+      <div style="text-align:center;padding:40px;color:var(--ink3);">📊 No recent crowd reports. Trails are likely quiet.</div>
+    <?php else: ?>
+      <div class="crowd-grid">
+        <?php foreach($crowd_reports as $report): 
+          $badge = getCrowdBadge($report['crowd_level']);
+        ?>
+          <div class="alert-card">
+            <div class="alert-card-header">
+              <div class="alert-icon" style="background:<?= $badge['bg'] ?>">
+                <span style="font-size:20px"><?= $badge['icon'] ?></span>
               </div>
-            <?php endforeach; ?>
-          </div>
-        <?php endif; ?>
-      </div>
-    </div>
-
-    <!-- Broadcasts / Advisories -->
-    <div class="panel" id="broadcasts">
-      <div class="panel-hdr">
-        <div class="panel-title"><svg viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Official Advisories & Broadcasts</div>
-        <button class="btn-sm btn-primary-sm" onclick="openBroadcastModal()">📢 Send Broadcast</button>
-      </div>
-      <div class="panel-body">
-        <?php if(empty($broadcasts)): ?>
-          <div style="text-align:center;padding:40px;color:var(--ink3);">📭 No broadcast messages yet.</div>
-        <?php else: ?>
-          <?php foreach($broadcasts as $broadcast): ?>
-            <div class="broadcast-item <?= $broadcast['is_read'] == 0 ? 'unread' : '' ?>" onclick="markBroadcastRead(<?= $broadcast['id'] ?>, this)">
-              <div class="broadcast-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              </div>
-              <div class="broadcast-content">
-                <div class="broadcast-title">From: <?= htmlspecialchars($broadcast['sender_name']) ?></div>
-                <div class="broadcast-message"><?= nl2br(htmlspecialchars(substr($broadcast['message'], 0, 200))) ?></div>
-                <div class="broadcast-meta">
-                  <span>📅 <?= date('M d, Y g:i A', strtotime($broadcast['created_at'])) ?></span>
-                  <span>👥 Target: <?= ucfirst(str_replace('_', ' ', $broadcast['recipient_role'] ?? 'All')) ?></span>
+              <div>
+                <div class="alert-title"><?= htmlspecialchars($report['mountain_name']) ?></div>
+                <div class="alert-meta">
+                  <span class="crowd-badge" style="background:<?= $badge['bg'] ?>;color:<?= $badge['color'] ?>">
+                    <?= $badge['icon'] ?> <?= $report['crowd_level'] ?> Crowd
+                  </span>
+                  <span>🕐 <?= $report['minutes_ago'] ?> min ago</span>
                 </div>
               </div>
             </div>
-          <?php endforeach; ?>
-        <?php endif; ?>
+            <div class="alert-body">
+              <?= htmlspecialchars($report['notes'] ?? 'No additional notes') ?>
+              <?php if($report['latitude'] && $report['longitude']): ?>
+                <div style="margin-top:8px;font-size:11px;color:var(--ink4);">
+                  📍 <?= number_format($report['latitude'], 6) ?>, <?= number_format($report['longitude'], 6) ?>
+                </div>
+              <?php endif; ?>
+            </div>
+          </div>
+        <?php endforeach; ?>
       </div>
+    <?php endif; ?>
+  </div>
+</div>
+
+   <!-- Broadcasts / Advisories - View Only -->
+<div class="panel" id="broadcasts">
+  <div class="panel-hdr">
+    <div class="panel-title">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
+      Official Advisories & Broadcasts
     </div>
+  </div>
+  <div class="panel-body">
+    <?php if(empty($broadcasts)): ?>
+      <div style="text-align:center;padding:40px;color:var(--ink3);">📭 No broadcast messages yet.</div>
+    <?php else: ?>
+      <?php foreach($broadcasts as $broadcast): ?>
+        <div class="broadcast-item <?= $broadcast['is_read'] == 0 ? 'unread' : '' ?>" onclick="markBroadcastRead(<?= $broadcast['id'] ?>, this)">
+          <div class="broadcast-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div class="broadcast-content">
+            <div class="broadcast-title">From: <?= htmlspecialchars($broadcast['sender_name']) ?></div>
+            <div class="broadcast-message"><?= nl2br(htmlspecialchars(substr($broadcast['message'], 0, 200))) ?></div>
+            <div class="broadcast-meta">
+              <span>📅 <?= date('M d, Y g:i A', strtotime($broadcast['created_at'])) ?></span>
+              <span>👥 Target: <?= ucfirst(str_replace('_', ' ', $broadcast['recipient_role'] ?? 'All')) ?></span>
+            </div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+</div>
   </div>
 </div>
 
