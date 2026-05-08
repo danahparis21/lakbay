@@ -1133,6 +1133,14 @@ svg{display:block;flex-shrink:0;}
     box-shadow: var(--sh);
 }
 
+.weather-tabs-row {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--mist);
+    scrollbar-width: thin;
+}
+
 </style>
 </head>
 <body>
