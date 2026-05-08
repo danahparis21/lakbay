@@ -3835,10 +3835,6 @@ if (g.id_image) {
 // Display only Guide ID and ID Type with image
 document.getElementById('gDetails').innerHTML = `
     <div class="gd-item">
-        <div class="gd-lbl">🆔 Guide ID</div>
-        <div class="gd-val">#${g.id}</div>
-    </div>
-    <div class="gd-item">
         <div class="gd-lbl">🪪 ID Type</div>
         <div class="gd-val">${g.id_type ? esc(g.id_type) : 'Not provided'}${idImageHtml}</div>
     </div>
