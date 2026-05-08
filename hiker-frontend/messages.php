@@ -748,11 +748,9 @@ if (msg.body && msg.body.includes('PAYMENT PROOF SUBMITTED')) {
                     </div>
                     ${proofImageBase64 ? `
                         <div class="proof-image-preview" style="margin-top:8px;text-align:center;">
-                            <img src="${proofImageBase64}" alt="Payment Proof" style="max-width:100%;max-height:300px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('${proofImageBase64}', '_blank')">
-                            <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
-                        </div>
-                    ` : '<div style="font-size:12px;color:#6b7280;">No image uploaded</div>'}
-                </div>
+    <img src="${proofImageBase64}" alt="Payment Proof" style="max-width:100%;max-height:300px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer;" onclick="openImageModal('${proofImageBase64}')">
+    <small style="display:block;margin-top:4px;font-size:9px;color:#9ca3af;">Click to view full image</small>
+</div>
                 ${actionButtons}
                 ${!isGuide && !isMine ? `
                 <div class="info-note" style="background:#fef3c7;border-radius:8px;padding:10px;margin-top:12px;text-align:center;">
@@ -1708,6 +1706,58 @@ async function submitProofOfPayment() {
     reader.readAsDataURL(file);
 }
 
+// Function to open base64 image in a modal lightbox
+function openImageModal(base64Image) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('imageModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'imageModal';
+        modal.style.cssText = `
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 10000;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+            max-width: 90%;
+            max-height: 90%;
+            margin: auto;
+        `;
+        
+        const modalImg = document.createElement('img');
+        modalImg.id = 'modalImage';
+        modalImg.style.cssText = `
+            max-width: 100%;
+            max-height: 90vh;
+            object-fit: contain;
+            border-radius: 8px;
+        `;
+        
+        modalContent.appendChild(modalImg);
+        modal.appendChild(modalContent);
+        
+        // Close modal when clicked
+        modal.onclick = function() {
+            modal.style.display = 'none';
+        };
+        
+        document.body.appendChild(modal);
+    }
+    
+    const modalImg = document.getElementById('modalImage');
+    modalImg.src = base64Image;
+    modal.style.display = 'flex';
+}
 
 </script>
 </body>
