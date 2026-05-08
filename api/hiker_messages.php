@@ -593,12 +593,6 @@ function submitPaymentProof($pdo, $hikerId) {
         return;
     }
     
-    // Validate base64 image (optional - check size)
-    if (strlen($proofImageBase64) > 5 * 1024 * 1024) { // Max 5MB base64 string
-        echo json_encode(['success' => false, 'message' => 'Image too large (max 2MB)']);
-        return;
-    }
-    
     // Get booking details
     $stmt = $pdo->prepare("SELECT id, guide_id, user_id FROM bookings WHERE booking_number = ?");
     $stmt->execute([$bookingNumber]);
@@ -619,7 +613,7 @@ function submitPaymentProof($pdo, $hikerId) {
     $stmt = $pdo->prepare("UPDATE bookings SET downpayment_status = 'pending_approval' WHERE id = ?");
     $stmt->execute([$booking['id']]);
     
-    // Update the action_data in the original message
+    // Update action_data - ONLY store metadata, NOT the image!
     $stmt = $pdo->prepare("SELECT action_data FROM messages WHERE id = ?");
     $stmt->execute([$messageId]);
     $msg = $stmt->fetch();
@@ -627,21 +621,18 @@ function submitPaymentProof($pdo, $hikerId) {
         $ad = json_decode($msg['action_data'], true) ?: [];
         $ad['payment_status'] = 'pending_approval';
         $ad['payment_reference'] = $referenceNumber;
-        $ad['proof_image_base64'] = $proofImageBase64; // Store base64 in action_data
+        // DO NOT add proof_image_base64 here - that's what caused the error!
         $stmt = $pdo->prepare("UPDATE messages SET action_data = ? WHERE id = ?");
         $stmt->execute([json_encode($ad), $messageId]);
     }
     
-    // Send message to guide with proof
+    // Send message to guide - store image ONLY in proof_image column
     $proofMessage = "💵 **PAYMENT PROOF SUBMITTED**\n\n";
     $proofMessage .= "Hiker has paid the downpayment for booking #{$bookingNumber}.\n\n";
     $proofMessage .= "📝 Reference Number: {$referenceNumber}\n\n";
     $proofMessage .= "Please check the attached proof image and verify the payment.";
     
     date_default_timezone_set('Asia/Manila');
-    
-    // Add proof_image column if not exists (run this SQL once)
-    // ALTER TABLE messages ADD COLUMN proof_image LONGTEXT NULL AFTER body;
     
     $stmt = $pdo->prepare("
         INSERT INTO messages (sender_id, receiver_id, body, sender_role, receiver_role, proof_image, created_at)
