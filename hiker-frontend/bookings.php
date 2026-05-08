@@ -158,7 +158,7 @@ function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
     
     try {
         // Simplified query - first get all bookings where user is owner
-       $stmt = $pdo->prepare("
+$stmt = $pdo->prepare("
 SELECT 
     b.id, b.booking_number, b.mountain_id, b.guide_id,
     b.user_id,
@@ -169,7 +169,11 @@ SELECT
     m.name as mountain,
     COALESCE(u.name, 'Unknown Guide') as guideName,
     COALESCE(SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2), '??') as guideInitials,
-    COALESCE(g.user_id, 0) as guide_user_id
+    COALESCE(g.user_id, 0) as guide_user_id,
+    b.downpayment_status as downpaymentStatus,
+    b.payment_status as paymentStatus,
+    b.downpayment_amount as downpaymentAmount,
+    b.guide_payment_status as guidePaymentStatus
 FROM bookings b
 JOIN mountains m ON b.mountain_id = m.id
 LEFT JOIN guides g ON b.guide_id = g.id      
@@ -213,29 +217,34 @@ ORDER BY b.created_at DESC
                 $timeValue = date('H:i', strtotime($row['start_time']));
             }
             $bookings[] = [
-                'id' => $bookingId,
-                'db_id' => $row['id'],
-                'mountainId' => $row['mountain_id'],
-                'mountain' => $row['mountain'],
-                'date' => $row['date'],
-                'time' => $timeValue,
-                'type' => $row['type'] == 'overnight' ? 'overnight' : ($row['type'] == 'late_hike' ? 'late' : 'day'),
-                'status' => $row['status'],
-                'guideId' => $row['guide_id'],
-                'guideName' => $row['guideName'],
-                'guideInitials' => $row['guideInitials'] ?: substr($row['guideName'], 0, 2),
-                'guide_user_id' => $row['guide_user_id'] ?? 0,
-                'pax' => $row['pax'],
-                'hikers' => $hikers,
-                'totalFee' => floatval($row['totalFee']),
-                'createdAt' => strtotime($row['created_at']) * 1000,
-                'nudges' => intval($nudgeData['nudge_count'] ?? 0),
-                'lastNudge' => $nudgeData['last_nudge'] ? strtotime($nudgeData['last_nudge']) * 1000 : 0,
-                'camping' => $row['camping'] == 1,
-                'notes' => $row['notes'] ?? '',
-                'hasReviewed' => $hasReviewed,
-                'relationship' => 'owner'
-            ];
+    'id' => $bookingId,
+    'db_id' => $row['id'],
+    'mountainId' => $row['mountain_id'],
+    'mountain' => $row['mountain'],
+    'date' => $row['date'],
+    'time' => $timeValue,
+    'type' => $row['type'] == 'overnight' ? 'overnight' : ($row['type'] == 'late_hike' ? 'late' : 'day'),
+    'status' => $row['status'],
+    'guideId' => $row['guide_id'],
+    'guideName' => $row['guideName'],
+    'guideInitials' => $row['guideInitials'] ?: substr($row['guideName'], 0, 2),
+    'guide_user_id' => $row['guide_user_id'] ?? 0,
+    'pax' => $row['pax'],
+    'hikers' => $hikers,
+    'totalFee' => floatval($row['totalFee']),
+    'createdAt' => strtotime($row['created_at']) * 1000,
+    'nudges' => intval($nudgeData['nudge_count'] ?? 0),
+    'lastNudge' => $nudgeData['last_nudge'] ? strtotime($nudgeData['last_nudge']) * 1000 : 0,
+    'camping' => $row['camping'] == 1,
+    'notes' => $row['notes'] ?? '',
+    'hasReviewed' => $hasReviewed,
+    'relationship' => 'owner',
+    // ===== ADD THESE FIELDS =====
+    'downpaymentStatus' => $row['downpaymentStatus'] ?? 'unpaid',
+    'paymentStatus' => $row['paymentStatus'] ?? 'pending',
+    'downpaymentAmount' => floatval($row['downpaymentAmount'] ?? 0),
+    'guidePaymentStatus' => $row['guidePaymentStatus'] ?? 'unpaid'
+];
         }
         
         // Now get joined bookings (where user is in booking_hikers but not owner)
@@ -4396,10 +4405,7 @@ const statusLabel = statusLabels[b.status] || b.status;
         <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-sm">
           <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Message Guide
         </a>
-        <!-- VIEW DETAILS BUTTON - Show for ALL bookings -->
-    <button class="btn btn-outline btn-sm" onclick="viewActiveHikeDetails('${b.id}')">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/></svg> View Details
-    </button>
+        
 
         ${isJoined ? `
           <button class="btn btn-outline btn-sm" onclick="viewJoinedHike('${b.id}')">
