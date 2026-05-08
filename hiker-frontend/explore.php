@@ -1097,6 +1097,42 @@ svg{display:block;flex-shrink:0;}
 .crowd-low-chip{background:rgba(76,175,80,.12);color:#2a7a2a;}
 .crowd-med-chip{background:rgba(255,152,0,.12);color:#8a5a00;}
 .crowd-high-chip{background:rgba(244,67,54,.12);color:#9a1a1a;}
+
+/* Map panel improvements */
+.map-card {
+    box-shadow: var(--sh-lg);
+}
+
+#exploreMap {
+    height: 450px;
+    border-radius: 0 0 var(--r) var(--r);
+}
+
+.lk-marker {
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(16,6,0,.35);
+    font-weight: 700;
+}
+.lk-marker:hover {
+    transform: scale(1.1);
+    transition: transform 0.2s ease;
+}
+.weather-panel-header {
+    background: linear-gradient(135deg, var(--cream) 0%, var(--white) 100%);
+}
+.forecast-compact {
+    transition: all 0.2s ease;
+}
+.forecast-compact:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--sh);
+}
+
 </style>
 </head>
 <body>
@@ -1680,17 +1716,30 @@ function bookMtn(){ if(activeMtn){ localStorage.setItem('bookingMtn',JSON.string
 const mountainCoords = <?php
   $coords = [];
   foreach ($dbMountains as $m) {
+    // Map difficulty to display format
+    $difficultyDisplay = $m['difficulty'] ?? 'Moderate';
+    // Special case for Trilogy
+    if(strpos($m['name'], 'Trilogy') !== false) {
+        $difficultyDisplay = 'Difficult';
+    }
+    // For "Easy to Moderate" - keep as is
+    if($difficultyDisplay === 'Easy to Moderate') {
+        $difficultyDisplay = 'Easy to Moderate';
+    }
+    
     $coords[] = [
       'id'         => (int)$m['id'],
       'name'       => $m['name'],
       'lat'        => floatval($m['start_point_lat'] ?? 14.0583),
       'lng'        => floatval($m['start_point_lng'] ?? 120.8320),
       'elevation'  => $m['elevation'] ?? '—',
-      'difficulty' => strtolower($m['difficulty'] ?? 'moderate'),
+      'difficulty' => strtolower($difficultyDisplay),
+      'difficulty_display' => $difficultyDisplay,
       'crowd'      => strtolower($m['crowdLevel'] ?? 'medium'),
       'image'      => $m['image'] ?? '',
       'duration'   => $m['duration'] ?? '—',
-      'rating'     => $m['rating'] ?? 4.0,
+      'rating'     => floatval($m['rating'] ?? 4.0),
+      'is_trilogy' => strpos($m['name'], 'Trilogy') !== false,
     ];
   }
   echo json_encode($coords);
@@ -1761,38 +1810,66 @@ function renderWeatherPanel(mtnId){
   const advice = getHikingAdvice(current.code, current.temp);
   const crowd = getCrowdLabel(mtn.crowd);
   const tempColor = current.temp>=32?'#ef4444':current.temp>=27?'#f97316':current.temp>=22?'#eab308':'#06b6d4';
-
-  const dayNames = daily.times.map(t=>{
-    const day = new Date(t+'T00:00:00');
-    return day.toLocaleDateString('en-PH',{weekday:'short'});
-  });
+  
+  // Get tomorrow's forecast (just 1 day ahead)
+  const tomorrow = daily.times[0];
+  const tomorrowMax = daily.maxTemps[0];
+  const tomorrowMin = daily.minTemps[0];
+  const tomorrowIcon = getWeatherIcon(daily.codes[0]);
+  const dayName = tomorrow ? new Date(tomorrow+'T00:00:00').toLocaleDateString('en-PH',{weekday:'short'}) : 'Tomorrow';
+  
+  // Set difficulty background color
+  let diffBg = '#ffe0b5'; // default moderate
+  let diffColor = '#8a5a2a';
+  const diffDisplay = mtn.difficulty_display || mtn.difficulty;
+  if(diffDisplay === 'Easy' || diffDisplay === 'easy') {
+    diffBg = '#d9ead3';
+    diffColor = '#2a6b2a';
+  } else if(diffDisplay === 'Difficult' || diffDisplay === 'hard') {
+    diffBg = '#ffcfc2';
+    diffColor = '#a23b1a';
+  } else if(diffDisplay === 'Easy to Moderate') {
+    diffBg = '#e8f5e9';
+    diffColor = '#4caf50';
+  }
 
   wrap.innerHTML = `
     <div class="weather-current-block">
       <div>
         <div class="weather-temp-main" style="color:${tempColor}">${current.temp}°C</div>
-        <div class="weather-desc-row">${desc}</div>
+        <div class="weather-desc-row">${desc} · 💨 ${current.wind} km/h</div>
       </div>
       <div class="weather-icon-main">${icon}</div>
     </div>
     <div class="weather-advice-banner ${advice.cls}">${advice.msg}</div>
     <div class="weather-details-row">
-      <div class="weather-detail-chip"><div class="weather-chip-val">${current.wind}</div><div class="weather-chip-lbl">km/h Wind</div></div>
-      <div class="weather-detail-chip"><div class="weather-chip-val">${mtn.elevation}</div><div class="weather-chip-lbl">Elevation</div></div>
-      <div class="weather-detail-chip"><div class="weather-chip-val"><span class="crowd-status-chip ${crowd.chip}">${crowd.label}</span></div><div class="weather-chip-lbl" style="margin-top:4px;">Trail Crowd</div></div>
+      <div class="weather-detail-chip">
+        <div class="weather-chip-val">${mtn.elevation}</div>
+        <div class="weather-chip-lbl">Elevation</div>
+      </div>
+      <div class="weather-detail-chip">
+        <div class="weather-chip-val" style="background:${diffBg}; color:${diffColor}; padding:4px 8px; border-radius:30px; font-weight:600;">${diffDisplay}</div>
+        <div class="weather-chip-lbl">Difficulty</div>
+      </div>
+      <div class="weather-detail-chip">
+        <div class="weather-chip-val"><span class="crowd-status-chip ${crowd.chip}">${crowd.label}</span></div>
+        <div class="weather-chip-lbl">Trail Crowd</div>
+      </div>
     </div>
-    <div class="forecast-label">5-Day Forecast</div>
-    <div class="forecast-row">
-      ${dayNames.map((day,i)=>`
-        <div class="forecast-day-chip">
-          <div class="fc-day-name">${day}</div>
-          <div class="fc-icon">${getWeatherIcon(daily.codes[i])}</div>
-          <div class="fc-temps"><span class="fc-high">${daily.maxTemps[i]}°</span><span class="fc-low"> / ${daily.minTemps[i]}°</span></div>
-        </div>`).join('')}
+    <div class="forecast-compact" style="background:var(--cream); border-radius:12px; padding:12px; margin-top:8px;">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <div style="font-size:11px; color:var(--stone);">⛅ ${dayName}</div>
+          <div style="font-size:20px; margin:4px 0;">${tomorrowIcon}</div>
+          <div><span style="font-weight:700;">${tomorrowMax}°</span> <span style="color:var(--stone);">/${tomorrowMin}°</span></div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px; color:var(--stone);">${current.wind} km/h wind</div>
+        </div>
+      </div>
     </div>
   `;
 }
-
 async function selectWeatherTab(mtnId, el){
   // Update tabs
   document.querySelectorAll('.wtab').forEach(t=>t.classList.remove('active'));
@@ -1816,7 +1893,8 @@ async function selectWeatherTab(mtnId, el){
 
 function initExploreMap(){
   if(typeof L === 'undefined') return;
-  // Center on Nasugbu
+  
+  // Use Satellite/Imagery layer (ESRI World Imagery)
   exploreMap = L.map('exploreMap',{
     center:[14.07, 120.80],
     zoom:12,
@@ -1824,37 +1902,52 @@ function initExploreMap(){
     attributionControl:false
   });
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-    attribution:'© OpenStreetMap © CARTO',
-    subdomains:'abcd',maxZoom:19
+  // Add satellite imagery
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+    maxZoom: 19
+  }).addTo(exploreMap);
+  
+  // Add a semi-transparent overlay to make markers pop (optional)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19,
+    opacity: 0.3
   }).addTo(exploreMap);
 
   mountainCoords.forEach(mtn=>{
+    // Special larger marker for Trilogy
+    const isTrilogy = mtn.is_trilogy || mtn.name.includes('Trilogy');
+    
     const icon = L.divIcon({
-      html:`<div class="lk-marker" title="${mtn.name}">⛰</div>`,
+      html:`<div class="lk-marker" style="width:${isTrilogy ? '52px' : '38px'}; height:${isTrilogy ? '52px' : '38px'}; background:${isTrilogy ? '#c6a43b' : 'var(--ink)'}; border:${isTrilogy ? '3px solid #ffd700' : '3px solid var(--gold)'}; font-size:${isTrilogy ? '24px' : '16px'};">⛰</div>`,
       className:'',
-      iconSize:[38,38],
-      iconAnchor:[19,38],
-      popupAnchor:[0,-42]
+      iconSize:[isTrilogy ? 52 : 38, isTrilogy ? 52 : 38],
+      iconAnchor:[isTrilogy ? 26 : 19, isTrilogy ? 52 : 38],
+      popupAnchor:[0,-(isTrilogy ? 55 : 42)]
     });
 
     const crowdInfo = getCrowdLabel(mtn.crowd);
-    const diffBg = mtn.difficulty==='easy'?'var(--g-easy);color:var(--t-easy)':mtn.difficulty==='hard'?'var(--g-hard);color:var(--t-hard)':'var(--g-mod);color:var(--t-mod)';
+    const diffBg = mtn.difficulty==='easy'?'var(--g-easy);color:var(--t-easy)':mtn.difficulty==='moderate'?'var(--g-mod);color:var(--t-mod)':'var(--g-hard);color:var(--t-hard)';
+    
+    // Special popup message for Trilogy
+    const trilogyNote = isTrilogy ? '<div style="background:#c6a43b20; border-radius:8px; padding:6px; margin-top:6px; font-size:11px; text-align:center;">🔥 Combines 3 peaks: Apayang + Lantik + Talamitam</div>' : '';
 
-    const popup = L.popup({className:'lk-popup', maxWidth:220, minWidth:200})
+    const popup = L.popup({className:'lk-popup', maxWidth:260, minWidth:220})
       .setContent(`
-        <div class="popup-img" style="background-image:url('${mtn.image}')"></div>
+        <div class="popup-img" style="background-image:url('${mtn.image}'); height:100px;"></div>
         <div class="popup-inner">
-          <div class="popup-name">${mtn.name}</div>
+          <div class="popup-name" style="font-size:${isTrilogy ? '17px' : '15px'};">${mtn.name}</div>
           <div class="popup-row">
-            <span class="popup-badge" style="background:${diffBg}">${mtn.difficulty}</span>
-            ★ ${parseFloat(mtn.rating).toFixed(1)}
+            <span class="popup-badge" style="background:${diffBg}">${mtn.difficulty_display || mtn.difficulty}</span>
+            ★ ${mtn.rating.toFixed(1)}
           </div>
-          <div class="popup-row">📍 ${mtn.elevation} &nbsp;·&nbsp; ⏱ ${mtn.duration}</div>
+          <div class="popup-row">📍 ${mtn.elevation} · ⏱ ${mtn.duration}</div>
           <div class="popup-crowd">
             <span class="popup-crowd-dot" style="background:${crowdInfo.dot}"></span>
-            <span class="popup-crowd-label">${crowdInfo.label} right now</span>
+            <span class="popup-crowd-label">${crowdInfo.label}</span>
           </div>
+          ${trilogyNote}
         </div>
         <button class="popup-btn" onclick="openMtnById(${mtn.id})">View Details →</button>
       `);
@@ -1862,7 +1955,6 @@ function initExploreMap(){
     const marker = L.marker([mtn.lat, mtn.lng], {icon}).addTo(exploreMap).bindPopup(popup);
 
     marker.on('click', ()=>{
-      // Also switch weather tab
       const tab = document.querySelector(`.wtab[data-id="${mtn.id}"]`);
       if(tab) selectWeatherTab(mtn.id, tab);
     });
