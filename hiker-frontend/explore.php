@@ -2628,10 +2628,10 @@ const crowdIcon ={low:'<svg width="8" height="8" viewBox="0 0 24 24" fill="#2a6b
 const diffLabel = {
     easy: 'Easy',
     moderate: 'Moderate',
-    hard: 'Difficult',  // Changed from 'Hard' to 'Difficult'
-    difficult: 'Difficult'
+    hard: 'Difficult',
+    'difficult': 'Difficult',  // Add this for capital D
+    'Difficult': 'Difficult',  // Add this for capital D
 };
-
 function renderGrid(list){
   const grid=document.getElementById('mtnGrid');
   if(!grid) return;
@@ -2644,7 +2644,14 @@ function renderGrid(list){
   
   let dataToRender = list;
   if(!dataToRender){
-    dataToRender = mountains.filter(m => activeFilter === 'all' || m.difficulty === activeFilter);
+    dataToRender = mountains.filter(m => {
+      if (activeFilter === 'all') return true;
+      // Handle 'Difficult' filter properly
+      if (activeFilter === 'Difficult' || activeFilter === 'hard') {
+        return m.difficulty === 'Difficult' || m.difficulty === 'hard' || m.difficulty === 'difficult';
+      }
+      return m.difficulty === activeFilter;
+    });
     if(activeSort === 'rating') dataToRender = [...dataToRender].sort((a,b)=>b.rating - a.rating);
     if(activeSort === 'elevation') dataToRender = [...dataToRender].sort((a,b)=>parseInt(b.elevation) - parseInt(a.elevation));
     if(activeSort === 'time') dataToRender = [...dataToRender].sort((a,b)=>parseInt(b.time) - parseInt(a.time));
@@ -2655,12 +2662,27 @@ function renderGrid(list){
     return;
   }
   
-  grid.innerHTML=dataToRender.map((m,idx)=>`
+  // Helper function to get badge class and text
+  function getBadgeInfo(difficulty) {
+    if (difficulty === 'hard' || difficulty === 'difficult' || difficulty === 'Difficult') {
+      return { class: 'badge-difficult', text: 'Difficult' };
+    } else if (difficulty === 'easy') {
+      return { class: 'badge-easy', text: 'Easy' };
+    } else if (difficulty === 'moderate') {
+      return { class: 'badge-moderate', text: 'Moderate' };
+    } else {
+      return { class: `badge-${difficulty}`, text: diffLabel[difficulty] || difficulty };
+    }
+  }
+  
+  grid.innerHTML = dataToRender.map((m, idx) => {
+    const badgeInfo = getBadgeInfo(m.difficulty);
+    return `
     <div class="mtn-card" onclick="openMtnModal(mountains.find(x=>x.id===${m.id}))">
       <div class="mtn-img-wrap">
         <div class="mtn-img" style="background-image:url('${m.image}')"></div>
         <div class="mtn-img-overlay"></div>
-       <span class="badge ${m.difficulty === 'hard' ? 'badge-difficult' : `badge-${m.difficulty}`}">${diffLabel[m.difficulty] || (m.difficulty === 'hard' ? 'Difficult' : m.difficulty)}</span>
+        <div class="mtn-badges"><span class="badge ${badgeInfo.class}">${badgeInfo.text}</span></div>
       </div>
       <div class="mtn-body">
         <div class="mtn-name">${esc(m.name)}</div>
@@ -2677,10 +2699,21 @@ function renderGrid(list){
           <button class="view-btn">Details</button>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+function filterBy(f,el){
+    // Map 'hard' to 'Difficult' for database comparison
+    let filterValue = f;
+    if (f === 'hard') {
+        filterValue = 'Difficult';
+    }
+    activeFilter = filterValue;
+    document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+    el.classList.add('active');
+    renderGrid();
 }
 
-function filterBy(f,el){ activeFilter=f; document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active')); el.classList.add('active'); renderGrid(); }
 function sortBy(v){ activeSort=v; renderGrid(); }
 
 // ── REDESIGNED MOUNTAIN MODAL ──
