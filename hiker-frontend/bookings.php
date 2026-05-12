@@ -1040,11 +1040,17 @@ if ($action === 'check_pending_request') {
         exit;
     }
 
-   if ($action === 'get_available_guides_for_booking') {
-    // Ensure we always return JSON
+if ($action === 'get_available_guides_for_booking') {
+    // Ensure we always return JSON and nothing else
     header('Content-Type: application/json');
     
     try {
+        // Check if pdo exists
+        if (!isset($pdo) || !$pdo) {
+            echo json_encode(['success' => false, 'message' => 'Database connection failed', 'guides' => []]);
+            exit;
+        }
+        
         $mountainId = $_POST['mountain_id'] ?? 0;
         $date = $_POST['date'] ?? '';
         $time = $_POST['time'] ?? '';
@@ -1057,11 +1063,7 @@ if ($action === 'check_pending_request') {
             exit;
         }
         
-        // Convert frontend type to database type for comparison
-        $dbHikeType = $hikeType;
-        if ($hikeType === 'day' || $hikeType === 'late') {
-            $dbHikeType = 'day_hike';
-        }
+        error_log("get_available_guides_for_booking - mountain: $mountainId, date: $date, time: $time, type: $hikeType");
         
         $sql = "
             SELECT g.id as guide_db_id, g.user_id, g.rating, g.years_experience, g.id as guide_id,
@@ -1081,11 +1083,11 @@ if ($action === 'check_pending_request') {
                         CASE 
                             WHEN ? = 'overnight' THEN 1
                             ELSE (
-                                b.start_time <= ? 
-                                AND ? <= DATE_ADD(b.start_time, INTERVAL 
+                                TIME(b.start_time) <= TIME(?) 
+                                AND TIME(?) <= TIME(DATE_ADD(CONCAT('1970-01-01 ', b.start_time), INTERVAL 
                                     CASE WHEN b.hike_type = 'day_hike' THEN 10 
                                          WHEN b.hike_type = 'late' THEN 2 
-                                         ELSE 16 END HOUR)
+                                         ELSE 16 END HOUR))
                             )
                         END
                     )
@@ -1095,7 +1097,9 @@ if ($action === 'check_pending_request') {
         
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$mountainId, $date, $hikeType, $time, $time]);
-        $guides = $stmt->fetchAll();
+        $guides = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        error_log("Found " . count($guides) . " guides available");
         
         $formattedGuides = [];
         foreach ($guides as $guide) {
@@ -1109,7 +1113,7 @@ if ($action === 'check_pending_request') {
                 WHERE guide_id = ? AND mountain_id = ?
             ");
             $stmt3->execute([$guide['guide_db_id'], $mountainId]);
-            $rates = $stmt3->fetch();
+            $rates = $stmt3->fetch(PDO::FETCH_ASSOC);
             
             $formattedGuides[] = [
                 'id' => $guide['guide_db_id'],
@@ -1124,15 +1128,18 @@ if ($action === 'check_pending_request') {
             ];
         }
         
+        // Clear any output buffers before sending JSON
+        if (ob_get_length()) ob_clean();
         echo json_encode(['success' => true, 'guides' => $formattedGuides]);
         
     } catch (Exception $e) {
         error_log('Error in get_available_guides_for_booking: ' . $e->getMessage());
+        error_log('Stack trace: ' . $e->getTraceAsString());
+        if (ob_get_length()) ob_clean();
         echo json_encode(['success' => false, 'message' => $e->getMessage(), 'guides' => []]);
     }
-    exit;
+    exit; // IMPORTANT: Stop execution here
 }
-
     if ($action === 'check_guide_availability') {
     $guideId = $_POST['guide_id'] ?? 0;
     $date = $_POST['date'] ?? '';
