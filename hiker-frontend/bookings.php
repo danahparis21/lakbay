@@ -602,6 +602,9 @@ exit;
     exit;
 }
     if ($action === 'nudge_guide') {
+    error_reporting(0);
+    if (ob_get_length()) ob_clean();
+    
     $bookingId = $_POST['booking_id'] ?? '';
     $guideId = $_POST['guide_id'] ?? ''; // This is guides.id
     
@@ -649,6 +652,9 @@ exit;
     ");
     $stmt_msg->execute([$currentUserId, $guideUserId, $nudgeMessage, MSG_AES_KEY]);
     
+    // Clear any output buffers before sending JSON
+    if (ob_get_length()) ob_clean();
+    header('Content-Type: application/json');
     echo json_encode(['success' => true, 'message' => 'Nudge sent to guide!']);
     exit;
 }
