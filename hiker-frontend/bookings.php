@@ -1040,6 +1040,41 @@ if ($action === 'check_pending_request') {
         exit;
     }
 
+    if ($action === 'check_guide_availability') {
+    $guideId = $_POST['guide_id'] ?? 0;
+    $date = $_POST['date'] ?? '';
+    $time = $_POST['time'] ?? '';
+    $hikeType = $_POST['hike_type'] ?? '';
+    
+    $checkSql = "
+        SELECT COUNT(*) 
+        FROM bookings b
+        WHERE b.guide_id = ?
+          AND b.status IN ('active', 'confirmed', 'waiting_payment')
+          AND b.hike_date = ?
+    ";
+    
+    if ($hikeType !== 'overnight') {
+        // For day/late hikes, also check time overlap
+        $checkSql .= " AND (
+            b.start_time <= ? 
+            AND ? <= DATE_ADD(b.start_time, INTERVAL 
+                CASE WHEN b.hike_type = 'day' THEN 10 
+                     WHEN b.hike_type = 'late' THEN 2 
+                     ELSE 16 END HOUR)
+        )";
+        $stmt = $pdo->prepare($checkSql);
+        $stmt->execute([$guideId, $date, $time, $time]);
+    } else {
+        $stmt = $pdo->prepare($checkSql);
+        $stmt->execute([$guideId, $date]);
+    }
+    
+    $count = $stmt->fetchColumn();
+    echo json_encode(['success' => true, 'available' => $count == 0]);
+    exit;
+}
+
     if ($action === 'save_review') {
         try {
             $data = json_decode($_POST['data'] ?? '', true);
@@ -4022,7 +4057,7 @@ function selectGuide(id) {
     // Show fee in console for debugging (optional)
     console.log(`Selected guide: ${flowState.guide.name}, Fee: ₱${guideFee}`);
 }
-function nextStep() {
+async function nextStep() {
     if(currentStep===1 && !flowState.mtn) { 
         showToast('Please select a mountain'); 
         return; 
@@ -4048,14 +4083,14 @@ function nextStep() {
         const selectedDate = d;
         
         // BLOCK PAST DATES
-        // BLOCK PAST DATES
-if (selectedDate < todayStr) {
-    showToast('❌ Cannot book for past dates. Please select today or a future date.');
-    // Force reset the date picker to today
-    document.getElementById('hikeDate').value = todayStr;
-    flowState.date = todayStr;
-    return;
-}
+        if (selectedDate < todayStr) {
+            showToast('❌ Cannot book for past dates. Please select today or a future date.');
+            // Force reset the date picker to today
+            document.getElementById('hikeDate').value = todayStr;
+            flowState.date = todayStr;
+            return;
+        }
+        
         // If selected date is today, check time restrictions
         if (selectedDate === todayStr) {
             const currentHour = now.getHours();
@@ -4095,7 +4130,7 @@ if (selectedDate < todayStr) {
             }
         }
         
-        // Store the values
+        // Store the values (only ONCE, after validation)
         flowState.date = d;
         flowState.time = t;
         flowState.pax = flowState.hikers.length;
@@ -4103,7 +4138,37 @@ if (selectedDate < todayStr) {
         const cc = document.getElementById('campingCheck');
         if(cc) flowState.camping = cc.checked;
         
-        renderStep(3);
+        // Fetch available guides from server
+        showToast('Checking guide availability...', 'info');
+        
+        const formData = new FormData();
+        formData.append('action', 'get_available_guides_for_booking');
+        formData.append('mountain_id', flowState.mtn.id);
+        formData.append('date', flowState.date);
+        formData.append('time', flowState.time);
+        formData.append('hike_type', flowState.type);
+        formData.append('pax', flowState.pax);
+        
+        try {
+            const response = await fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            
+            if (result.success && result.guides && result.guides.length > 0) {
+                // Store available guides globally
+                window.availableGuidesForBooking = result.guides;
+                renderStep(3);
+            } else {
+                showToast('No guides available for this date and time. Please choose a different date or time.', 'error');
+                return;
+            }
+        } catch (error) {
+            console.error('Error fetching guides:', error);
+            showToast('Error checking guide availability. Please try again.', 'error');
+            return;
+        }
         return;
     }
     
@@ -4462,6 +4527,23 @@ function validateSelectedDate(selectedDate) {
     }
     return true;
 }
+
+async function checkGuideAvailability(guideId, date, time, hikeType) {
+    const formData = new FormData();
+    formData.append('action', 'check_guide_availability');
+    formData.append('guide_id', guideId);
+    formData.append('date', date);
+    formData.append('time', time);
+    formData.append('hike_type', hikeType);
+    
+    const response = await fetch(window.location.href, {
+        method: 'POST',
+        body: formData
+    });
+    const result = await response.json();
+    return result.available;
+}
+
 function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
   const ts = now - b.createdAt;
   const canReplace = b.status === 'pending' && ts >= FIVE_H;
