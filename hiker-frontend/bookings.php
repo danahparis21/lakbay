@@ -102,69 +102,30 @@ function getMountainsFromDB($pdo) {
     }
     return $mountains;
 }
-function getGuidesFromDB($pdo, $filters = []) {
+function getGuidesFromDB($pdo) {
     $guides = [];
-    $selectedDate = $filters['date'] ?? null;
-    $startTime = $filters['time'] ?? null;
-    $hikeType = $filters['type'] ?? null;
-    
     try {
-        // Base query
-        $sql = "
+        $stmt = $pdo->query("
             SELECT g.id as guide_db_id, g.user_id, g.rating, g.is_available,
                    u.id as user_id, u.name as guide_name, u.avatar, u.phone
             FROM guides g 
             JOIN users u ON g.user_id = u.id 
             WHERE g.is_available = 1
-              AND g.is_approved = 1
-        ";
-        
-        $params = [];
-        
-        // If date/time is provided, filter out guides with conflicting bookings
-        if ($selectedDate && $startTime && $hikeType) {
-            $sql .= " AND NOT EXISTS (
-                SELECT 1 FROM bookings b
-                WHERE b.guide_id = g.id
-                  AND b.status IN ('active', 'confirmed', 'waiting_payment')
-                  AND b.hike_date = ?
-                  AND (
-                      CASE 
-                          WHEN ? = 'overnight' THEN b.hike_date = ?
-                          ELSE (
-                              b.start_time <= ? 
-                              AND ? <= DATE_ADD(b.start_time, INTERVAL 
-                                  CASE WHEN b.hike_type = 'day' THEN 10 
-                                       WHEN b.hike_type = 'late' THEN 2 
-                                       ELSE 16 END HOUR)
-                          )
-                      END
-                  )
-            )";
-            $params = [$selectedDate, $hikeType, $selectedDate, $startTime, $startTime];
-        }
-        
-        $sql .= " ORDER BY g.rating DESC";
-        
-        $stmt = $pdo->prepare($sql);
-        if (!empty($params)) {
-            $stmt->execute($params);
-        } else {
-            $stmt->execute();
-        }
-        
+            ORDER BY g.rating DESC
+        ");
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            // ✅ CORRECT: Use guides.id (guide_db_id) for mountain assignments
             $guideMountains = [];
             $stmt2 = $pdo->prepare("SELECT mountain_id FROM guide_mountains WHERE guide_id = ?");
-            $stmt2->execute([$row['guide_db_id']]);
+            $stmt2->execute([$row['guide_db_id']]);  // ✅ This is guides.id = 1,2,3,etc.
             while ($m = $stmt2->fetch(PDO::FETCH_ASSOC)) {
                 $guideMountains[] = $m['mountain_id'];
             }
             
             $guides[] = [
-                'id' => $row['guide_db_id'],
-                'guide_db_id' => $row['guide_db_id'],
-                'name' => $row['guide_name'],
+                'id' => $row['guide_db_id'],  // ← Change from user_id to guide_db_id
+    'guide_db_id' => $row['guide_db_id'],
+    'name' => $row['guide_name'],
                 'initials' => substr(preg_replace('/[^A-Z]/', '', $row['guide_name']), 0, 2),
                 'mountains' => $guideMountains,
                 'rating' => floatval($row['rating']),
@@ -187,8 +148,6 @@ function getGuidesFromDB($pdo, $filters = []) {
     }
     return $guides;
 }
-
-
 function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
     $bookings = [];
    
@@ -370,66 +329,9 @@ ORDER BY b.created_at DESC
     }
 }
 
-
-// Helper function to check if guide is available for a specific date and time
-function isGuideAvailableForDateTime($pdo, $guideId, $hikeDate, $startTime, $hikeType) {
-    // Determine the end time based on hike type
-    $endTime = '';
-    if ($hikeType === 'day') {
-        $endTime = '14:00:00'; // Day hike ends at 2 PM
-    } elseif ($hikeType === 'late') {
-        $endTime = '17:00:00'; // Late hike ends at 5 PM
-    } else { // overnight
-        $endTime = '06:00:00'; // Overnight ends next day 6 AM
-        // For overnight, we need to check if date range overlaps
-        // This is more complex - we'll check if guide has any booking on that date
-    }
-    
-    // Check for overlapping bookings
-    if ($hikeType === 'overnight') {
-        // Overnight: check if guide has ANY active/confirmed booking on that date
-        $sql = "
-            SELECT COUNT(*) 
-            FROM bookings b
-            WHERE b.guide_id = ? 
-              AND b.status IN ('active', 'confirmed', 'waiting_payment')
-              AND b.hike_date = ?
-        ";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$guideId, $hikeDate]);
-    } else {
-        // Day/Late: check if guide has booking that overlaps with the time slot
-        $sql = "
-            SELECT COUNT(*) 
-            FROM bookings b
-            WHERE b.guide_id = ? 
-              AND b.status IN ('active', 'confirmed', 'waiting_payment')
-              AND b.hike_date = ?
-              AND (
-                  (b.start_time <= ? AND ? <= b.end_time)
-                  OR (b.start_time <= ? AND ? <= b.end_time)
-              )
-        ";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$guideId, $hikeDate, $startTime, $startTime, $endTime, $endTime]);
-    }
-    
-    $count = $stmt->fetchColumn();
-    return $count == 0; // Available if no overlapping bookings
-}
-
 // Get data from database
 $dbMountains = getMountainsFromDB($pdo);
-// For initial guide selection (during booking flow)
-$guideFilters = [];
-if (isset($bookingData['date']) && isset($bookingData['time']) && isset($bookingData['type'])) {
-    $guideFilters = [
-        'date' => $bookingData['date'],
-        'time' => $bookingData['time'],
-        'type' => $bookingData['type']
-    ];
-}
-$dbGuides = getGuidesFromDB($pdo, $guideFilters);
+$dbGuides = getGuidesFromDB($pdo);
 $dbUserBookings = getUserBookingsFromDB($pdo, $currentUserId, $currentUser ? $currentUser['name'] : 'Guest');
 
 error_log('========== BOOKINGS DEBUG ==========');
@@ -766,49 +668,30 @@ $stmt->execute([$newDate, $newTime, $notes, $currentTime, $numericId, $currentUs
     
    if ($action === 'get_available_guides') {
     $bookingId = $_POST['booking_id'] ?? '';
-    $hikeDate = $_POST['date'] ?? '';
-    $startTime = $_POST['time'] ?? '';
-    $hikeType = $_POST['type'] ?? '';
     $numericId = preg_replace('/[^0-9]/', '', $bookingId);
     
-    // Get current booking's mountain
     $stmt = $pdo->prepare("SELECT mountain_id, guide_id FROM bookings WHERE id = ?");
     $stmt->execute([$numericId]);
     $booking = $stmt->fetch();
     
     if ($booking) {
-        // Get other guides for this mountain, excluding current guide
-        // Also filter by date/time availability
+        // ✅ Get the current guide's guides.id from the booking
+        $stmt = $pdo->prepare("SELECT user_id FROM guides WHERE id = ?");
+        $stmt->execute([$booking['guide_id']]);
+        $currentGuide = $stmt->fetch();
+        $currentGuideUserId = $currentGuide['user_id'] ?? 0;
+        
+        // ✅ Use guides.id (not users.id) for the mountain assignment query
         $stmt = $pdo->prepare("
-            SELECT u.id as user_id, u.name, g.rating, g.years_experience, g.id as guide_db_id
+            SELECT u.id, u.name, g.rating, g.years_experience, g.id as guide_db_id
             FROM guides g
             JOIN users u ON g.user_id = u.id
             JOIN guide_mountains gm ON gm.guide_id = g.id
             WHERE gm.mountain_id = ? 
               AND g.id != ? 
               AND g.is_available = 1
-              AND g.is_approved = 1
-              -- Exclude guides who already have bookings on this date/time
-              AND NOT EXISTS (
-                  SELECT 1 FROM bookings b
-                  WHERE b.guide_id = g.id
-                    AND b.status IN ('active', 'confirmed', 'waiting_payment')
-                    AND b.hike_date = ?
-                    AND (
-                        CASE 
-                            WHEN ? = 'overnight' THEN b.hike_date = ?
-                            ELSE (
-                                b.start_time <= ? 
-                                AND ? <= DATE_ADD(b.start_time, INTERVAL 
-                                    CASE WHEN b.hike_type = 'day' THEN 10 
-                                         WHEN b.hike_type = 'late' THEN 2 
-                                         ELSE 16 END HOUR)
-                            )
-                        END
-                    )
-              )
         ");
-        $stmt->execute([$booking['mountain_id'], $booking['guide_id'], $hikeDate, $hikeType, $hikeDate, $startTime, $startTime]);
+        $stmt->execute([$booking['mountain_id'], $booking['guide_id']]);
         $guides = $stmt->fetchAll();
         echo json_encode(['success' => true, 'guides' => $guides]);
     } else {
@@ -1039,141 +922,6 @@ if ($action === 'check_pending_request') {
         echo json_encode($response);
         exit;
     }
-
-if ($action === 'get_available_guides_for_booking') {
-    // Ensure we always return JSON and nothing else
-    header('Content-Type: application/json');
-    
-    try {
-        // Check if pdo exists
-        if (!isset($pdo) || !$pdo) {
-            echo json_encode(['success' => false, 'message' => 'Database connection failed', 'guides' => []]);
-            exit;
-        }
-        
-        $mountainId = $_POST['mountain_id'] ?? 0;
-        $date = $_POST['date'] ?? '';
-        $time = $_POST['time'] ?? '';
-        $hikeType = $_POST['hike_type'] ?? '';
-        $pax = $_POST['pax'] ?? 1;
-        
-        // Validate required fields
-        if (!$mountainId || !$date || !$time || !$hikeType) {
-            echo json_encode(['success' => false, 'message' => 'Missing required fields', 'guides' => []]);
-            exit;
-        }
-        
-        error_log("get_available_guides_for_booking - mountain: $mountainId, date: $date, time: $time, type: $hikeType");
-        
-        $sql = "
-            SELECT g.id as guide_db_id, g.user_id, g.rating, g.years_experience, g.id as guide_id,
-                   u.id as user_id, u.name as guide_name, u.phone
-            FROM guides g 
-            JOIN users u ON g.user_id = u.id 
-            JOIN guide_mountains gm ON gm.guide_id = g.id
-            WHERE gm.mountain_id = ?
-              AND g.is_available = 1
-              AND g.is_approved = 1
-              AND NOT EXISTS (
-                  SELECT 1 FROM bookings b
-                  WHERE b.guide_id = g.id
-                    AND b.status IN ('active', 'confirmed', 'waiting_payment')
-                    AND b.hike_date = ?
-                    AND (
-                        CASE 
-                            WHEN ? = 'overnight' THEN 1
-                            ELSE (
-                                TIME(b.start_time) <= TIME(?) 
-                                AND TIME(?) <= TIME(DATE_ADD(CONCAT('1970-01-01 ', b.start_time), INTERVAL 
-                                    CASE WHEN b.hike_type = 'day_hike' THEN 10 
-                                         WHEN b.hike_type = 'late' THEN 2 
-                                         ELSE 16 END HOUR))
-                            )
-                        END
-                    )
-              )
-            ORDER BY g.rating DESC
-        ";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$mountainId, $date, $hikeType, $time, $time]);
-        $guides = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        error_log("Found " . count($guides) . " guides available");
-        
-        $formattedGuides = [];
-        foreach ($guides as $guide) {
-            $stmt2 = $pdo->prepare("SELECT mountain_id FROM guide_mountains WHERE guide_id = ?");
-            $stmt2->execute([$guide['guide_db_id']]);
-            $mountains = $stmt2->fetchAll(PDO::FETCH_COLUMN);
-            
-            $stmt3 = $pdo->prepare("
-                SELECT guide_fee_day, guide_fee_overnight 
-                FROM guide_mountain_rates 
-                WHERE guide_id = ? AND mountain_id = ?
-            ");
-            $stmt3->execute([$guide['guide_db_id'], $mountainId]);
-            $rates = $stmt3->fetch(PDO::FETCH_ASSOC);
-            
-            $formattedGuides[] = [
-                'id' => $guide['guide_db_id'],
-                'name' => $guide['guide_name'],
-                'initials' => substr(preg_replace('/[^A-Z]/', '', $guide['guide_name']), 0, 2),
-                'mountains' => $mountains,
-                'rating' => floatval($guide['rating']),
-                'available' => 'Daily',
-                'phone' => $guide['phone'] ?? '',
-                'guide_fee_day' => $rates['guide_fee_day'] ?? 801,
-                'guide_fee_overnight' => $rates['guide_fee_overnight'] ?? 1500
-            ];
-        }
-        
-        // Clear any output buffers before sending JSON
-        if (ob_get_length()) ob_clean();
-        echo json_encode(['success' => true, 'guides' => $formattedGuides]);
-        
-    } catch (Exception $e) {
-        error_log('Error in get_available_guides_for_booking: ' . $e->getMessage());
-        error_log('Stack trace: ' . $e->getTraceAsString());
-        if (ob_get_length()) ob_clean();
-        echo json_encode(['success' => false, 'message' => $e->getMessage(), 'guides' => []]);
-    }
-    exit; // IMPORTANT: Stop execution here
-}
-    if ($action === 'check_guide_availability') {
-    $guideId = $_POST['guide_id'] ?? 0;
-    $date = $_POST['date'] ?? '';
-    $time = $_POST['time'] ?? '';
-    $hikeType = $_POST['hike_type'] ?? '';
-    
-    $checkSql = "
-        SELECT COUNT(*) 
-        FROM bookings b
-        WHERE b.guide_id = ?
-          AND b.status IN ('active', 'confirmed', 'waiting_payment')
-          AND b.hike_date = ?
-    ";
-    
-    if ($hikeType !== 'overnight') {
-        // For day/late hikes, also check time overlap
-        $checkSql .= " AND (
-            b.start_time <= ? 
-            AND ? <= DATE_ADD(b.start_time, INTERVAL 
-                CASE WHEN b.hike_type = 'day' THEN 10 
-                     WHEN b.hike_type = 'late' THEN 2 
-                     ELSE 16 END HOUR)
-        )";
-        $stmt = $pdo->prepare($checkSql);
-        $stmt->execute([$guideId, $date, $time, $time]);
-    } else {
-        $stmt = $pdo->prepare($checkSql);
-        $stmt->execute([$guideId, $date]);
-    }
-    
-    $count = $stmt->fetchColumn();
-    echo json_encode(['success' => true, 'available' => $count == 0]);
-    exit;
-}
 
     if ($action === 'save_review') {
         try {
@@ -3665,40 +3413,6 @@ else if(n===3) {
     document.getElementById('flowTitle').textContent = 'Choose a Guide';
     document.getElementById('flowSubtitle').textContent = 'Select a guide for your hike';
     
-    // ===== ADD THIS FUNCTION HERE =====
-    const hasConflict = (guide) => {
-        // Check if this guide has any active booking on the same date with overlapping time
-        const existingBookings = bookings.filter(b => 
-            b.guideId === guide.id && 
-            (b.status === 'active' || b.status === 'confirmed' || b.status === 'waiting_payment') &&
-            b.date === flowState.date
-        );
-        
-        if (existingBookings.length === 0) return false;
-        
-        // For overnight hikes: any booking on same date is conflict
-        if (flowState.type === 'overnight') {
-            return true;
-        }
-        
-        // For day/late hikes: check time overlap
-        const selectedStart = flowState.time;
-        let selectedEnd = '';
-        if (flowState.type === 'day') selectedEnd = '14:00';
-        else if (flowState.type === 'late') selectedEnd = '17:00';
-        else selectedEnd = '18:00';
-        
-        return existingBookings.some(booking => {
-            let bookingEnd = '';
-            if (booking.type === 'day') bookingEnd = '14:00';
-            else if (booking.type === 'late') bookingEnd = '17:00';
-            else bookingEnd = '18:00';
-            
-            return (booking.time <= selectedEnd && selectedStart <= bookingEnd);
-        });
-    };
-    // ===== END OF ADDED FUNCTION =====
-    
     // Filter guides by mountain AND by max_pax capacity
     const avail = guides.filter(g => {
         // Check if guide can serve this mountain
@@ -3707,9 +3421,6 @@ else if(n===3) {
         // Check if guide has max_pax for this mountain and if it meets requirement
         const maxPax = g.max_pax_per_mountain?.[flowState.mtn.id]?.max_pax;
         if (maxPax && flowState.pax > maxPax) return false;
-        
-        // Check for date/time conflict - ADD THIS LINE
-        if (hasConflict(g)) return false;
         
         return true;
     });
@@ -3723,7 +3434,7 @@ else if(n===3) {
                     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     No guides available
                 </h4>
-                <p>No guides can accommodate ${flowState.pax} hikers for ${flowState.mtn.name} on ${flowState.date} at ${flowState.time}. Please try a different date or time.</p>
+                <p>No guides can accommodate ${flowState.pax} hikers for ${flowState.mtn.name}. Please go back and reduce the number of hikers.</p>
             </div>
         `;
     }
@@ -3777,8 +3488,7 @@ else if(n===3) {
     </button><button class="btn btn-primary btn-full" onclick="nextStep()" id="nextGuideBtn" ${avail.length === 0 ? 'disabled' : ''}>Continue
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>`;
-}
-else if(n===4) {
+} else if(n===4) {
     document.getElementById('flowTitle').textContent = 'Review & Confirm';
     document.getElementById('flowSubtitle').textContent = 'Booking summary';
     const m=flowState.mtn,f=m.fees,pax=flowState.hikers.length;
@@ -4157,7 +3867,7 @@ function selectGuide(id) {
     // Show fee in console for debugging (optional)
     console.log(`Selected guide: ${flowState.guide.name}, Fee: ₱${guideFee}`);
 }
-async function nextStep() {
+function nextStep() {
     if(currentStep===1 && !flowState.mtn) { 
         showToast('Please select a mountain'); 
         return; 
@@ -4183,14 +3893,14 @@ async function nextStep() {
         const selectedDate = d;
         
         // BLOCK PAST DATES
-        if (selectedDate < todayStr) {
-            showToast('❌ Cannot book for past dates. Please select today or a future date.');
-            // Force reset the date picker to today
-            document.getElementById('hikeDate').value = todayStr;
-            flowState.date = todayStr;
-            return;
-        }
-        
+        // BLOCK PAST DATES
+if (selectedDate < todayStr) {
+    showToast('❌ Cannot book for past dates. Please select today or a future date.');
+    // Force reset the date picker to today
+    document.getElementById('hikeDate').value = todayStr;
+    flowState.date = todayStr;
+    return;
+}
         // If selected date is today, check time restrictions
         if (selectedDate === todayStr) {
             const currentHour = now.getHours();
@@ -4230,7 +3940,7 @@ async function nextStep() {
             }
         }
         
-        // Store the values (only ONCE, after validation)
+        // Store the values
         flowState.date = d;
         flowState.time = t;
         flowState.pax = flowState.hikers.length;
@@ -4238,57 +3948,13 @@ async function nextStep() {
         const cc = document.getElementById('campingCheck');
         if(cc) flowState.camping = cc.checked;
         
-        // Fetch available guides from server
-        showToast('Checking guide availability...');
-        
-        const formData = new FormData();
-        formData.append('action', 'get_available_guides_for_booking');
-        formData.append('mountain_id', flowState.mtn.id);
-        formData.append('date', flowState.date);
-        formData.append('time', flowState.time);
-        formData.append('hike_type', flowState.type);
-        formData.append('pax', flowState.pax);
-        
-        try {
-            const response = await fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            });
-            
-            // Check if response is OK
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const text = await response.text();
-            
-            // Try to parse as JSON
-            let result;
-            try {
-                result = JSON.parse(text);
-            } catch (e) {
-                console.error('Raw response:', text.substring(0, 500));
-                throw new Error('Server returned invalid JSON. Please check PHP error logs.');
-            }
-            
-            if (result.success && result.guides && result.guides.length > 0) {
-                // Store available guides globally
-                window.availableGuidesForBooking = result.guides;
-                renderStep(3);
-            } else {
-                showToast(result.message || 'No guides available for this date and time. Please choose a different date or time.');
-                return;
-            }
-        } catch (error) {
-            console.error('Error fetching guides:', error);
-            showToast('Error checking guide availability. Please try again.');
-            return;
-        }
+        renderStep(3);
         return;
     }
     
     renderStep(currentStep + 1);
 }
+
 function copyBookingId() {
   const id = document.getElementById('successBookingId').textContent;
   navigator.clipboard.writeText(id).then(()=>{
@@ -4641,23 +4307,6 @@ function validateSelectedDate(selectedDate) {
     }
     return true;
 }
-
-async function checkGuideAvailability(guideId, date, time, hikeType) {
-    const formData = new FormData();
-    formData.append('action', 'check_guide_availability');
-    formData.append('guide_id', guideId);
-    formData.append('date', date);
-    formData.append('time', time);
-    formData.append('hike_type', hikeType);
-    
-    const response = await fetch(window.location.href, {
-        method: 'POST',
-        body: formData
-    });
-    const result = await response.json();
-    return result.available;
-}
-
 function bookingCard(b, now, FIVE_H, TWENTY_M, MAX_N) {
   const ts = now - b.createdAt;
   const canReplace = b.status === 'pending' && ts >= FIVE_H;
@@ -5529,14 +5178,11 @@ function confirmReplaceGuide() {
 
 function openReplaceGuide(bookingId) {
     replaceBookingId = bookingId;
-    const b = bookings.find(x => x.id === bookingId);
-    
     fetch(window.location.href, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-        body: `action=get_available_guides&booking_id=${bookingId}&date=${b.date}&time=${b.time}&type=${b.type}`
-    })
-    .then(response => response.json()).then(result => {
+        body: `action=get_available_guides&booking_id=${bookingId}`
+    }).then(response => response.json()).then(result => {
         if (result.success && result.guides.length > 0) {
             document.getElementById('replaceGuideList').innerHTML = result.guides.map(g => `
                 <div class="guide-replace-option" onclick="selectReplaceGuide(${g.id})" data-gid="${g.id}">
