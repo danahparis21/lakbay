@@ -216,31 +216,30 @@ ORDER BY b.created_at DESC
             if (!empty($row['start_time'])) {
                 $timeValue = date('H:i', strtotime($row['start_time']));
             }
-          $bookings[] = [
+            $bookings[] = [
     'id' => $bookingId,
     'db_id' => $row['id'],
     'mountainId' => $row['mountain_id'],
     'mountain' => $row['mountain'],
     'date' => $row['date'],
-    'time' => $timeValue,  // Use actual time from booking
+    'time' => $timeValue,
     'type' => $row['type'] == 'overnight' ? 'overnight' : ($row['type'] == 'late_hike' ? 'late' : 'day'),
-    'status' => $row['status'],  // ← USE THE ACTUAL STATUS FROM THE BOOKING
+    'status' => $row['status'],
     'guideId' => $row['guide_id'],
     'guideName' => $row['guideName'],
     'guideInitials' => $row['guideInitials'] ?: substr($row['guideName'], 0, 2),
     'guide_user_id' => $row['guide_user_id'] ?? 0,
     'pax' => $row['pax'],
     'hikers' => $hikers,
-    'totalFee' => 0,  // Joined users don't pay directly
+    'totalFee' => floatval($row['totalFee']),
     'createdAt' => strtotime($row['created_at']) * 1000,
-    'nudges' => 0,
-    'lastNudge' => 0,
+    'nudges' => intval($nudgeData['nudge_count'] ?? 0),
+    'lastNudge' => $nudgeData['last_nudge'] ? strtotime($nudgeData['last_nudge']) * 1000 : 0,
     'camping' => $row['camping'] == 1,
     'notes' => $row['notes'] ?? '',
-    'hasReviewed' => false,
-    'relationship' => 'joined',
-    'joinedFromId' => $row['booking_number'],
-    // Add these for consistency with owner bookings
+    'hasReviewed' => $hasReviewed,
+    'relationship' => 'owner',
+    // ===== ADD THESE FIELDS =====
     'downpaymentStatus' => $row['downpaymentStatus'] ?? 'unpaid',
     'paymentStatus' => $row['paymentStatus'] ?? 'pending',
     'downpaymentAmount' => floatval($row['downpaymentAmount'] ?? 0),
@@ -248,6 +247,7 @@ ORDER BY b.created_at DESC
 ];
         }
         
+        // Now get joined bookings (where user is in booking_hikers but not owner)
        $stmt = $pdo->prepare("
 SELECT 
     b.id, b.booking_number, b.mountain_id, b.guide_id,
@@ -259,11 +259,7 @@ SELECT
     m.name as mountain,
     COALESCE(u.name, 'Unknown Guide') as guideName,
     SUBSTR(UPPER(REPLACE(u.name, ' ', '')), 1, 2) as guideInitials,
-    COALESCE(g.user_id, 0) as guide_user_id,
-    b.downpayment_status as downpaymentStatus,
-    b.payment_status as paymentStatus,
-    b.downpayment_amount as downpaymentAmount,
-    b.guide_payment_status as guidePaymentStatus
+    COALESCE(g.user_id, 0) as guide_user_id
 FROM booking_hikers bh
 JOIN bookings b ON bh.booking_id = b.id
 JOIN mountains m ON b.mountain_id = m.id
@@ -272,62 +268,59 @@ LEFT JOIN users u ON g.user_id = u.id
 WHERE bh.hiker_name = ? AND b.user_id != ?
 ORDER BY b.created_at DESC
 ");
-$stmt->execute([$currentUserName, $currentUserId]);
+        $stmt->execute([$currentUserName, $currentUserId]);
+        
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            // Get hikers for this booking
+            $hikers = [];
+            $stmt2 = $pdo->prepare("SELECT hiker_name FROM booking_hikers WHERE booking_id = ?");
+            $stmt2->execute([$row['id']]);
+            while ($h = $stmt2->fetch(PDO::FETCH_ASSOC)) {
+                $hikers[] = $h['hiker_name'];
+            }
+            
+            // Get owner name
+            $stmt2 = $pdo->prepare("SELECT name FROM users WHERE id = ?");
+            $stmt2->execute([$row['user_id']]);
+            $ownerName = $stmt2->fetchColumn();
+            if ($ownerName && !in_array($ownerName, $hikers)) {
+                array_unshift($hikers, $ownerName);
+            }
+            
+            $timeValue = $row['start_time'] ?? '06:00';
+            if (!empty($row['start_time'])) {
+                $timeValue = date('H:i', strtotime($row['start_time']));
+            }
 
-while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    // Get hikers for this booking
-    $hikers = [];
-    $stmt2 = $pdo->prepare("SELECT hiker_name FROM booking_hikers WHERE booking_id = ?");
-    $stmt2->execute([$row['id']]);
-    while ($h = $stmt2->fetch(PDO::FETCH_ASSOC)) {
-        $hikers[] = $h['hiker_name'];
-    }
-    
-    // Get owner name
-    $stmt2 = $pdo->prepare("SELECT name FROM users WHERE id = ?");
-    $stmt2->execute([$row['user_id']]);
-    $ownerName = $stmt2->fetchColumn();
-    if ($ownerName && !in_array($ownerName, $hikers)) {
-        array_unshift($hikers, $ownerName);
-    }
-    
-    $timeValue = $row['start_time'] ?? '06:00';
-    if (!empty($row['start_time'])) {
-        $timeValue = date('H:i', strtotime($row['start_time']));
-    }
-
-    $bookingId = 'JO-' . $row['booking_number'];
-    
-    $bookings[] = [
-        'id' => $bookingId,
-        'db_id' => $row['id'],
-        'mountainId' => $row['mountain_id'],
-        'mountain' => $row['mountain'],
-        'date' => $row['date'],
-        'time' => $timeValue,  // Use actual time
-        'type' => $row['type'] == 'overnight' ? 'overnight' : ($row['type'] == 'late_hike' ? 'late' : 'day'),
-        'status' => $row['status'],  // Use actual status from booking
-        'guideId' => $row['guide_id'],
-        'guideName' => $row['guideName'],
-        'guideInitials' => $row['guideInitials'] ?: substr($row['guideName'], 0, 2),
-        'guide_user_id' => $row['guide_user_id'] ?? 0,
-        'pax' => $row['pax'],
-        'hikers' => $hikers,
-        'totalFee' => 0,
-        'createdAt' => strtotime($row['created_at']) * 1000,
-        'nudges' => 0,
-        'lastNudge' => 0,
-        'camping' => $row['camping'] == 1,
-        'notes' => $row['notes'] ?? '',
-        'hasReviewed' => false,
-        'relationship' => 'joined',
-        'joinedFromId' => $row['booking_number'],
-        'downpaymentStatus' => $row['downpaymentStatus'] ?? 'unpaid',
-        'paymentStatus' => $row['paymentStatus'] ?? 'pending',
-        'downpaymentAmount' => floatval($row['downpaymentAmount'] ?? 0),
-        'guidePaymentStatus' => $row['guidePaymentStatus'] ?? 'unpaid'
-    ];
-}
+            $bookingId = 'JO-' . $row['booking_number'];
+            
+            $bookings[] = [
+                'id' => $bookingId,
+                'db_id' => $row['id'],
+                'mountainId' => $row['mountain_id'],
+                'mountain' => $row['mountain'],
+                'date' => $row['date'],
+                'time' => '06:00',
+                'type' => $row['type'] == 'overnight' ? 'overnight' : 'day',
+                'status' => 'joined',
+                'guideId' => $row['guide_id'],
+                'guideName' => $row['guideName'],
+                'guideInitials' => $row['guideInitials'] ?: substr($row['guideName'], 0, 2),
+                'guide_user_id' => $row['guide_user_id'] ?? 0,
+                'pax' => $row['pax'],
+                'hikers' => $hikers,
+                'totalFee' => 0,
+                'createdAt' => strtotime($row['created_at']) * 1000,
+                'nudges' => 0,
+                'lastNudge' => 0,
+                'camping' => $row['camping'] == 1,
+                'notes' => $row['notes'] ?? '',
+                'hasReviewed' => false,
+                'relationship' => 'joined',
+                'joinedFromId' => $row['booking_number']
+            ];
+      }
+        
         return $bookings;  // ← ADD THIS LINE
         
     } catch (PDOException $e) {
