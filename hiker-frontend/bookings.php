@@ -216,7 +216,7 @@ ORDER BY b.created_at DESC
             if (!empty($row['start_time'])) {
                 $timeValue = date('H:i', strtotime($row['start_time']));
             }
-            $bookings[] = [
+           $bookings[] = [
     'id' => $bookingId,
     'db_id' => $row['id'],
     'mountainId' => $row['mountain_id'],
@@ -231,16 +231,19 @@ ORDER BY b.created_at DESC
     'guide_user_id' => $row['guide_user_id'] ?? 0,
     'pax' => $row['pax'],
     'hikers' => $hikers,
-    'totalFee' => 0,
+    'totalFee' => floatval($row['totalFee']),
     'createdAt' => strtotime($row['created_at']) * 1000,
-    'nudges' => 0,
-    'lastNudge' => 0,
+    'nudges' => intval($nudgeData['nudge_count'] ?? 0),
+    'lastNudge' => $nudgeData['last_nudge'] ? strtotime($nudgeData['last_nudge']) * 1000 : 0,
     'camping' => $row['camping'] == 1,
     'notes' => $row['notes'] ?? '',
-    'hasReviewed' => false,
-    'relationship' => 'joined',
-    'joinedFromId' => $row['booking_number']
-    // No payment fields - joined users don't need them
+    'hasReviewed' => $hasReviewed,
+    'relationship' => 'owner',
+    // Payment fields for owner
+    'downpaymentStatus' => $row['downpaymentStatus'] ?? 'unpaid',
+    'paymentStatus' => $row['paymentStatus'] ?? 'pending',
+    'downpaymentAmount' => floatval($row['downpaymentAmount'] ?? 0),
+    'guidePaymentStatus' => $row['guidePaymentStatus'] ?? 'unpaid'
 ];
         }
         
