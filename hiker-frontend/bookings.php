@@ -102,30 +102,69 @@ function getMountainsFromDB($pdo) {
     }
     return $mountains;
 }
-function getGuidesFromDB($pdo) {
+function getGuidesFromDB($pdo, $filters = []) {
     $guides = [];
+    $selectedDate = $filters['date'] ?? null;
+    $startTime = $filters['time'] ?? null;
+    $hikeType = $filters['type'] ?? null;
+    
     try {
-        $stmt = $pdo->query("
+        // Base query
+        $sql = "
             SELECT g.id as guide_db_id, g.user_id, g.rating, g.is_available,
                    u.id as user_id, u.name as guide_name, u.avatar, u.phone
             FROM guides g 
             JOIN users u ON g.user_id = u.id 
             WHERE g.is_available = 1
-            ORDER BY g.rating DESC
-        ");
+              AND g.is_approved = 1
+        ";
+        
+        $params = [];
+        
+        // If date/time is provided, filter out guides with conflicting bookings
+        if ($selectedDate && $startTime && $hikeType) {
+            $sql .= " AND NOT EXISTS (
+                SELECT 1 FROM bookings b
+                WHERE b.guide_id = g.id
+                  AND b.status IN ('active', 'confirmed', 'waiting_payment')
+                  AND b.hike_date = ?
+                  AND (
+                      CASE 
+                          WHEN ? = 'overnight' THEN b.hike_date = ?
+                          ELSE (
+                              b.start_time <= ? 
+                              AND ? <= DATE_ADD(b.start_time, INTERVAL 
+                                  CASE WHEN b.hike_type = 'day' THEN 10 
+                                       WHEN b.hike_type = 'late' THEN 2 
+                                       ELSE 16 END HOUR)
+                          )
+                      END
+                  )
+            )";
+            $params = [$selectedDate, $hikeType, $selectedDate, $startTime, $startTime];
+        }
+        
+        $sql .= " ORDER BY g.rating DESC";
+        
+        $stmt = $pdo->prepare($sql);
+        if (!empty($params)) {
+            $stmt->execute($params);
+        } else {
+            $stmt->execute();
+        }
+        
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            // ✅ CORRECT: Use guides.id (guide_db_id) for mountain assignments
             $guideMountains = [];
             $stmt2 = $pdo->prepare("SELECT mountain_id FROM guide_mountains WHERE guide_id = ?");
-            $stmt2->execute([$row['guide_db_id']]);  // ✅ This is guides.id = 1,2,3,etc.
+            $stmt2->execute([$row['guide_db_id']]);
             while ($m = $stmt2->fetch(PDO::FETCH_ASSOC)) {
                 $guideMountains[] = $m['mountain_id'];
             }
             
             $guides[] = [
-                'id' => $row['guide_db_id'],  // ← Change from user_id to guide_db_id
-    'guide_db_id' => $row['guide_db_id'],
-    'name' => $row['guide_name'],
+                'id' => $row['guide_db_id'],
+                'guide_db_id' => $row['guide_db_id'],
+                'name' => $row['guide_name'],
                 'initials' => substr(preg_replace('/[^A-Z]/', '', $row['guide_name']), 0, 2),
                 'mountains' => $guideMountains,
                 'rating' => floatval($row['rating']),
@@ -148,6 +187,8 @@ function getGuidesFromDB($pdo) {
     }
     return $guides;
 }
+
+
 function getUserBookingsFromDB($pdo, $currentUserId, $currentUserName) {
     $bookings = [];
    
@@ -379,7 +420,16 @@ function isGuideAvailableForDateTime($pdo, $guideId, $hikeDate, $startTime, $hik
 
 // Get data from database
 $dbMountains = getMountainsFromDB($pdo);
-$dbGuides = getGuidesFromDB($pdo);
+// For initial guide selection (during booking flow)
+$guideFilters = [];
+if (isset($bookingData['date']) && isset($bookingData['time']) && isset($bookingData['type'])) {
+    $guideFilters = [
+        'date' => $bookingData['date'],
+        'time' => $bookingData['time'],
+        'type' => $bookingData['type']
+    ];
+}
+$dbGuides = getGuidesFromDB($pdo, $guideFilters);
 $dbUserBookings = getUserBookingsFromDB($pdo, $currentUserId, $currentUser ? $currentUser['name'] : 'Guest');
 
 error_log('========== BOOKINGS DEBUG ==========');
@@ -3480,6 +3530,40 @@ else if(n===3) {
     document.getElementById('flowTitle').textContent = 'Choose a Guide';
     document.getElementById('flowSubtitle').textContent = 'Select a guide for your hike';
     
+    // ===== ADD THIS FUNCTION HERE =====
+    const hasConflict = (guide) => {
+        // Check if this guide has any active booking on the same date with overlapping time
+        const existingBookings = bookings.filter(b => 
+            b.guideId === guide.id && 
+            (b.status === 'active' || b.status === 'confirmed' || b.status === 'waiting_payment') &&
+            b.date === flowState.date
+        );
+        
+        if (existingBookings.length === 0) return false;
+        
+        // For overnight hikes: any booking on same date is conflict
+        if (flowState.type === 'overnight') {
+            return true;
+        }
+        
+        // For day/late hikes: check time overlap
+        const selectedStart = flowState.time;
+        let selectedEnd = '';
+        if (flowState.type === 'day') selectedEnd = '14:00';
+        else if (flowState.type === 'late') selectedEnd = '17:00';
+        else selectedEnd = '18:00';
+        
+        return existingBookings.some(booking => {
+            let bookingEnd = '';
+            if (booking.type === 'day') bookingEnd = '14:00';
+            else if (booking.type === 'late') bookingEnd = '17:00';
+            else bookingEnd = '18:00';
+            
+            return (booking.time <= selectedEnd && selectedStart <= bookingEnd);
+        });
+    };
+    // ===== END OF ADDED FUNCTION =====
+    
     // Filter guides by mountain AND by max_pax capacity
     const avail = guides.filter(g => {
         // Check if guide can serve this mountain
@@ -3488,6 +3572,9 @@ else if(n===3) {
         // Check if guide has max_pax for this mountain and if it meets requirement
         const maxPax = g.max_pax_per_mountain?.[flowState.mtn.id]?.max_pax;
         if (maxPax && flowState.pax > maxPax) return false;
+        
+        // Check for date/time conflict - ADD THIS LINE
+        if (hasConflict(g)) return false;
         
         return true;
     });
@@ -3501,7 +3588,7 @@ else if(n===3) {
                     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     No guides available
                 </h4>
-                <p>No guides can accommodate ${flowState.pax} hikers for ${flowState.mtn.name}. Please go back and reduce the number of hikers.</p>
+                <p>No guides can accommodate ${flowState.pax} hikers for ${flowState.mtn.name} on ${flowState.date} at ${flowState.time}. Please try a different date or time.</p>
             </div>
         `;
     }
@@ -3555,7 +3642,8 @@ else if(n===3) {
     </button><button class="btn btn-primary btn-full" onclick="nextStep()" id="nextGuideBtn" ${avail.length === 0 ? 'disabled' : ''}>Continue
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>`;
-} else if(n===4) {
+}
+else if(n===4) {
     document.getElementById('flowTitle').textContent = 'Review & Confirm';
     document.getElementById('flowSubtitle').textContent = 'Booking summary';
     const m=flowState.mtn,f=m.fees,pax=flowState.hikers.length;
