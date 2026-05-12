@@ -5171,12 +5171,12 @@ function nudgeGuide(bookingId) {
             renderBookings();
             showToast(`🔔 Nudge sent to ${b.guideName}!`);
 
-            // Send nudge message
-            fetch('../api/hiker_messages.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `action=send_system_message&guide_id=${b.guideId}&message=Hi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋`
-            });
+            // // Send nudge message
+            // fetch('../api/hiker_messages.php', {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            //     body: `action=send_system_message&guide_id=${b.guideId}&message=Hi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋`
+            // });
         } else {
             showToast(result.message);
         }
