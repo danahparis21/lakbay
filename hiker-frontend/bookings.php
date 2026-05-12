@@ -598,38 +598,57 @@ exit;
     }
     exit;
 }
-    
     if ($action === 'nudge_guide') {
-        $bookingId = $_POST['booking_id'] ?? '';
-        $guideId = $_POST['guide_id'] ?? '';
-        
-        // Find booking by number or numeric id
-        $stmt = $pdo->prepare("SELECT id FROM bookings WHERE booking_number = ? OR id = ?");
-        $stmt->execute([$bookingId, preg_replace('/[^0-9]/', '', $bookingId)]);
-        $booking = $stmt->fetch();
-        
-        if (!$booking) {
-            echo json_encode(['success' => false, 'message' => 'Booking not found']);
-            exit;
-        }
-        $numericId = $booking['id'];
-        
-        // Check nudge limit
-        $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM booking_nudges WHERE booking_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 20 MINUTE)");
-        $stmt->execute([$numericId]);
-        $recentNudges = $stmt->fetch();
-        
-        if ($recentNudges['count'] >= 1) {
-            echo json_encode(['success' => false, 'message' => 'Please wait 20 minutes before nudging again']);
-            exit;
-        }
-        
-        $stmt = $pdo->prepare("INSERT INTO booking_nudges (booking_id, user_id, guide_id, created_at) VALUES (?, ?, ?, NOW())");
-        $stmt->execute([$numericId, $currentUserId, $guideId]);
-        
-        echo json_encode(['success' => true, 'message' => 'Nudge sent to guide!']);
+    $bookingId = $_POST['booking_id'] ?? '';
+    $guideId = $_POST['guide_id'] ?? ''; // This is guides.id
+    
+    // Find booking by number or numeric id
+    $stmt = $pdo->prepare("SELECT id FROM bookings WHERE booking_number = ? OR id = ?");
+    $stmt->execute([$bookingId, preg_replace('/[^0-9]/', '', $bookingId)]);
+    $booking = $stmt->fetch();
+    
+    if (!$booking) {
+        echo json_encode(['success' => false, 'message' => 'Booking not found']);
         exit;
     }
+    $numericId = $booking['id'];
+    
+    // Check nudge limit
+    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM booking_nudges WHERE booking_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 20 MINUTE)");
+    $stmt->execute([$numericId]);
+    $recentNudges = $stmt->fetch();
+    
+    if ($recentNudges['count'] >= 1) {
+        echo json_encode(['success' => false, 'message' => 'Please wait 20 minutes before nudging again']);
+        exit;
+    }
+    
+    // Get the guide's actual user_id (from users table) using the guides.id
+    $stmt = $pdo->prepare("SELECT user_id FROM guides WHERE id = ?");
+    $stmt->execute([$guideId]);
+    $guide = $stmt->fetch();
+    $guideUserId = $guide ? $guide['user_id'] : 0;
+    
+    if (!$guideUserId) {
+        echo json_encode(['success' => false, 'message' => 'Guide not found']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("INSERT INTO booking_nudges (booking_id, user_id, guide_id, created_at) VALUES (?, ?, ?, NOW())");
+    $stmt->execute([$numericId, $currentUserId, $guideId]);
+    
+    // Send nudge message to the correct guide user_id
+    $nudgeMessage = "🔔 **Reminder**\n\nHi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋";
+    
+    $stmt_msg = $pdo->prepare("
+        INSERT INTO messages (sender_id, receiver_id, body, sender_role, receiver_role, created_at, source_type, is_system_announcement)
+        VALUES (?, ?, AES_ENCRYPT(?, ?), 'hiker', 'guide', NOW(), 'nudge', 0)
+    ");
+    $stmt_msg->execute([$currentUserId, $guideUserId, $nudgeMessage, MSG_AES_KEY]);
+    
+    echo json_encode(['success' => true, 'message' => 'Nudge sent to guide!']);
+    exit;
+}
     
     if ($action === 'replace_guide') {
         $bookingId = $_POST['booking_id'] ?? '';

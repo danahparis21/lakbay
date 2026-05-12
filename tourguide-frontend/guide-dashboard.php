@@ -263,6 +263,7 @@ $next_hike = $upcoming_bookings[0] ?? null;
 
 // Handle AJAX status update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
+    if (ob_get_length()) ob_clean();
     header('Content-Type: application/json');
     $new_status = $_POST['status'] ?? 'safe';
     
@@ -273,13 +274,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     // Also update is_available based on status (1 = available, 0 = busy)
     $is_available = ($db_status === 'on_trail') ? 0 : 1;
     
+    $success = false;
+    $message = '';
+    $total_trips_updated = false;
+    
+    // If status is 'completed', also update total_trips in guides table
+    if ($db_status === 'completed') {
+        // Count all FINISHED bookings for this guide
+        $stmt_count = $pdo->prepare("
+            SELECT COUNT(*) as total_finished 
+            FROM bookings 
+            WHERE guide_id = ? AND status = 'finished'
+        ");
+        $stmt_count->execute([$guide_id]);
+        $finished_count = $stmt_count->fetch(PDO::FETCH_ASSOC);
+        $total_finished = $finished_count['total_finished'] ?? 0;
+        
+        // Update total_trips in guides table
+        $stmt_update = $pdo->prepare("UPDATE guides SET total_trips = ? WHERE user_id = ?");
+        $stmt_update->execute([$total_finished, $user_id]);
+        $total_trips_updated = true;
+        $message = "✓ Status updated to Completed! Total trips: {$total_finished}";
+    }
+    
+    // Update trail status
     $stmt = $pdo->prepare("UPDATE guides SET trail_status = ?, is_available = ? WHERE user_id = ?");
     $success = $stmt->execute([$db_status, $is_available, $user_id]);
     
-    echo json_encode(['success' => $success, 'status' => $db_status]);
+    if ($success) {
+        $response = ['success' => true, 'status' => $db_status];
+        if ($total_trips_updated) {
+            $response['message'] = $message;
+            $response['total_trips'] = $total_finished ?? 0;
+        } else {
+            $response['message'] = "Status updated to " . ucfirst($db_status);
+        }
+        echo json_encode($response);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Failed to update status']);
+    }
     exit;
 }
-
 // Handle marking broadcast as read
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'mark_read') {
     header('Content-Type: application/json');
