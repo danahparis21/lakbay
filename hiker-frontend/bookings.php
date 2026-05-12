@@ -329,6 +329,54 @@ ORDER BY b.created_at DESC
     }
 }
 
+
+// Helper function to check if guide is available for a specific date and time
+function isGuideAvailableForDateTime($pdo, $guideId, $hikeDate, $startTime, $hikeType) {
+    // Determine the end time based on hike type
+    $endTime = '';
+    if ($hikeType === 'day') {
+        $endTime = '14:00:00'; // Day hike ends at 2 PM
+    } elseif ($hikeType === 'late') {
+        $endTime = '17:00:00'; // Late hike ends at 5 PM
+    } else { // overnight
+        $endTime = '06:00:00'; // Overnight ends next day 6 AM
+        // For overnight, we need to check if date range overlaps
+        // This is more complex - we'll check if guide has any booking on that date
+    }
+    
+    // Check for overlapping bookings
+    if ($hikeType === 'overnight') {
+        // Overnight: check if guide has ANY active/confirmed booking on that date
+        $sql = "
+            SELECT COUNT(*) 
+            FROM bookings b
+            WHERE b.guide_id = ? 
+              AND b.status IN ('active', 'confirmed', 'waiting_payment')
+              AND b.hike_date = ?
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$guideId, $hikeDate]);
+    } else {
+        // Day/Late: check if guide has booking that overlaps with the time slot
+        $sql = "
+            SELECT COUNT(*) 
+            FROM bookings b
+            WHERE b.guide_id = ? 
+              AND b.status IN ('active', 'confirmed', 'waiting_payment')
+              AND b.hike_date = ?
+              AND (
+                  (b.start_time <= ? AND ? <= b.end_time)
+                  OR (b.start_time <= ? AND ? <= b.end_time)
+              )
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$guideId, $hikeDate, $startTime, $startTime, $endTime, $endTime]);
+    }
+    
+    $count = $stmt->fetchColumn();
+    return $count == 0; // Available if no overlapping bookings
+}
+
 // Get data from database
 $dbMountains = getMountainsFromDB($pdo);
 $dbGuides = getGuidesFromDB($pdo);
@@ -668,30 +716,49 @@ $stmt->execute([$newDate, $newTime, $notes, $currentTime, $numericId, $currentUs
     
    if ($action === 'get_available_guides') {
     $bookingId = $_POST['booking_id'] ?? '';
+    $hikeDate = $_POST['date'] ?? '';
+    $startTime = $_POST['time'] ?? '';
+    $hikeType = $_POST['type'] ?? '';
     $numericId = preg_replace('/[^0-9]/', '', $bookingId);
     
+    // Get current booking's mountain
     $stmt = $pdo->prepare("SELECT mountain_id, guide_id FROM bookings WHERE id = ?");
     $stmt->execute([$numericId]);
     $booking = $stmt->fetch();
     
     if ($booking) {
-        // ✅ Get the current guide's guides.id from the booking
-        $stmt = $pdo->prepare("SELECT user_id FROM guides WHERE id = ?");
-        $stmt->execute([$booking['guide_id']]);
-        $currentGuide = $stmt->fetch();
-        $currentGuideUserId = $currentGuide['user_id'] ?? 0;
-        
-        // ✅ Use guides.id (not users.id) for the mountain assignment query
+        // Get other guides for this mountain, excluding current guide
+        // Also filter by date/time availability
         $stmt = $pdo->prepare("
-            SELECT u.id, u.name, g.rating, g.years_experience, g.id as guide_db_id
+            SELECT u.id as user_id, u.name, g.rating, g.years_experience, g.id as guide_db_id
             FROM guides g
             JOIN users u ON g.user_id = u.id
             JOIN guide_mountains gm ON gm.guide_id = g.id
             WHERE gm.mountain_id = ? 
               AND g.id != ? 
               AND g.is_available = 1
+              AND g.is_approved = 1
+              -- Exclude guides who already have bookings on this date/time
+              AND NOT EXISTS (
+                  SELECT 1 FROM bookings b
+                  WHERE b.guide_id = g.id
+                    AND b.status IN ('active', 'confirmed', 'waiting_payment')
+                    AND b.hike_date = ?
+                    AND (
+                        CASE 
+                            WHEN ? = 'overnight' THEN b.hike_date = ?
+                            ELSE (
+                                b.start_time <= ? 
+                                AND ? <= DATE_ADD(b.start_time, INTERVAL 
+                                    CASE WHEN b.hike_type = 'day' THEN 10 
+                                         WHEN b.hike_type = 'late' THEN 2 
+                                         ELSE 16 END HOUR)
+                            )
+                        END
+                    )
+              )
         ");
-        $stmt->execute([$booking['mountain_id'], $booking['guide_id']]);
+        $stmt->execute([$booking['mountain_id'], $booking['guide_id'], $hikeDate, $hikeType, $hikeDate, $startTime, $startTime]);
         $guides = $stmt->fetchAll();
         echo json_encode(['success' => true, 'guides' => $guides]);
     } else {
@@ -4402,7 +4469,7 @@ const statusLabel = statusLabels[b.status] || b.status;
       
       <div class="booking-actions">
         ${startBtn}
-        <a href="messages.php?guide=${b.guideId}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-sm">
+        <a href="messages.php?guide=${b.guide_user_id}&guide_name=${encodeURIComponent(b.guideName)}" class="btn btn-outline btn-sm">
           <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Message Guide
         </a>
         
@@ -5178,11 +5245,14 @@ function confirmReplaceGuide() {
 
 function openReplaceGuide(bookingId) {
     replaceBookingId = bookingId;
+    const b = bookings.find(x => x.id === bookingId);
+    
     fetch(window.location.href, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-        body: `action=get_available_guides&booking_id=${bookingId}`
-    }).then(response => response.json()).then(result => {
+        body: `action=get_available_guides&booking_id=${bookingId}&date=${b.date}&time=${b.time}&type=${b.type}`
+    })
+    .then(response => response.json()).then(result => {
         if (result.success && result.guides.length > 0) {
             document.getElementById('replaceGuideList').innerHTML = result.guides.map(g => `
                 <div class="guide-replace-option" onclick="selectReplaceGuide(${g.id})" data-gid="${g.id}">

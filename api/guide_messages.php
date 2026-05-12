@@ -635,13 +635,13 @@ function verifyPayment($pdo, $guideId) {
     ");
     $stmt->execute([$downpaymentAmount, $booking['id']]);
     
-    // Lock the guide - set as unavailable during the hike
-    $stmt = $pdo->prepare("UPDATE guides SET 
-        is_available = 0,
-        currently_on_hike = 1
-        WHERE user_id = ?
-    ");
-    $stmt->execute([$guideId]);
+    // // Lock the guide - set as unavailable during the hike
+    // $stmt = $pdo->prepare("UPDATE guides SET 
+    //     is_available = 0,
+    //     currently_on_hike = 1
+    //     WHERE user_id = ?
+    // ");
+    // $stmt->execute([$guideId]);
     
     // Notify hiker — downpayment confirmed, hike is active
     $hikeDate       = date('F j, Y', strtotime($booking['hike_date']));
