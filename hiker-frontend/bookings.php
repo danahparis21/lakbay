@@ -665,39 +665,6 @@ $stmt->execute([$newDate, $newTime, $notes, $currentTime, $numericId, $currentUs
         echo json_encode(['success' => true, 'message' => 'Booking updated!']);
         exit;
     }
-
-    if ($action === 'check_guide_availability') {
-    header('Content-Type: application/json');
-    
-    $guideId = $_POST['guide_id'] ?? 0;
-    $date = $_POST['date'] ?? '';
-    $time = $_POST['time'] ?? '';
-    $hikeType = $_POST['hike_type'] ?? '';
-    
-    // For day/late hikes, check time overlap
-    // For overnight, just check if there's any booking on that date
-    $sql = "
-        SELECT COUNT(*) 
-        FROM bookings b
-        WHERE b.guide_id = ?
-          AND b.status IN ('active', 'confirmed', 'waiting_payment')
-          AND b.hike_date = ?
-    ";
-    
-    if ($hikeType !== 'overnight') {
-        $sql .= " AND TIME(b.start_time) = TIME(?)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$guideId, $date, $time]);
-    } else {
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$guideId, $date]);
-    }
-    
-    $count = $stmt->fetchColumn();
-    echo json_encode(['success' => true, 'available' => $count == 0]);
-    exit;
-}
-
     
    if ($action === 'get_available_guides') {
     $bookingId = $_POST['booking_id'] ?? '';
@@ -732,6 +699,36 @@ $stmt->execute([$newDate, $newTime, $notes, $currentTime, $numericId, $currentUs
     }
     exit;
 }
+    if ($action === 'check_guide_availability') {
+        $mountainId = intval($_POST['mountain_id'] ?? 0);
+        $hikeDate   = $_POST['hike_date'] ?? '';
+        $hikeType   = $_POST['hike_type'] ?? 'day';
+
+        if (!$mountainId || !$hikeDate) {
+            echo json_encode(['success' => false, 'booked_guide_ids' => []]);
+            exit;
+        }
+
+        // A guide is "booked" on a date if they have an active/pending/confirmed booking
+        // on the same mountain, same date, same hike-type window.
+        // We consider same-date + same hike_type as a conflict (one guide can only
+        // lead one group per time window).
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT b.guide_id
+            FROM bookings b
+            WHERE b.mountain_id = ?
+              AND b.hike_date   = ?
+              AND b.hike_type   = ?
+              AND b.status NOT IN ('cancelled', 'finished')
+        ");
+        $stmt->execute([$mountainId, $hikeDate, $hikeType === 'day' ? 'day_hike' : ($hikeType === 'late' ? 'late_hike' : 'overnight')]);
+        $bookedGuideIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (ob_get_length()) ob_clean();
+        echo json_encode(['success' => true, 'booked_guide_ids' => array_map('intval', $bookedGuideIds)]);
+        exit;
+    }
+
     if ($action === 'lookup_hike') {
         $bookingNumber = $_POST['booking_number'] ?? '';
         
@@ -3446,31 +3443,28 @@ else if(n===3) {
     document.getElementById('flowTitle').textContent = 'Choose a Guide';
     document.getElementById('flowSubtitle').textContent = 'Select a guide for your hike';
     
-    // ===== USE THE PRE-FILTERED AVAILABLE GUIDES FROM SERVER =====
-    // window.availableGuidesForBooking is set in nextStep() after checking availability
-    const avail = window.availableGuidesForBooking || [];
-    
-    // Also filter by max_pax capacity (client-side for speed)
-    const filteredByPax = avail.filter(g => {
-        const rates = g.max_pax_per_mountain?.[flowState.mtn.id];
-        const maxPax = rates?.max_pax;
+    // Filter guides by mountain AND by max_pax capacity
+    const avail = guides.filter(g => {
+        // Check if guide can serve this mountain
+        if (!g.mountains.includes(flowState.mtn.id)) return false;
+        
+        // Check if guide has max_pax for this mountain and if it meets requirement
+        const maxPax = g.max_pax_per_mountain?.[flowState.mtn.id]?.max_pax;
         if (maxPax && flowState.pax > maxPax) return false;
+        
         return true;
     });
     
-    // Use the filtered list
-    const finalGuides = filteredByPax;
-    
     // Show warning if no guides available
     let warningHtml = '';
-    if (finalGuides.length === 0) {
+    if (avail.length === 0) {
         warningHtml = `
             <div class="warning-card" style="margin-bottom:14px; background:#fee2e2; border-color:#dc2626;">
                 <h4 style="color:#dc2626;">
                     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     No guides available
                 </h4>
-                <p>No guides can accommodate ${flowState.pax} hikers for ${flowState.mtn.name} on ${flowState.date} at ${flowState.time}. Please try a different date or time.</p>
+                <p>No guides can accommodate ${flowState.pax} hikers for ${flowState.mtn.name}. Please go back and reduce the number of hikers.</p>
             </div>
         `;
     }
@@ -3481,7 +3475,7 @@ else if(n===3) {
         <p>For safety, all hikes require a licensed local tour guide.</p>
       </div>
       ${warningHtml}
-      ${finalGuides.map(g => {
+      ${avail.map(g => {
           const rates = g.max_pax_per_mountain?.[flowState.mtn.id];
           const maxPax = rates?.max_pax || 'Unlimited';
           const capacityText = maxPax !== 'Unlimited' ? `👥 Max ${maxPax} hikers` : '👥 No limit';
@@ -3497,7 +3491,26 @@ else if(n===3) {
                   ? (flowState.type === 'overnight' ? guideFeeMap[feeKey].overnight : guideFeeMap[feeKey].day)
                   : (flowState.type === 'overnight' ? 1500 : 801);
           }
-          
+
+          // Check if guide is already booked on the selected date/type
+          const bookedIds = flowState.bookedGuideIds || [];
+          const isBooked = bookedIds.includes(g.id);
+
+          if (isBooked) {
+              return `
+                <div class="guide-select-card" style="opacity:0.55; cursor:not-allowed; pointer-events:none; position:relative; background:#f5f5f5;">
+                  <div class="guide-av-sm" style="background:#bbb;">${g.initials}</div>
+                  <div class="guide-select-info">
+                    <div class="guide-select-name" style="color:#888;">${g.name}</div>
+                    <div class="guide-select-meta" style="color:#aaa;">⭐ ${g.rating} ★ · ${g.mountains.map(mid=>mountains.find(m=>m.id===mid)?.name).join(', ')}</div>
+                    <div style="margin-top:6px; display:inline-flex; align-items:center; gap:5px; background:#fce4ec; color:#c62828; border-radius:20px; padding:3px 10px; font-size:11px; font-weight:700;">
+                      <svg viewBox="0 0 24 24" style="width:11px;height:11px;stroke:currentColor;stroke-width:2.5;fill:none;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                      Already booked on this date
+                    </div>
+                  </div>
+                </div>`;
+          }
+
           return `
             <div class="guide-select-card" id="gs${g.id}" onclick="selectGuide(${g.id})">
               <div class="guide-av-sm">${g.initials}</div>
@@ -3521,7 +3534,7 @@ else if(n===3) {
       
     footer.innerHTML = `<button class="btn btn-outline" onclick="renderStep(2)">
       <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back
-    </button><button class="btn btn-primary btn-full" onclick="nextStep()" id="nextGuideBtn" ${finalGuides.length === 0 ? 'disabled' : ''}>Continue
+    </button><button class="btn btn-primary btn-full" onclick="nextStep()" id="nextGuideBtn" ${avail.length === 0 ? 'disabled' : ''}>Continue
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>`;
 } else if(n===4) {
@@ -3903,7 +3916,7 @@ function selectGuide(id) {
     // Show fee in console for debugging (optional)
     console.log(`Selected guide: ${flowState.guide.name}, Fee: ₱${guideFee}`);
 }
-async function nextStep() {
+function nextStep() {
     if(currentStep===1 && !flowState.mtn) { 
         showToast('Please select a mountain'); 
         return; 
@@ -3929,24 +3942,27 @@ async function nextStep() {
         const selectedDate = d;
         
         // BLOCK PAST DATES
-        if (selectedDate < todayStr) {
-            showToast('❌ Cannot book for past dates. Please select today or a future date.');
-            document.getElementById('hikeDate').value = todayStr;
-            flowState.date = todayStr;
-            return;
-        }
-        
+        // BLOCK PAST DATES
+if (selectedDate < todayStr) {
+    showToast('❌ Cannot book for past dates. Please select today or a future date.');
+    // Force reset the date picker to today
+    document.getElementById('hikeDate').value = todayStr;
+    flowState.date = todayStr;
+    return;
+}
         // If selected date is today, check time restrictions
         if (selectedDate === todayStr) {
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
             const [selectedHour, selectedMinute] = t.split(':').map(Number);
             
+            // Block past times today
             if (selectedHour < currentHour || (selectedHour === currentHour && selectedMinute < currentMinute)) {
                 showToast('❌ Selected time has already passed today. Please choose a later time or future date.');
                 return;
             }
             
+            // Check cutoff times based on hike type
             if (flowState.type === 'day' && currentHour >= 13) {
                 showToast('⚠️ Day hikes must be booked BEFORE 1:00 PM for same-day departure. Please select a future date.');
                 return;
@@ -3960,11 +3976,13 @@ async function nextStep() {
                 return;
             }
             
+            // For late hikes, ensure time is after 3:00 PM
             if (flowState.type === 'late' && selectedHour < 15) {
                 showToast('🌙 Late hikes must start at 3:00 PM or later (3:00 PM - 5:00 PM only)');
                 return;
             }
             
+            // For late hikes, ensure time is not after 5:00 PM
             if (flowState.type === 'late' && selectedHour > 17) {
                 showToast('🌙 Late hikes are only available until 5:00 PM');
                 return;
@@ -3979,59 +3997,30 @@ async function nextStep() {
         const cc = document.getElementById('campingCheck');
         if(cc) flowState.camping = cc.checked;
         
-        // ===== ADD THIS: Check guide availability on server =====
-        showToast('Checking guide availability...');
-        
-        // First, filter guides client-side by mountain (quick filter)
-        const mountainGuides = guides.filter(g => g.mountains.includes(flowState.mtn.id));
-        
-        if (mountainGuides.length === 0) {
-            showToast('No guides available for this mountain. Please contact support.');
-            return;
-        }
-        
-        // For each guide, check availability on server
-        const availableGuides = [];
-        
-        for (const guide of mountainGuides) {
-            try {
-                const formData = new FormData();
-                formData.append('action', 'check_guide_availability');
-                formData.append('guide_id', guide.id);
-                formData.append('date', flowState.date);
-                formData.append('time', flowState.time);
-                formData.append('hike_type', flowState.type);
-                
-                const response = await fetch(window.location.href, {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const text = await response.text();
-                let result;
-                try {
-                    result = JSON.parse(text);
-                } catch (e) {
-                    console.error('Parse error for guide', guide.id, text.substring(0, 200));
-                    continue;
-                }
-                
-                if (result.success && result.available) {
-                    availableGuides.push(guide);
-                }
-            } catch (error) {
-                console.error('Error checking guide', guide.id, error);
-            }
-        }
-        
-        if (availableGuides.length === 0) {
-            showToast('❌ No guides available for ' + flowState.mtn.name + ' on ' + flowState.date + ' at ' + flowState.time + '. Please choose a different date or time.');
-            return;
-        }
-        
-        // Store available guides and go to step 3
-        window.availableGuidesForBooking = availableGuides;
-        renderStep(3);
+        // Fetch guide availability for chosen date/mountain before showing step 3
+        const nextBtn = document.getElementById('nextStepBtn');
+        if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = 'Checking guides…'; }
+
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body: `action=check_guide_availability&mountain_id=${flowState.mtn.id}&hike_date=${encodeURIComponent(d)}&hike_type=${encodeURIComponent(flowState.type)}`
+        })
+        .then(res => {
+            const raw = res.text();
+            return raw;
+        })
+        .then(text => {
+            let data = { success: false, booked_guide_ids: [] };
+            try { data = JSON.parse(text); } catch(e) { console.warn('Guide availability parse error', text); }
+            flowState.bookedGuideIds = data.booked_guide_ids || [];
+            renderStep(3);
+        })
+        .catch(err => {
+            console.error('Guide availability check failed:', err);
+            flowState.bookedGuideIds = [];
+            renderStep(3);
+        });
         return;
     }
     
