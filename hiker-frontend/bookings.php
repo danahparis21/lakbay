@@ -5156,6 +5156,8 @@ function nudgeGuide(bookingId) {
     const b = bookings.find(x => x.id === bookingId);
     if (!b || b.status !== 'pending') return showToast('Only pending bookings can be nudged');
     
+    console.log('Nudge - guideId:', b.guideId, 'guide_user_id:', b.guide_user_id);
+    
     showToast(`Sending nudge to ${b.guideName}...`);
     
     fetch(window.location.href, {
