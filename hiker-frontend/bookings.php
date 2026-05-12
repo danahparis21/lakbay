@@ -1040,7 +1040,7 @@ if ($action === 'check_pending_request') {
         exit;
     }
 
-    if ($action === 'get_available_guides_for_booking') {
+   if ($action === 'get_available_guides_for_booking') {
     // Ensure we always return JSON
     header('Content-Type: application/json');
     
@@ -1055,6 +1055,12 @@ if ($action === 'check_pending_request') {
         if (!$mountainId || !$date || !$time || !$hikeType) {
             echo json_encode(['success' => false, 'message' => 'Missing required fields', 'guides' => []]);
             exit;
+        }
+        
+        // Convert frontend type to database type for comparison
+        $dbHikeType = $hikeType;
+        if ($hikeType === 'day' || $hikeType === 'late') {
+            $dbHikeType = 'day_hike';
         }
         
         $sql = "
@@ -1077,7 +1083,7 @@ if ($action === 'check_pending_request') {
                             ELSE (
                                 b.start_time <= ? 
                                 AND ? <= DATE_ADD(b.start_time, INTERVAL 
-                                    CASE WHEN b.hike_type = 'day' THEN 10 
+                                    CASE WHEN b.hike_type = 'day_hike' THEN 10 
                                          WHEN b.hike_type = 'late' THEN 2 
                                          ELSE 16 END HOUR)
                             )
@@ -4226,7 +4232,7 @@ async function nextStep() {
         if(cc) flowState.camping = cc.checked;
         
         // Fetch available guides from server
-        showToast('Checking guide availability...', 'info');
+        showToast('Checking guide availability...');
         
         const formData = new FormData();
         formData.append('action', 'get_available_guides_for_booking');
@@ -4241,19 +4247,34 @@ async function nextStep() {
                 method: 'POST',
                 body: formData
             });
-            const result = await response.json();
+            
+            // Check if response is OK
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const text = await response.text();
+            
+            // Try to parse as JSON
+            let result;
+            try {
+                result = JSON.parse(text);
+            } catch (e) {
+                console.error('Raw response:', text.substring(0, 500));
+                throw new Error('Server returned invalid JSON. Please check PHP error logs.');
+            }
             
             if (result.success && result.guides && result.guides.length > 0) {
                 // Store available guides globally
                 window.availableGuidesForBooking = result.guides;
                 renderStep(3);
             } else {
-                showToast('No guides available for this date and time. Please choose a different date or time.', 'error');
+                showToast(result.message || 'No guides available for this date and time. Please choose a different date or time.');
                 return;
             }
         } catch (error) {
             console.error('Error fetching guides:', error);
-            showToast('Error checking guide availability. Please try again.', 'error');
+            showToast('Error checking guide availability. Please try again.');
             return;
         }
         return;
@@ -4261,7 +4282,6 @@ async function nextStep() {
     
     renderStep(currentStep + 1);
 }
-
 function copyBookingId() {
   const id = document.getElementById('successBookingId').textContent;
   navigator.clipboard.writeText(id).then(()=>{
