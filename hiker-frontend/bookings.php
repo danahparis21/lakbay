@@ -602,8 +602,6 @@ exit;
     exit;
 }
     if ($action === 'nudge_guide') {
-    if (ob_get_length()) ob_clean();
-    error_reporting(0);
     $bookingId = $_POST['booking_id'] ?? '';
     $guideId = $_POST['guide_id'] ?? ''; // This is guides.id
     
@@ -640,7 +638,7 @@ exit;
     }
     
     $stmt = $pdo->prepare("INSERT INTO booking_nudges (booking_id, user_id, guide_id, created_at) VALUES (?, ?, ?, NOW())");
-    $result = $stmt->execute([$numericId, $currentUserId, $guideId]);
+    $stmt->execute([$numericId, $currentUserId, $guideId]);
     
     // Send nudge message to the correct guide user_id
     $nudgeMessage = "🔔 **Reminder**\n\nHi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋";
@@ -649,9 +647,8 @@ exit;
         INSERT INTO messages (sender_id, receiver_id, body, sender_role, receiver_role, created_at, source_type, is_system_announcement)
         VALUES (?, ?, AES_ENCRYPT(?, ?), 'hiker', 'guide', NOW(), 'nudge', 0)
     ");
-    $msg_result = $stmt_msg->execute([$currentUserId, $guideUserId, $nudgeMessage, MSG_AES_KEY]);
+    $stmt_msg->execute([$currentUserId, $guideUserId, $nudgeMessage, MSG_AES_KEY]);
     
-    if (ob_get_length()) ob_clean();
     echo json_encode(['success' => true, 'message' => 'Nudge sent to guide!']);
     exit;
 }
