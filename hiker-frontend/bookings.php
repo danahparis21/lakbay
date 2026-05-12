@@ -5131,6 +5131,7 @@ const nb = {
         if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
     });
 }
+
 function nudgeGuide(bookingId) {
     const b = bookings.find(x => x.id === bookingId);
     if (!b || b.status !== 'pending') return showToast('Only pending bookings can be nudged');
@@ -5148,20 +5149,12 @@ function nudgeGuide(bookingId) {
             renderBookings();
             showToast(`🔔 Nudge sent to ${b.guideName}!`);
 
-            // FIX: Use guide_user_id (the users.id) not guideId (guides.id)
-            // b.guide_user_id should contain the user account ID (30 for Guide Leo, 14 for Mica)
-            const guideUserId = b.guide_user_id;
-            console.log(`Sending nudge message to guide user ID: ${guideUserId}`);
-            
-            if (guideUserId && guideUserId > 0) {
-                fetch('../api/hiker_messages.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=send_system_message&guide_id=${guideUserId}&message=Hi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋`
-                });
-            } else {
-                console.error('No guide_user_id found for booking:', bookingId);
-            }
+            // Send nudge message
+            fetch('../api/hiker_messages.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `action=send_system_message&guide_id=${b.guideId}&message=Hi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋`
+            });
         } else {
             showToast(result.message);
         }
