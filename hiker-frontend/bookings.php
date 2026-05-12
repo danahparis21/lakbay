@@ -1040,6 +1040,81 @@ if ($action === 'check_pending_request') {
         exit;
     }
 
+    if ($action === 'get_available_guides_for_booking') {
+    $mountainId = $_POST['mountain_id'] ?? 0;
+    $date = $_POST['date'] ?? '';
+    $time = $_POST['time'] ?? '';
+    $hikeType = $_POST['hike_type'] ?? '';
+    $pax = $_POST['pax'] ?? 1;
+    
+    $sql = "
+        SELECT g.id as guide_db_id, g.user_id, g.rating, g.years_experience, g.id as guide_id,
+               u.id as user_id, u.name as guide_name
+        FROM guides g 
+        JOIN users u ON g.user_id = u.id 
+        JOIN guide_mountains gm ON gm.guide_id = g.id
+        WHERE gm.mountain_id = ?
+          AND g.is_available = 1
+          AND g.is_approved = 1
+          AND NOT EXISTS (
+              SELECT 1 FROM bookings b
+              WHERE b.guide_id = g.id
+                AND b.status IN ('active', 'confirmed', 'waiting_payment')
+                AND b.hike_date = ?
+                AND (
+                    CASE 
+                        WHEN ? = 'overnight' THEN 1
+                        ELSE (
+                            b.start_time <= ? 
+                            AND ? <= DATE_ADD(b.start_time, INTERVAL 
+                                CASE WHEN b.hike_type = 'day' THEN 10 
+                                     WHEN b.hike_type = 'late' THEN 2 
+                                     ELSE 16 END HOUR)
+                        )
+                    END
+                )
+          )
+        ORDER BY g.rating DESC
+    ";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$mountainId, $date, $hikeType, $time, $time]);
+    $guides = $stmt->fetchAll();
+    
+    // Format guides for frontend
+    $formattedGuides = [];
+    foreach ($guides as $guide) {
+        // Get mountains this guide can serve
+        $stmt2 = $pdo->prepare("SELECT mountain_id FROM guide_mountains WHERE guide_id = ?");
+        $stmt2->execute([$guide['guide_db_id']]);
+        $mountains = $stmt2->fetchAll(PDO::FETCH_COLUMN);
+        
+        // Get rate for this mountain
+        $stmt3 = $pdo->prepare("
+            SELECT guide_fee_day, guide_fee_overnight 
+            FROM guide_mountain_rates 
+            WHERE guide_id = ? AND mountain_id = ?
+        ");
+        $stmt3->execute([$guide['guide_db_id'], $mountainId]);
+        $rates = $stmt3->fetch();
+        
+        $formattedGuides[] = [
+            'id' => $guide['guide_db_id'],
+            'name' => $guide['guide_name'],
+            'initials' => substr(preg_replace('/[^A-Z]/', '', $guide['guide_name']), 0, 2),
+            'mountains' => $mountains,
+            'rating' => floatval($guide['rating']),
+            'available' => 'Daily',
+            'phone' => '',
+            'guide_fee_day' => $rates['guide_fee_day'] ?? 801,
+            'guide_fee_overnight' => $rates['guide_fee_overnight'] ?? 1500
+        ];
+    }
+    
+    echo json_encode(['success' => true, 'guides' => $formattedGuides]);
+    exit;
+}
+
     if ($action === 'check_guide_availability') {
     $guideId = $_POST['guide_id'] ?? 0;
     $date = $_POST['date'] ?? '';
