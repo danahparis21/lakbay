@@ -709,19 +709,15 @@ $stmt->execute([$newDate, $newTime, $notes, $currentTime, $numericId, $currentUs
             exit;
         }
 
-        // A guide is "booked" on a date if they have an active/pending/confirmed booking
-        // on the same mountain, same date, same hike-type window.
-        // We consider same-date + same hike_type as a conflict (one guide can only
-        // lead one group per time window).
+        // A guide can only lead one group per day — block them for the entire date
+        // regardless of hike type (a guide can't do a late hike AND an overnight on the same day).
         $stmt = $pdo->prepare("
             SELECT DISTINCT b.guide_id
             FROM bookings b
-            WHERE b.mountain_id = ?
-              AND b.hike_date   = ?
-              AND b.hike_type   = ?
+            WHERE b.hike_date = ?
               AND b.status NOT IN ('cancelled', 'finished')
         ");
-        $stmt->execute([$mountainId, $hikeDate, $hikeType === 'day' ? 'day_hike' : ($hikeType === 'late' ? 'late_hike' : 'overnight')]);
+        $stmt->execute([$hikeDate]);
         $bookedGuideIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
         if (ob_get_length()) ob_clean();
