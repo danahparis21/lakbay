@@ -5162,33 +5162,22 @@ function nudgeGuide(bookingId) {
     const b = bookings.find(x => x.id === bookingId);
     if (!b || b.status !== 'pending') return showToast('Only pending bookings can be nudged');
     
-    console.log('Nudge - guideId:', b.guideId, 'guide_user_id:', b.guide_user_id);
-    
     showToast(`Sending nudge to ${b.guideName}...`);
     
     fetch(window.location.href, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
         body: `action=nudge_guide&booking_id=${bookingId}&guide_id=${b.guideId}`
-    }).then(response => response.json()).then(result => {
-        if (result.success) {
-            b.nudges++;
-            b.lastNudge = Date.now();
-            renderBookings();
-            showToast(`🔔 Nudge sent to ${b.guideName}!`);
-
-            // // Send nudge message
-            // fetch('../api/hiker_messages.php', {
-            //     method: 'POST',
-            //     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            //     body: `action=send_system_message&guide_id=${b.guideId}&message=Hi! Just a friendly reminder about my upcoming hike booking. Let me know if you have any updates! 👋`
-            // });
-        } else {
-            showToast(result.message);
-        }
-    }).catch(err => {
+    })
+    .then(response => {
+        // Just reload the page - don't try to parse JSON
+        location.reload();
+        return;
+    })
+    .catch(err => {
         console.error(err);
-        showToast('Network error.');
+        // Even on error, reload - the nudge might have worked
+        location.reload();
     });
 }
 function confirmJoinHike() {
