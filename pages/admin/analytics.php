@@ -34,15 +34,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WI
 
 // ========== ADVANCED ANALYTICS QUERIES ==========
 
-// 1. HOURLY DISTRIBUTION - When do hikers ACTUALLY HIKE?
+// 1. HOURLY DISTRIBUTION - When do hikers book?
 $stmt = $pdo->prepare("
     SELECT 
-        HOUR(start_time) as hour,
-        COUNT(*) as hike_count,
-        ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM bookings WHERE payment_status = 'paid' AND start_time IS NOT NULL), 1) as percentage
+        HOUR(created_at) as hour,
+        COUNT(*) as booking_count,
+        ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM bookings), 1) as percentage
     FROM bookings
-    WHERE payment_status = 'paid' AND start_time IS NOT NULL AND status IN ('finished', 'completed', 'active')
-    GROUP BY HOUR(start_time)
+    WHERE payment_status = 'paid'
+    GROUP BY HOUR(created_at)
     ORDER BY hour ASC
 ");
 $stmt->execute();
@@ -50,7 +50,7 @@ $hourlyDistribution = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Find peak booking hour
 $peakHour = array_reduce($hourlyDistribution, function($carry, $item) {
-    return (!$carry || $item['hike_count'] > $carry['hike_count']) ? $item : $carry;
+    return (!$carry || $item['booking_count'] > $carry['booking_count']) ? $item : $carry;
 }, null);
 
 // 2. WEEKDAY DISTRIBUTION - Which days are busiest?
@@ -58,43 +58,40 @@ $stmt = $pdo->prepare("
     SELECT 
         DAYNAME(hike_date) as day_name,
         DAYOFWEEK(hike_date) as day_num,
-        SUM(number_of_hikers) as total_hikers,
-        COUNT(*) as hike_count,
-        ROUND(SUM(number_of_hikers) * 100.0 / (SELECT SUM(number_of_hikers) FROM bookings WHERE hike_date IS NOT NULL AND payment_status = 'paid' AND status IN ('finished', 'completed', 'active')), 1) as percentage
+        COUNT(*) as booking_count,
+        ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM bookings WHERE hike_date IS NOT NULL), 1) as percentage
     FROM bookings
-    WHERE hike_date IS NOT NULL AND payment_status = 'paid' AND status IN ('finished', 'completed', 'active')
+    WHERE hike_date IS NOT NULL AND payment_status = 'paid'
     GROUP BY DAYNAME(hike_date), DAYOFWEEK(hike_date)
     ORDER BY day_num ASC
 ");
 $stmt->execute();
 $weekdayDistribution = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Find busiest day for ACTUAL HIKING
+// Find busiest day
 $busiestDay = array_reduce($weekdayDistribution, function($carry, $item) {
-    return (!$carry || $item['total_hikers'] > $carry['total_hikers']) ? $item : $carry;
+    return (!$carry || $item['booking_count'] > $carry['booking_count']) ? $item : $carry;
 }, null);
-
 
 // 3. MONTHLY SEASONALITY - Most popular months
 $stmt = $pdo->prepare("
     SELECT 
         MONTHNAME(hike_date) as month_name,
         MONTH(hike_date) as month_num,
-        SUM(number_of_hikers) as total_hikers,
-        COUNT(*) as hike_count,
-        ROUND(SUM(number_of_hikers) * 100.0 / (SELECT SUM(number_of_hikers) FROM bookings WHERE hike_date IS NOT NULL AND payment_status = 'paid' AND status IN ('finished', 'completed', 'active')), 1) as percentage
+        COUNT(*) as booking_count,
+        ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM bookings WHERE hike_date IS NOT NULL), 1) as percentage
     FROM bookings
-    WHERE hike_date IS NOT NULL AND payment_status = 'paid' AND status IN ('finished', 'completed', 'active')
+    WHERE hike_date IS NOT NULL AND payment_status = 'paid'
     GROUP BY MONTHNAME(hike_date), MONTH(hike_date)
     ORDER BY month_num ASC
 ");
 $stmt->execute();
 $monthlyDistribution = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Find peak months for ACTUAL HIKING
+// Find peak months (top 3)
 $peakMonths = $monthlyDistribution;
 usort($peakMonths, function($a, $b) {
-    return $b['total_hikers'] - $a['total_hikers'];
+    return $b['booking_count'] - $a['booking_count'];
 });
 $topMonths = array_slice($peakMonths, 0, 3);
 
@@ -104,18 +101,14 @@ $stmt = $pdo->prepare("
         m.id,
         m.name,
         m.crowdLevel,
-        COUNT(b.id) as total_hikes,
-        SUM(b.number_of_hikers) as total_visitors,
+        COUNT(b.id) as total_bookings,
         ROUND(AVG(b.number_of_hikers), 1) as avg_group_size,
         COUNT(DISTINCT DATE(b.hike_date)) as active_days,
-        ROUND(SUM(b.number_of_hikers) / NULLIF(COUNT(DISTINCT DATE(b.hike_date)), 0), 1) as avg_daily_visitors
+        ROUND(COUNT(b.id) / NULLIF(COUNT(DISTINCT DATE(b.hike_date)), 0), 1) as avg_daily_visitors
     FROM mountains m
-    LEFT JOIN bookings b ON m.id = b.mountain_id 
-        AND b.payment_status = 'paid' 
-        AND b.status IN ('finished', 'completed', 'active')
-        AND b.hike_date >= DATE_SUB(NOW(), INTERVAL 90 DAY)
+    LEFT JOIN bookings b ON m.id = b.mountain_id AND b.payment_status = 'paid' AND b.hike_date >= DATE_SUB(NOW(), INTERVAL 90 DAY)
     GROUP BY m.id, m.name, m.crowdLevel
-    ORDER BY total_visitors DESC
+    ORDER BY total_bookings DESC
 ");
 $stmt->execute();
 $mountainCongestion = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -174,17 +167,15 @@ for ($i = 11; $i >= 0; $i--) {
     $monthDate = date('Y-m', strtotime("-$i months"));
     $monthName = date('M Y', strtotime("-$i months"));
     $stmt = $pdo->prepare("
-        SELECT COALESCE(SUM(number_of_hikers), 0) as total_hikers
+        SELECT COUNT(*) as bookings
         FROM bookings
-        WHERE payment_status = 'paid' 
-            AND status IN ('finished', 'completed', 'active')
-            AND DATE_FORMAT(hike_date, '%Y-%m') = ?
+        WHERE payment_status = 'paid' AND DATE_FORMAT(created_at, '%Y-%m') = ?
     ");
     $stmt->execute([$monthDate]);
     $data = $stmt->fetch(PDO::FETCH_ASSOC);
     $monthlyTrend[] = [
         'month' => $monthName,
-        'hikers' => $data['total_hikers'] ?? 0
+        'bookings' => $data['bookings'] ?? 0
     ];
 }
 
@@ -695,7 +686,6 @@ const revenueMtnLabels = <?= json_encode(array_column($revenueByMountain, 'name'
 const revenueMtnData = <?= json_encode(array_column($revenueByMountain, 'revenue')) ?>;
 const trendLabels = <?= json_encode(array_column($monthlyTrend, 'month')) ?>;
 const trendBookings = <?= json_encode(array_column($monthlyTrend, 'bookings')) ?>;
-const trendHikers = <?= json_encode(array_column($monthlyTrend, 'hikers')) ?>;
 
 const charts = {};
 
