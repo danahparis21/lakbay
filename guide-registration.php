@@ -56,7 +56,6 @@ function detectIDType($text) {
     
     return null;
 }
-
 function extractNameFromID($imagePath) {
     // Try multiple PSM modes and take the best result
     $psmModes = [6, 4, 3, 8]; // 6=uniform block, 4=single column, 3=auto, 8=single word
@@ -156,7 +155,7 @@ function extractNameFromID($imagePath) {
             $fullName = ucwords(strtolower($firstName . ' ' . $lastName . ' ' . $middleInitial . '.'));
         }
         if (strlen($fullName) > 5 && !preg_match('/(REPUBLIC|PHILIPPINES|CARD|ID)/i', $fullName)) {
-            return ['name' => $fullName, 'id_type' => null];
+            return ['name' => $fullName, 'raw_text' => $allText];
         }
     }
     
@@ -182,7 +181,7 @@ function extractNameFromID($imagePath) {
             // Also check it's not just numbers
             if ($isValid && !preg_match('/^\d+$/', $lineUpper) && strlen($lineUpper) > 8) {
                 $name = ucwords(strtolower($lineUpper));
-                return ['name' => $name, 'id_type' => null];
+                return ['name' => $name, 'raw_text' => $allText];
             }
         }
     }
@@ -206,13 +205,13 @@ function extractNameFromID($imagePath) {
                 if ($i > 0 && !preg_match('/(' . implode('|', $excludeWords) . ')/i', $lines[$i - 1])) {
                     $firstNameClean = ucwords(strtolower(trim($lines[$i - 1])));
                     if (strlen($firstNameClean) < 20 && strpos($firstNameClean, ' ') === false) {
-                        return ['name' => $firstNameClean . ' ' . $surnameClean, 'id_type' => null];
+                        return ['name' => $firstNameClean . ' ' . $surnameClean, 'raw_text' => $allText];
                     }
                 }
                 
                 // If no first name found, just return the surname (better than nothing)
                 if (strlen($surnameClean) > 3) {
-                    return ['name' => $surnameClean, 'id_type' => null];
+                    return ['name' => $surnameClean, 'raw_text' => $allText];
                 }
             }
         }
@@ -220,6 +219,8 @@ function extractNameFromID($imagePath) {
     
     return null;
 }
+
+
 // Handle OCR AJAX request with Tesseract
 if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] === 'XMLHttpRequest') {
     header('Content-Type: application/json');
@@ -241,14 +242,15 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
     }
     
     $tempPath = $file['tmp_name'];
-    $extractedName = extractNameFromID($tempPath);
-    
-    if ($extractedName && strlen($extractedName) > 3) {
-    // Also detect ID type from the raw text
-    $detectedIdType = detectIDType($allText);
+$result = extractNameFromID($tempPath);
+
+if ($result && isset($result['name']) && strlen($result['name']) > 3) {
+    // Get the raw text from the extractNameFromID function - we need to capture it
+    // Let's modify the function to also return the raw text
+    $detectedIdType = detectIDType($result['raw_text'] ?? '');
     echo json_encode([
         'success' => true, 
-        'name' => $extractedName,
+        'name' => $result['name'],
         'detected_id_type' => $detectedIdType
     ]);
 } else {
