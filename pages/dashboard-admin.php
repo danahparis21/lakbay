@@ -262,6 +262,20 @@ for ($i = 0; $i < 7; $i++) {
     $totalWeekRevenue += $revenue;
 }
 
+
+$currentYear = date('Y');
+$yearlyYears = [];
+$yearlyRevenue = [];
+for ($i = 4; $i >= 0; $i--) {
+    $year = $currentYear - $i;
+    $yearlyYears[] = $year;
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings WHERE payment_status = 'paid' AND YEAR(created_at) = ?");
+    $stmt->execute([$year]);
+    $yearlyRevenue[] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+}
+$yearlyTotal = array_sum($yearlyRevenue);
+
+
 // Weekly bookings trend
 $weeklyBookings = [];
 $weekLabels = [];
@@ -590,6 +604,25 @@ const mountainNames = <?= json_encode(array_column($popularMountains, 'name')) ?
 const mountainBookings = <?= json_encode(array_column($popularMountains, 'total_bookings_30d')) ?>;
 const hourlyData = <?= json_encode(array_values($hourlyCheckins)) ?>;
 
+
+// YEARS DATA for yearly chart (pre-fetch)
+const yearlyYears = <?php 
+    $currentYear = date('Y');
+    $years = [];
+    $yearlyRevenue = [];
+    for ($i = 4; $i >= 0; $i--) {
+        $year = $currentYear - $i;
+        $years[] = $year;
+        $stmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings WHERE payment_status = 'paid' AND YEAR(created_at) = ?");
+        $stmt->execute([$year]);
+        $yearlyRevenue[] = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+    }
+    echo json_encode($years);
+?>;
+
+const yearlyRevenueData = <?php echo json_encode($yearlyRevenue); ?>;
+const yearlyTotal = <?php echo array_sum($yearlyRevenue); ?>;
+
 // Live clock
 function updateDate() {
   const d = new Date();
@@ -621,30 +654,46 @@ function updateRevenueChart(labels, data, total, viewType) {
   
   currentRevenueChart = new Chart(ctx, {
     type: 'bar',
-    data: { labels: labels, datasets: [{ data: data, backgroundColor: 'rgba(17,19,24,0.8)', borderRadius: 6 }] },
+    data: { 
+      labels: labels, 
+      datasets: [{ 
+        label: 'Revenue (₱)',
+        data: data, 
+        backgroundColor: 'rgba(17,19,24,0.8)', 
+        borderRadius: 6 
+      }] 
+    },
     options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { tooltip: { callbacks: { label: (ctx) => `₱${ctx.raw.toLocaleString()}` } } },
+      responsive: true, 
+      maintainAspectRatio: false,
+      plugins: { 
+        legend: { display: true, position: 'top' },
+        tooltip: { callbacks: { label: (ctx) => `₱${ctx.raw.toLocaleString()}` } } 
+      },
       scales: { y: { ticks: { callback: (val) => val >= 1000 ? `₱${(val/1000).toFixed(0)}k` : `₱${val}` } } }
     }
   });
   
-  document.getElementById('revenueInsights').innerHTML = `<i class="fas fa-chart-line"></i> Total: ₱${total.toLocaleString()} · Peak: ${labels[data.indexOf(Math.max(...data))]}`;
+  const peakIndex = data.indexOf(Math.max(...data));
+  const peakLabel = labels[peakIndex] || 'N/A';
+  document.getElementById('revenueInsights').innerHTML = `<i class="fas fa-chart-line"></i> Total: ₱${total.toLocaleString()} · Peak: ${peakLabel} (₱${Math.max(...data).toLocaleString()})`;
 }
 
-// Initialize all charts
-updateRevenueChart(weekdays, revenueData, <?= $totalWeekRevenue ?>, 'daily');
+// Initialize charts with YEARLY as default
+updateRevenueChart(yearlyYears, yearlyRevenueData, yearlyTotal, 'yearly');
 buildChart('chartActivity', 'line', { labels: weekLabels, datasets: [{ data: weeklyBookingsData, borderColor: '#111318', tension: 0.3, fill: true }] });
 buildChart('popularityChart', 'bar', { labels: mountainNames, datasets: [{ data: mountainBookings, backgroundColor: '#d4af37', borderRadius: 6 }] });
 buildChart('hourlyChart', 'bar', { labels: Array.from({length:24}, (_,i)=>`${i}:00`), datasets: [{ data: hourlyData, backgroundColor: (ctx) => ctx.raw === Math.max(...hourlyData) ? '#c0392b' : '#adb5bd', borderRadius: 4 }] });
 
-// Revenue filter handlers - FIXED to prevent layout shift
+// Revenue filter handlers
 document.getElementById('revenueViewFilter')?.addEventListener('change', async (e) => {
   const view = e.target.value;
   const yearFilter = document.getElementById('revenueYearFilter');
   
-  // Enable/disable year filter (not hide/show)
-  if (view === 'yearly' || view === 'monthly') {
+  if (view === 'yearly') {
+    yearFilter.disabled = true;
+    yearFilter.style.opacity = '0.5';
+  } else if (view === 'monthly') {
     yearFilter.disabled = false;
     yearFilter.style.opacity = '1';
   } else {
@@ -671,9 +720,12 @@ document.getElementById('revenueViewFilter')?.addEventListener('change', async (
   }
 });
 
-// Initial state - disable year filter for daily view
-document.getElementById('revenueYearFilter').disabled = true;
-document.getElementById('revenueYearFilter').style.opacity = '0.5';
+// Initial state - disable year filter for yearly (default)
+const yearFilter = document.getElementById('revenueYearFilter');
+if (yearFilter) {
+  yearFilter.disabled = true;
+  yearFilter.style.opacity = '0.5';
+}
 
 document.getElementById('revenueYearFilter')?.addEventListener('change', async (e) => {
   const view = document.getElementById('revenueViewFilter').value;
@@ -687,6 +739,16 @@ document.getElementById('revenueYearFilter')?.addEventListener('change', async (
   if (data) updateRevenueChart(data.labels, data.data, data.total, view);
 });
 
+document.getElementById('refreshStatsBtn')?.addEventListener('click', () => location.reload());
+document.getElementById('viewAllBookings')?.addEventListener('click', () => window.location.href = '/pages/admin/hikers.php?tab=bookings-tab');
+
+function acknowledgeAlert(alertId) {
+  fetch(window.location.href, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+    body: new URLSearchParams({ action: 'acknowledge_alert', alert_id: alertId })
+  }).then(() => location.reload()).catch(() => alert('Alert acknowledged'));
+}
 document.getElementById('refreshStatsBtn')?.addEventListener('click', () => location.reload());
 document.getElementById('viewAllBookings')?.addEventListener('click', () => window.location.href = '/pages/admin/hikers.php?tab=bookings-tab');
 
