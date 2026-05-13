@@ -18,18 +18,17 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
         $action = $_POST['action'];
         
         if ($action === 'get_revenue_data') {
-            $view = $_POST['view'] ?? 'yearly';  // Changed default to yearly
+            $view = $_POST['view'] ?? 'daily';
             $response = ['labels' => [], 'data' => [], 'total' => 0, 'metadata' => []];
             
             if ($view === 'daily') {
-                // FIX: Use hike_date instead of created_at
                 $weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 $response['labels'] = $weekdays;
                 for ($i = 0; $i < 7; $i++) {
                     $date = date('Y-m-d', strtotime('monday this week +' . $i . ' days'));
                     $stmt = $pdo->prepare("
                         SELECT COALESCE(SUM(total_amount), 0) as total, COUNT(*) as booking_count
-                        FROM bookings WHERE payment_status = 'paid' AND DATE(hike_date) = ?
+                        FROM bookings WHERE payment_status = 'paid' AND DATE(created_at) = ?
                     ");
                     $stmt->execute([$date]);
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -38,14 +37,13 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                     $response['metadata'][] = ['revenue' => $row['total'], 'booking_count' => $row['booking_count']];
                 }
             } elseif ($view === 'monthly') {
-                // FIX: Use hike_date instead of created_at
                 $year = $_POST['year'] ?? date('Y');
                 $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                 $response['labels'] = $months;
                 for ($month = 1; $month <= 12; $month++) {
                     $stmt = $pdo->prepare("
                         SELECT COALESCE(SUM(total_amount), 0) as total
-                        FROM bookings WHERE payment_status = 'paid' AND YEAR(hike_date) = ? AND MONTH(hike_date) = ?
+                        FROM bookings WHERE payment_status = 'paid' AND YEAR(created_at) = ? AND MONTH(created_at) = ?
                     ");
                     $stmt->execute([$year, $month]);
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -53,14 +51,13 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
                     $response['total'] += $row['total'];
                 }
             } elseif ($view === 'yearly') {
-                // FIX: Use hike_date instead of created_at
                 $currentYear = date('Y');
                 for ($i = 4; $i >= 0; $i--) {
                     $year = $currentYear - $i;
                     $response['labels'][] = $year;
                     $stmt = $pdo->prepare("
                         SELECT COALESCE(SUM(total_amount), 0) as total
-                        FROM bookings WHERE payment_status = 'paid' AND YEAR(hike_date) = ?
+                        FROM bookings WHERE payment_status = 'paid' AND YEAR(created_at) = ?
                     ");
                     $stmt->execute([$year]);
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -252,13 +249,13 @@ function getStatusBadgeClass($status) {
     }
 }
 
-// Revenue chart data - FIX to use hike_date
+// Revenue chart data
 $weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 $dailyRevenue = [];
 $totalWeekRevenue = 0;
 for ($i = 0; $i < 7; $i++) {
     $date = date('Y-m-d', strtotime('monday this week +' . $i . ' days'));
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings WHERE payment_status = 'paid' AND DATE(hike_date) = ?");
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings WHERE payment_status = 'paid' AND DATE(created_at) = ?");
     $stmt->execute([$date]);
     $revenue = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
     $dailyRevenue[] = $revenue;
@@ -431,7 +428,7 @@ for ($i = 3; $i >= 0; $i--) {
         <select id="revenueViewFilter" class="revenue-filter-select">
           <option value="daily">Weekly</option>
           <option value="monthly">Monthly</option>
-          <option value="yearly" selected>Yearly</option>  <!-- Add selected here -->
+          <option value="yearly" selected>Yearly</option> 
         </select>
         <select id="revenueYearFilter" class="revenue-filter-select">
           <?php for ($y = date('Y')-4; $y <= date('Y'); $y++): ?>
