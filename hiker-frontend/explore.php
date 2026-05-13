@@ -205,28 +205,22 @@ foreach ($dbGuideReviews as $rev) {
 
 // --- FIRST: Update guide total_trips from bookings ---
 try {
-    // Update each guide's total_trips count from bookings table
+    // Direct update - count all finished bookings regardless of completed_at
     $stmt = $pdo->prepare("
         UPDATE guides g
-        SET g.total_trips = (
-            SELECT COUNT(*)
-            FROM bookings b
-            WHERE b.guide_id = g.id 
-            AND b.status = 'finished'
-            AND b.completed_at IS NOT NULL
-        )
+        LEFT JOIN (
+            SELECT guide_id, COUNT(*) as trip_count
+            FROM bookings
+            WHERE status = 'finished'
+            GROUP BY guide_id
+        ) b ON g.id = b.guide_id
+        SET g.total_trips = COALESCE(b.trip_count, 0)
     ");
     $stmt->execute();
     
-    // Set any NULL values to 0
-    $stmt = $pdo->prepare("UPDATE guides SET total_trips = 0 WHERE total_trips IS NULL");
-    $stmt->execute();
-    
 } catch (PDOException $e) {
-    // Silently fail - don't break the page if update fails
     error_log("Failed to update guide trips: " . $e->getMessage());
 }
-
 // --- THEN: Fetch guides with UPDATED data ---
 $stmt = $pdo->query("
     SELECT g.*, u.name as guide_name, u.avatar, u.phone, u.email, u.hiking_level, u.home_region
