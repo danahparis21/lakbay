@@ -203,7 +203,31 @@ foreach ($dbGuideReviews as $rev) {
     ];
 }
 
-// --- Guides ---
+// --- FIRST: Update guide total_trips from bookings ---
+try {
+    // Update each guide's total_trips count from bookings table
+    $stmt = $pdo->prepare("
+        UPDATE guides g
+        SET g.total_trips = (
+            SELECT COUNT(*)
+            FROM bookings b
+            WHERE b.guide_id = g.id 
+            AND b.status = 'finished'
+            AND b.completed_at IS NOT NULL
+        )
+    ");
+    $stmt->execute();
+    
+    // Set any NULL values to 0
+    $stmt = $pdo->prepare("UPDATE guides SET total_trips = 0 WHERE total_trips IS NULL");
+    $stmt->execute();
+    
+} catch (PDOException $e) {
+    // Silently fail - don't break the page if update fails
+    error_log("Failed to update guide trips: " . $e->getMessage());
+}
+
+// --- THEN: Fetch guides with UPDATED data ---
 $stmt = $pdo->query("
     SELECT g.*, u.name as guide_name, u.avatar, u.phone, u.email, u.hiking_level, u.home_region
     FROM guides g 
@@ -240,13 +264,12 @@ foreach ($dbGuides as $dbGuide) {
         'specialization'   => $dbGuide['specialization'],
         'years_experience' => intval($dbGuide['years_experience']),
         'rating'           => $avgRating,
-        'total_trips'      => intval($dbGuide['total_trips']),
+        'total_trips'      => intval($dbGuide['total_trips']), // This will now have the updated value
         'bio'              => $dbGuide['bio'],
         'is_available'     => boolval($dbGuide['is_available']),
         'mountains'        => $guideMountains,
         'reviews'          => $guideRevs,
         'reviews_count'    => count($guideRevs),
-        // ===== ADD THESE NEW FIELDS =====
         'gcash_number'     => $dbGuide['gcash_number'] ?? null,
         'gcash_name'       => $dbGuide['gcash_name'] ?? null,
         'gcash_qr_code'    => $dbGuide['gcash_qr_code'] ?? null,
@@ -258,6 +281,8 @@ foreach ($dbGuides as $dbGuide) {
         'trail_status'     => $dbGuide['trail_status'] ?? 'safe',
     ];
 }
+
+// Fallback guides (only if no guides in database)
 if (empty($guides)) {
     $guides = [
         [
@@ -279,7 +304,7 @@ if (empty($guides)) {
             'mountains' => [['id' => 1, 'name' => 'Mt. Batulao', 'difficulty' => 'Easy', 'location' => 'Nasugbu, Batangas']],
             'reviews' => [],
             'reviews_count' => 0,
-            'is_approved' => 1,  // Add this
+            'is_approved' => 1,
         ],
         [
             'id' => 2,
@@ -300,7 +325,7 @@ if (empty($guides)) {
             'mountains' => [['id' => 2, 'name' => 'Mt. Talamitam', 'difficulty' => 'Moderate', 'location' => 'Nasugbu, Batangas']],
             'reviews' => [],
             'reviews_count' => 0,
-            'is_approved' => 1,  // Add this
+            'is_approved' => 1,
         ],
     ];
 }
