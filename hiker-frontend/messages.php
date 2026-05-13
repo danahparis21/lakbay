@@ -501,7 +501,11 @@ function submitPaymentProof($pdo, $hikerId) {
         <div style="padding:24px;">
             <div style="margin-bottom:20px;">
                 <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:#1E2F3D;">REFERENCE NUMBER</label>
-                <input type="text" id="refNumber" class="inp" placeholder="e.g. GCash Ref #1234567890" style="width:100%; padding:12px; border:1.5px solid #E2E8F0; border-radius:12px;">
+                <input type="text" id="refNumber" class="inp" 
+       placeholder="e.g. 1234567890123" 
+       maxlength="13" 
+       oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+       style="width:100%; padding:12px; border:1.5px solid #E2E8F0; border-radius:12px;">
             </div>
             <div style="margin-bottom:20px;">
                 <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:#1E2F3D;">PROOF OF PAYMENT (Screenshot)</label>
@@ -1666,6 +1670,12 @@ async function submitProofOfPayment() {
     
     if (!refNumber || !file) {
         showToast('❌ Please fill in all fields');
+        return;
+    }
+    
+    // ADD THIS VALIDATION - Check if reference number has exactly 13 digits
+    if (!/^\d{13}$/.test(refNumber)) {
+        showToast('❌ Reference number must be exactly 13 digits (0-9 only)');
         return;
     }
     
