@@ -411,34 +411,28 @@ $topGuidesPerMountain = array_values($topGuidesPerMountain);
                                 </div>
 
                                 <!-- Action buttons -->
-                                <div class="guide-actions">
-                                    <!-- Message -->
-                                    <button class="btn-icon message"
-                                            title="Message guide"
-                                            onclick="openMessageModal(<?= $guide['guide_id'] ?>, '<?= htmlspecialchars(addslashes($guide['name'])) ?>')">
-                                        <i class="fas fa-comment"></i>
-                                    </button>
-                                    <!-- Edit -->
-                                    <button class="btn-icon"
-                                            title="Edit guide"
-                                            onclick="openEditModal(<?= htmlspecialchars(json_encode([
-                                                'guide_id'        => $guide['guide_id'],
-                                                'name'            => $guide['name'],
-                                                'phone'           => $guide['phone'] ?? '',
-                                                'specialization'  => $guide['specialization'] ?? '',
-                                                'years_experience'=> $guide['years_experience'] ?? '',
-                                                'bio'             => $guide['bio'] ?? '',
-                                                'mountain_ids'    => $mountainIds,
-                                            ])) ?>)">
-                                        <i class="fas fa-pen-to-square"></i>
-                                    </button>
-                                    <!-- Deactivate -->
-                                    <button class="btn-icon danger"
-                                            title="Remove from roster"
-                                            onclick="openDeactivateModal(<?= $guide['guide_id'] ?>, '<?= htmlspecialchars(addslashes($guide['name'])) ?>', '<?= htmlspecialchars($initial) ?>')">
-                                        <i class="fas fa-user-slash"></i>
-                                    </button>
-                                </div>
+<div class="guide-actions">
+    <!-- Edit -->
+    <button class="btn-icon"
+            title="Edit guide"
+            onclick="openEditModal(<?= htmlspecialchars(json_encode([
+                'guide_id'        => $guide['guide_id'],
+                'name'            => $guide['name'],
+                'phone'           => $guide['phone'] ?? '',
+                'specialization'  => $guide['specialization'] ?? '',
+                'years_experience'=> $guide['years_experience'] ?? '',
+                'bio'             => $guide['bio'] ?? '',
+                'mountain_ids'    => $mountainIds,
+            ])) ?>)">
+        <i class="fas fa-pen-to-square"></i>
+    </button>
+    <!-- Deactivate -->
+    <button class="btn-icon danger"
+            title="Remove from roster"
+            onclick="openDeactivateModal(<?= $guide['guide_id'] ?>, '<?= htmlspecialchars(addslashes($guide['name'])) ?>', '<?= htmlspecialchars($initial) ?>')">
+        <i class="fas fa-user-slash"></i>
+    </button>
+</div>
                             </div>
                             <?php endforeach; ?>
                         <?php else: ?>
@@ -1097,8 +1091,8 @@ if (file_exists($modalPath)) include_once $modalPath;
 $logoutModalPath = __DIR__ . '/../../includes/logout-modal.php';
 if (file_exists($logoutModalPath)) include_once $logoutModalPath;
 
-$messagingModalPath = __DIR__ . '/messaging-modal.php';
-if (file_exists($messagingModalPath)) include_once $messagingModalPath;
+// $messagingModalPath = __DIR__ . '/messaging-modal.php';
+// if (file_exists($messagingModalPath)) include_once $messagingModalPath;
 ?>
 </body>
 </html>
