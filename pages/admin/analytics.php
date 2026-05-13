@@ -50,7 +50,7 @@ $hourlyDistribution = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Find peak booking hour
 $peakHour = array_reduce($hourlyDistribution, function($carry, $item) {
-    return (!$carry || $item['booking_count'] > $carry['booking_count']) ? $item : $carry;
+    return (!$carry || $item['hike_count'] > $carry['hike_count']) ? $item : $carry;
 }, null);
 
 // 2. WEEKDAY DISTRIBUTION - Which days are busiest?
