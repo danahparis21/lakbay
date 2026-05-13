@@ -7,21 +7,73 @@ require_once __DIR__ . '/config/db.php';
 
 $success = false;
 $errors  = [];
-
-function extractNameFromID($imagePath) {
-    $outputFile = tempnam(sys_get_temp_dir(), 'ocr_');
+function detectIDType($text) {
+    $textUpper = strtoupper($text);
     
-    // Use PSM 6 (uniform block of text) - best for structured IDs
-    exec("tesseract " . escapeshellarg($imagePath) . " " . escapeshellarg($outputFile) . " -l eng --psm 6 2>&1");
-    
-    $text = '';
-    if (file_exists($outputFile . '.txt')) {
-        $text = file_get_contents($outputFile . '.txt');
-        unlink($outputFile . '.txt');
+    if (strpos($textUpper, 'PHILSYS') !== false || strpos($textUpper, 'PAMBANSANG PAGKAKAKILANLAN') !== false || strpos($textUpper, 'PHILIPPINE IDENTIFICATION CARD') !== false) {
+        return 'PhilSys National ID';
     }
     
-    // If first attempt fails, try with image preprocessing
-    if (strlen(trim($text)) < 30) {
+    if (strpos($textUpper, 'UNIFIED MULTI-PURPOSE ID') !== false || strpos($textUpper, 'UMID') !== false || strpos($textUpper, 'CRN-') !== false) {
+        return 'UMID';
+    }
+    
+    if (strpos($textUpper, 'PERSON WITH DISABILITY') !== false || strpos($textUpper, 'PWD') !== false || strpos($textUpper, 'REPUBLIC ACTS 9442') !== false) {
+        return 'PWD ID';
+    }
+    
+    if (strpos($textUpper, "DRIVER'S LICENSE") !== false || strpos($textUpper, 'DRIVING LICENSE') !== false || strpos($textUpper, 'LTO') !== false) {
+        return "Driver's License";
+    }
+    
+    if (strpos($textUpper, 'PASSPORT') !== false || strpos($textUpper, 'REPUBLIC OF THE PHILIPPINES PASSPORT') !== false) {
+        return 'Philippine Passport';
+    }
+    
+    if (strpos($textUpper, 'SSS') !== false || strpos($textUpper, 'SOCIAL SECURITY SYSTEM') !== false) {
+        return 'SSS ID';
+    }
+    
+    if (strpos($textUpper, 'GSIS') !== false || strpos($textUpper, 'GOVERNMENT SERVICE INSURANCE SYSTEM') !== false) {
+        return 'GSIS ID';
+    }
+    
+    if (strpos($textUpper, 'PRC') !== false || strpos($textUpper, 'PROFESSIONAL REGULATION COMMISSION') !== false) {
+        return 'PRC ID';
+    }
+    
+    if (strpos($textUpper, "VOTER'S ID") !== false || strpos($textUpper, 'VOTER ID') !== false || strpos($textUpper, 'COMELEC') !== false) {
+        return "Voter's ID";
+    }
+    
+    if (strpos($textUpper, 'POSTAL ID') !== false || strpos($textUpper, 'PHILIPPINE POSTAL') !== false) {
+        return 'Postal ID';
+    }
+    
+    if (strpos($textUpper, 'SENIOR CITIZEN') !== false) {
+        return 'Senior Citizen ID';
+    }
+    
+    return null;
+}
+
+function extractNameFromID($imagePath) {
+    // Try multiple PSM modes and take the best result
+    $psmModes = [6, 4, 3, 8]; // 6=uniform block, 4=single column, 3=auto, 8=single word
+    $allText = '';
+    
+    foreach ($psmModes as $psm) {
+        $outputFile = tempnam(sys_get_temp_dir(), 'ocr_');
+        exec("tesseract " . escapeshellarg($imagePath) . " " . escapeshellarg($outputFile) . " -l eng --psm $psm 2>&1");
+        if (file_exists($outputFile . '.txt')) {
+            $text = file_get_contents($outputFile . '.txt');
+            $allText .= "\n" . $text;
+            unlink($outputFile . '.txt');
+        }
+    }
+    
+    // Try with image preprocessing if text is sparse
+    if (strlen(trim($allText)) < 30) {
         $processedPath = tempnam(sys_get_temp_dir(), 'ocr_proc_') . '.png';
         $convertCmd = "convert " . escapeshellarg($imagePath) . " -colorspace Gray -contrast-stretch 5% -sharpen 0x1 -resize 200% " . escapeshellarg($processedPath) . " 2>&1";
         exec($convertCmd);
@@ -30,189 +82,137 @@ function extractNameFromID($imagePath) {
             $outputFile2 = tempnam(sys_get_temp_dir(), 'ocr_enh_');
             exec("tesseract " . escapeshellarg($processedPath) . " " . escapeshellarg($outputFile2) . " -l eng --psm 6 2>&1");
             if (file_exists($outputFile2 . '.txt')) {
-                $text = file_get_contents($outputFile2 . '.txt');
+                $allText .= "\n" . file_get_contents($outputFile2 . '.txt');
                 unlink($outputFile2 . '.txt');
             }
             unlink($processedPath);
         }
     }
     
-    // Debug: Log the raw OCR output
-    error_log("OCR Raw Text: " . $text);
-    
-    // Clean up the text - preserve line breaks
-    $lines = preg_split('/\r\n|\r|\n/', $text);
-    $fullText = implode(' ', $lines);
+    // Get lines and clean
+    $lines = preg_split('/\r\n|\r|\n/', $allText);
+    $lines = array_map('trim', $lines);
+    $lines = array_filter($lines, function($line) {
+        return strlen($line) > 0;
+    });
     
     // ============================================
-    // ID TYPE 1: PHILSYS NATIONAL ID
+    // STRATEGY 1: Look for label-value pairs
     // ============================================
     $lastName = '';
-    $givenNames = '';
+    $firstName = '';
     $middleName = '';
     
     for ($i = 0; $i < count($lines); $i++) {
-        $line = trim($lines[$i]);
+        $line = strtoupper($lines[$i]);
         
-        // Look for Last Name field (PhilSys)
-        if (preg_match('/(Apelyido|Last Name|APELYIDO|Apehido)/i', $line) && $i + 1 < count($lines)) {
+        // PhilSys: Apelyido/Last Name -> next line is last name
+        if ((strpos($line, 'APELYIDO') !== false || strpos($line, 'LAST NAME') !== false) && isset($lines[$i + 1])) {
+            $lastName = trim($lines[$i + 1]);
+        }
+        
+        // PhilSys: Mga Pangalan/Given Names -> next line(s) are given names
+        if ((strpos($line, 'MGA PANGALAN') !== false || strpos($line, 'GIVEN NAMES') !== false || strpos($line, 'PANGALAN') !== false) && isset($lines[$i + 1])) {
+            $firstName = trim($lines[$i + 1]);
+            // Check if there are multiple lines of given names
+            if (isset($lines[$i + 2]) && !preg_match('/(GITNANG|MIDDLE|APELYIDO|LAST|SEX|KASARIAN|BIRTH|DATE)/i', $lines[$i + 2])) {
+                $firstName .= ' ' . trim($lines[$i + 2]);
+            }
+        }
+        
+        // UMID: SURNAME, GIVEN NAME, MIDDLE NAME
+        if (strpos($line, 'SURNAME') !== false && isset($lines[$i + 1])) {
+            $lastName = trim($lines[$i + 1]);
+        }
+        if (strpos($line, 'GIVEN NAME') !== false && isset($lines[$i + 1])) {
+            $firstName = trim($lines[$i + 1]);
+        }
+        if (strpos($line, 'MIDDLE NAME') !== false && isset($lines[$i + 1])) {
+            $middleName = trim($lines[$i + 1]);
+        }
+        
+        // PWD ID: "NAME" label followed by name line
+        if ($line === 'NAME' && isset($lines[$i + 1])) {
             $candidate = trim($lines[$i + 1]);
-            if (!preg_match('/(Pangalan|Given|Middle|Sex|Kapanganakan|Birth|Date|Kasarian|Gitnang)/i', $candidate)) {
-                $lastName = preg_replace('/[^A-Za-z\s]/', '', $candidate);
-            }
-        }
-        
-        // Look for Given Names field (PhilSys)
-        if (preg_match('/(Mga Pangalan|Given Names|Pangalan|GIVEN NAMES)/i', $line)) {
-            $givenParts = [];
-            for ($j = $i + 1; $j < count($lines); $j++) {
-                $nextLine = trim($lines[$j]);
-                if (preg_match('/(Gitnang|Middle|Apelyido|Last|Sex|Kapanganakan|Birth|Petsa|Kasarian)/i', $nextLine)) {
-                    break;
+            // Filter out non-name words
+            if (!preg_match('/(PSYCHOSOCIAL|DISABILITY|SIGNATURE)/i', $candidate)) {
+                $nameParts = explode(' ', $candidate);
+                if (count($nameParts) >= 2) {
+                    $firstName = $nameParts[0];
+                    $lastName = $nameParts[count($nameParts) - 1];
+                    if (count($nameParts) > 2) {
+                        $middleName = implode(' ', array_slice($nameParts, 1, -1));
+                    }
                 }
-                if (!empty($nextLine) && !preg_match('/^\d+$/', $nextLine)) {
-                    $givenParts[] = $nextLine;
-                }
-            }
-            if (!empty($givenParts)) {
-                $givenNames = implode(' ', $givenParts);
-                $givenNames = preg_replace('/[^A-Za-z\s]/', '', $givenNames);
-            }
-        }
-        
-        // Look for Middle Name field (PhilSys)
-        if (preg_match('/(Gitnang Apelyido|Middle Name|GITNANG|Gintang Apehido|Ginang Apehido)/i', $line)) {
-            $middleParts = [];
-            for ($j = $i + 1; $j < count($lines); $j++) {
-                $nextLine = trim($lines[$j]);
-                if (preg_match('/(Petsa|Date|Kapanganakan|Birth|Kasarian|Sex|Tirahan|Address)/i', $nextLine)) {
-                    break;
-                }
-                if (!empty($nextLine) && !preg_match('/^\d+$/', $nextLine)) {
-                    $middleParts[] = $nextLine;
-                }
-            }
-            if (!empty($middleParts)) {
-                $middleName = implode(' ', $middleParts);
-                $middleName = preg_replace('/[^A-Za-z\s]/', '', $middleName);
             }
         }
     }
     
-    // Combine PhilSys name parts
-    if (!empty($lastName) && !empty($givenNames)) {
-        $firstName = explode(' ', $givenNames)[0]; // Take only first given name
+    // Build name from found parts
+    if (!empty($lastName) && !empty($firstName)) {
         $fullName = ucwords(strtolower($firstName . ' ' . $lastName));
-        
-        if (strlen($fullName) > 5 && !preg_match('/(Republic|Philippines|Identification|Card)/i', $fullName)) {
-            return $fullName;
+        if (!empty($middleName)) {
+            $middleInitial = strtoupper(substr($middleName, 0, 1));
+            $fullName = ucwords(strtolower($firstName . ' ' . $lastName . ' ' . $middleInitial . '.'));
+        }
+        if (strlen($fullName) > 5 && !preg_match('/(REPUBLIC|PHILIPPINES|CARD|ID)/i', $fullName)) {
+            return ['name' => $fullName, 'id_type' => null];
         }
     }
     
     // ============================================
-    // ID TYPE 2: UMID (Unified Multi-Purpose ID)
-    // Format: SURNAME, GIVEN NAME, MIDDLE NAME
+    // STRATEGY 2: Find all-caps lines with 2-3 words (likely a name)
     // ============================================
-    $umidSurname = '';
-    $umidGivenName = '';
-    $umidMiddleName = '';
+    $excludeWords = ['REPUBLIC', 'PHILIPPINES', 'PROVINCE', 'CITY', 'MUNICIPALITY', 'PAMBANSAG', 
+                     'PAGKAKAKILANLAN', 'IDENTIFICATION', 'CARD', 'SURNAME', 'GIVEN', 'MIDDLE', 
+                     'NAME', 'SEX', 'BIRTH', 'DATE', 'ADDRESS', 'SIGNATURE', 'DISABILITY', 'PSYCHOSOCIAL',
+                     'NON-TRANFERABLE', 'VALID', 'VIOLATION', 'PUNISHABLE', 'BENEFITS', 'PRIVILEGES'];
     
-    for ($i = 0; $i < count($lines); $i++) {
-        $line = trim($lines[$i]);
-        
-        if (preg_match('/SURNAME/i', $line) && $i + 1 < count($lines)) {
-            $umidSurname = trim(preg_replace('/[^A-Za-z\s]/', '', $lines[$i + 1]));
-        }
-        
-        if (preg_match('/GIVEN NAME/i', $line) && $i + 1 < count($lines)) {
-            $umidGivenName = trim(preg_replace('/[^A-Za-z\s]/', '', $lines[$i + 1]));
-        }
-        
-        if (preg_match('/MIDDLE NAME/i', $line) && $i + 1 < count($lines)) {
-            $umidMiddleName = trim(preg_replace('/[^A-Za-z\s]/', '', $lines[$i + 1]));
-        }
-    }
-    
-    if (!empty($umidSurname) && !empty($umidGivenName)) {
-        $fullName = ucwords(strtolower($umidGivenName . ' ' . $umidSurname));
-        if (!empty($umidMiddleName)) {
-            $middleInitial = strtoupper(substr($umidMiddleName, 0, 1));
-            $fullName = ucwords(strtolower($umidGivenName . ' ' . $umidSurname . ' ' . $middleInitial . '.'));
-        }
-        return $fullName;
-    }
-    
-    // ============================================
-    // ID TYPE 3: PWD ID (Person With Disability)
-    // Format: Name appears on a line by itself, often after "NAME" label
-    // ============================================
-    
-    // Look for "NAME" label followed by name
-    for ($i = 0; $i < count($lines); $i++) {
-        $line = trim($lines[$i]);
-        
-        if (preg_match('/^NAME$/i', $line) && $i + 1 < count($lines)) {
-            $candidate = trim($lines[$i + 1]);
-            // Filter out "PSYCHOSOCIAL" and other non-name text
-            if (!preg_match('/(PSYCHOSOCIAL|DISABILITY|SIGNATURE|BENEFITS|PRIVILEGES|VIOLATION|PUNISHABLE)/i', $candidate)) {
-                $candidate = preg_replace('/[^A-Za-z\s]/', '', $candidate);
-                if (strlen($candidate) > 5 && strpos($candidate, ' ') !== false) {
-                    return ucwords(strtolower($candidate));
-                }
-            }
-        }
-    }
-    
-    // For PWD ID - name might be the first all-caps line with 2-3 words
     foreach ($lines as $line) {
-        $line = trim($line);
-        // Look for pattern like "JUAN DELA CRUZ" (all caps, 2-3 words)
-        if (preg_match('/^[A-Z]{2,}(?:\s+[A-Z]{2,}){1,2}$/', $line)) {
-            $exclude = ['REPUBLIC', 'PHILIPPINES', 'PROVINCE', 'CITY', 'MUNICIPALITY', 'PSYCHOSOCIAL', 
-                       'DISABILITY', 'SIGNATURE', 'BENEFITS', 'PRIVILEGES', 'VIOLATION', 'PUNISHABLE',
-                       'NON-TRANFERABLE', 'VALID', 'ANYWHERE'];
+        $lineUpper = strtoupper($line);
+        // Check if it's all caps with 2-4 words
+        if (preg_match('/^[A-Z]{2,}(?:\s+[A-Z]{2,}){1,3}$/', $lineUpper)) {
             $isValid = true;
-            foreach ($exclude as $word) {
-                if (stripos($line, $word) !== false) {
+            foreach ($excludeWords as $exclude) {
+                if (strpos($lineUpper, $exclude) !== false) {
                     $isValid = false;
                     break;
                 }
             }
-            if ($isValid && strlen($line) > 8) {
-                return ucwords(strtolower($line));
+            // Also check it's not just numbers
+            if ($isValid && !preg_match('/^\d+$/', $lineUpper) && strlen($lineUpper) > 8) {
+                $name = ucwords(strtolower($lineUpper));
+                return ['name' => $name, 'id_type' => null];
             }
         }
     }
     
     // ============================================
-    // FALLBACK: Look for common Filipino surnames
+    // STRATEGY 3: Look for common Filipino surname patterns
     // ============================================
     $commonSurnames = ['CRUZ', 'SANTOS', 'REYES', 'GARCIA', 'MENDOZA', 'DELA CRUZ', 'BAUTISTA', 
                        'GUEVARA', 'VERGEL', 'ROSARIO', 'HERNANDEZ', 'LIGON', 'PADILLA', 'SEBASTIAN', 
-                       'CABRERA', 'ZAMORA', 'MORENO', 'ALONZO', 'NATIVIDAD', 'YU', 'CAYETANO', 'DEGUZMAN', 
-                       'VILLANUEVA', 'DALISAY', 'SANTOS', 'CRUZ'];
+                       'CABRERA', 'ZAMORA', 'MORENO', 'ALONZO', 'NATIVIDAD', 'YU', 'CAYETANO', 
+                       'VILLANUEVA', 'DALISAY', 'TORRES', 'RAMOS', 'FLORES'];
     
     foreach ($lines as $i => $line) {
-        $lineUpper = strtoupper(trim($line));
+        $lineUpper = strtoupper($line);
         foreach ($commonSurnames as $surname) {
             if (strpos($lineUpper, $surname) !== false) {
-                $fullName = ucwords(strtolower($lineUpper));
+                // Found a surname! Try to get first name from previous line
+                $surnameClean = ucwords(strtolower($surname));
+                $firstNameClean = '';
                 
-                // Check previous line for given name
-                if ($i > 0) {
-                    $prevLine = trim($lines[$i - 1]);
-                    if (!preg_match('/(SURNAME|GIVEN|NAME|APELYIDO|PANGALAN|MIDDLE|SEX|BIRTH|ADDRESS)/i', $prevLine) && 
-                        strlen($prevLine) > 2 && strlen($prevLine) < 30) {
-                        $prevLine = preg_replace('/[^A-Za-z\s]/', '', $prevLine);
-                        $fullName = ucwords(strtolower($prevLine)) . ' ' . $fullName;
+                if ($i > 0 && !preg_match('/(' . implode('|', $excludeWords) . ')/i', $lines[$i - 1])) {
+                    $firstNameClean = ucwords(strtolower(trim($lines[$i - 1])));
+                    if (strlen($firstNameClean) < 20 && strpos($firstNameClean, ' ') === false) {
+                        return ['name' => $firstNameClean . ' ' . $surnameClean, 'id_type' => null];
                     }
                 }
                 
-                $fullName = preg_replace('/\s+/', ' ', $fullName);
-                $fullName = trim($fullName);
-                
-                if (strlen($fullName) > 5 && strpos($fullName, ' ') !== false) {
-                    return $fullName;
+                // If no first name found, just return the surname (better than nothing)
+                if (strlen($surnameClean) > 3) {
+                    return ['name' => $surnameClean, 'id_type' => null];
                 }
             }
         }
@@ -220,7 +220,6 @@ function extractNameFromID($imagePath) {
     
     return null;
 }
-
 // Handle OCR AJAX request with Tesseract
 if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] === 'XMLHttpRequest') {
     header('Content-Type: application/json');
@@ -245,8 +244,14 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'
     $extractedName = extractNameFromID($tempPath);
     
     if ($extractedName && strlen($extractedName) > 3) {
-        echo json_encode(['success' => true, 'name' => $extractedName]);
-    } else {
+    // Also detect ID type from the raw text
+    $detectedIdType = detectIDType($allText);
+    echo json_encode([
+        'success' => true, 
+        'name' => $extractedName,
+        'detected_id_type' => $detectedIdType
+    ]);
+} else {
         // If still failing, return the raw text for debugging
         $debugFile = tempnam(sys_get_temp_dir(), 'ocr_debug_');
         exec("tesseract " . escapeshellarg($tempPath) . " " . escapeshellarg($debugFile) . " -l eng 2>&1");
@@ -666,17 +671,40 @@ async function handleIdUpload(input) {
         const result = await response.json();
         
         if (result.success && result.name) {
-            nameField.value = result.name;
-            hiddenField.value = result.name;
-            doneMsg.textContent = `✓ Name read: "${result.name}" — please verify`;
-            doneEl.className = 'ocr-status done';
-            nameField.style.borderColor = '#4a7c4a';
-            nameField.style.backgroundColor = 'rgba(74,124,74,.05)';
-            setTimeout(() => {
-                nameField.style.borderColor = '';
-                nameField.style.backgroundColor = '';
-            }, 2000);
-        } else {
+    nameField.value = result.name;
+    hiddenField.value = result.name;
+    doneMsg.textContent = `✓ Name read: "${result.name}" — please verify`;
+    doneEl.className = 'ocr-status done';
+    nameField.style.borderColor = '#4a7c4a';
+    nameField.style.backgroundColor = 'rgba(74,124,74,.05)';
+    
+    // Auto-select ID type if detected
+    if (result.detected_id_type) {
+        // Find and click the matching radio button
+        const radioButtons = document.querySelectorAll('input[name="id_type"]');
+        for (let radio of radioButtons) {
+            if (radio.value === result.detected_id_type) {
+                radio.checked = true;
+                // Add visual feedback
+                const label = radio.nextElementSibling;
+                if (label) {
+                    label.style.borderColor = '#4a7c4a';
+                    label.style.background = 'rgba(74,124,74,.07)';
+                    setTimeout(() => {
+                        label.style.borderColor = '';
+                        label.style.background = '';
+                    }, 2000);
+                }
+                break;
+            }
+        }
+    }
+    
+    setTimeout(() => {
+        nameField.style.borderColor = '';
+        nameField.style.backgroundColor = '';
+    }, 2000);
+} else {
             let errorMessage = result.error || 'Could not read name. Please type it manually.';
             errMsg.textContent = errorMessage;
             errEl.className = 'ocr-status error';
