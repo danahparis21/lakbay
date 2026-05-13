@@ -833,7 +833,7 @@ function displayRecommendations() {
   if(recommendations.length === 0) recommendations = mountains.slice(0,3);
   
   const recHtml = recommendations.map(m => `
-    <div class="rec-card" onclick="window.location='explore.php'">
+    <div class="rec-card" onclick="window.location='explore.php?recommend=${encodeURIComponent(m.name)}'">
       <div class="rec-card-img" style="background-image:url('${m.img}')">
         <div class="rec-card-label">${m.name}</div>
       </div>

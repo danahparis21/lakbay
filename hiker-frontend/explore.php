@@ -3818,5 +3818,32 @@ document.addEventListener('DOMContentLoaded', function() {
   loadAllWeather();
 });
 </script>
+<script>
+// Auto-open recommended mountain from quiz
+(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const recommendedMtn = urlParams.get('recommend');
+    
+    if (recommendedMtn && mountains && mountains.length > 0) {
+        // Find the mountain by name (case-insensitive)
+        const mountain = mountains.find(m => 
+            m.name.toLowerCase() === recommendedMtn.toLowerCase() ||
+            m.name.toLowerCase().includes(recommendedMtn.toLowerCase())
+        );
+        
+        if (mountain) {
+            // Small delay to ensure page is fully loaded
+            setTimeout(() => {
+                openMtnModal(mountain);
+                // Scroll to make modal visible
+                document.getElementById('mtnOverlay').classList.add('open');
+                document.body.style.overflow = 'hidden';
+                showToast(`✨ Showing ${mountain.name} details`);
+            }, 500);
+        }
+    }
+})();
+</script>
+
 </body>
 </html>
