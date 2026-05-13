@@ -3604,7 +3604,7 @@ const guideF = guideFee;
       <div class="warning-card">
     <h4><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Payment Policy</h4>
     <p><strong>Downpayment: ₱${Math.max(200, Math.round(guideF * 0.2)).toLocaleString()}</strong> (20% of guide fee, min ₱200)<br>
-    • Pay downpayment within 3-4 hours of guide confirmation<br>
+    • Pay downpayment within 5 hours of guide confirmation<br>
     • Remaining balance paid to guide after hike<br>
     • No refund for cancellations after confirmation</p>
 </div>`;
