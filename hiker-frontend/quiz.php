@@ -89,13 +89,27 @@ $difficultyScoreMap = [
 $mountainsFromDb = [];
 foreach ($dbMountains as $mountain) {
     $difficulty = $mountain['difficulty'] ?? 'Moderate';
+    
+    // Map difficulty to proper scores - FIX THIS
+    $difficultyScoreMap = [
+        'Easy' => [0],        // Beginners only see Easy
+        'Easy to Moderate' => [0, 1],  // Both beginner and intermediate
+        'Moderate' => [1],    // Intermediate only
+        'Hard' => [2],        // Advanced only
+        'Difficult' => [2],   // Advanced only
+        'Expert' => [3],      // Advanced only
+    ];
+    
+    // Fix: Use the correct difficulty string for lookup
+    $scoreArray = $difficultyScoreMap[$difficulty] ?? [1];
+    
     $mountainsFromDb[] = [
         'name' => $mountain['name'],
         'diff' => strtolower($difficulty),
         'elevation' => $mountain['elevation'] ?? 'N/A',
         'time' => $mountain['duration'] ?? '3-4 hrs',
         'img' => $mountain['image'] ?? 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=500&q=80',
-        'score' => $difficultyScoreMap[$difficulty] ?? [1, 2]
+        'score' => $scoreArray  // This is key for filtering
     ];
 }
 
@@ -818,58 +832,95 @@ function closeResultModalAndShowRecommendations() {
 }
 
 function displayRecommendations() {
-  const total = scores.reduce((a,b)=>a+b,0);
-  const max = questions.length * 3;
-  const pct = total/max;
-  let levelKey = pct < 0.33 ? 'beginner' : pct < 0.67 ? 'intermediate' : 'advanced';
-  const lvl = levels[levelKey];
-  
-  let recommendations = mountains.filter(m => {
-    if(levelKey==='beginner') return m.score.includes(0)||m.score.includes(1);
-    if(levelKey==='intermediate') return m.score.includes(1)||m.score.includes(2);
-    return m.score.includes(2)||m.score.includes(3);
-  });
-  
-  if(recommendations.length === 0) recommendations = mountains.slice(0,3);
-  
-  const recHtml = recommendations.map(m => `
-    <div class="rec-card" onclick="window.location='explore.php?recommend=${encodeURIComponent(m.name)}'">
-      <div class="rec-card-img" style="background-image:url('${m.img}')">
-        <div class="rec-card-label">${m.name}</div>
-      </div>
-      <div class="rec-card-body">
-        <div class="rec-card-name">${m.name}</div>
-        <div class="rec-card-meta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L12 4L20 20H4Z"/></svg> ${m.elevation} · <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${m.time}</div>
-        <div><span class="badge badge-${m.diff}">${m.diff}</span></div>
-      </div>
-    </div>
-  `).join('');
-  
-  document.getElementById('quizHero').style.display = 'none';
-  document.getElementById('quizContainer').style.marginTop = '24px';
-  document.getElementById('quizCard').innerHTML = `
-    <div class="result-hero">
-      <div class="result-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Results Ready</div>
-      <div class="result-title"><span class="level-icon">${lvl.icon}</span> ${lvl.name}</div>
-      
-    </div>
-    <div class="result-body">
-      <div class="result-level">
-        <div class="level-icon">${lvl.icon}</div>
-        <div>
-          <div class="level-name">${lvl.name}</div>
-          <div class="level-desc">${lvl.desc}</div>
+    const total = scores.reduce((a,b)=>a+b,0);
+    const max = questions.length * 3;
+    const pct = total/max;
+    let levelKey = pct < 0.33 ? 'beginner' : pct < 0.67 ? 'intermediate' : 'advanced';
+    let levelName = levels[levelKey].name;
+    
+    // IMPROVED FILTERING LOGIC
+    let recommendations = [];
+    
+    if (levelKey === 'beginner') {
+        // Beginners: ONLY mountains with "easy" in their difficulty (case insensitive)
+        recommendations = mountains.filter(m => {
+            const diff = m.diff.toLowerCase();
+            return diff === 'easy' || diff.includes('easy');
+        });
+    } 
+    else if (levelKey === 'intermediate') {
+        // Intermediate: Easy AND Moderate mountains (but not difficult)
+        recommendations = mountains.filter(m => {
+            const diff = m.diff.toLowerCase();
+            return diff === 'easy' || diff === 'moderate' || diff.includes('easy') || diff.includes('moderate');
+        });
+    }
+    else {
+        // Advanced: Moderate, Hard, Difficult, Expert
+        recommendations = mountains.filter(m => {
+            const diff = m.diff.toLowerCase();
+            return diff !== 'easy' && !diff.includes('easy'); // Exclude only easy ones
+        });
+    }
+    
+    // If no recommendations from filter, fallback to first 3
+    if (recommendations.length === 0) {
+        recommendations = mountains.slice(0, 3);
+        console.log('No recommendations found, using fallback');
+    }
+    
+    // Optional: Sort by difficulty (easiest first for beginners, hardest for advanced)
+    const difficultyOrder = { 'easy': 1, 'moderate': 2, 'hard': 3, 'difficult': 3, 'expert': 4 };
+    if (levelKey === 'beginner') {
+        recommendations.sort((a, b) => (difficultyOrder[a.diff] || 2) - (difficultyOrder[b.diff] || 2));
+    } else if (levelKey === 'advanced') {
+        recommendations.sort((a, b) => (difficultyOrder[b.diff] || 2) - (difficultyOrder[a.diff] || 2));
+    }
+    
+    // Limit to 4-5 recommendations max
+    recommendations = recommendations.slice(0, 5);
+    
+    // Rest of your displayRecommendations function continues here...
+    const lvl = levels[levelKey];
+    
+    const recHtml = recommendations.map(m => `
+        <div class="rec-card" onclick="window.location='explore.php?recommend=${encodeURIComponent(m.name)}'">
+            <div class="rec-card-img" style="background-image:url('${m.img}')">
+                <div class="rec-card-label">${m.name}</div>
+            </div>
+            <div class="rec-card-body">
+                <div class="rec-card-name">${m.name}</div>
+                <div class="rec-card-meta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L12 4L20 20H4Z"/></svg> ${m.elevation} · <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${m.time}</div>
+                <div><span class="badge badge-${m.diff}">${m.diff}</span></div>
+            </div>
         </div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--sage);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L12 4L20 20H4Z"/></svg> Recommended for You</div>
-      <div class="rec-grid">${recHtml}</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="save-btn" onclick="saveResults('${levelKey}', ${total}, ${max})">${iconMap.bookmarkIcon} Save to Profile & Update Level</button>
-        <button class="btn btn-outline btn-sm" onclick="location.reload()">Retake Quiz</button>
-        <a href="explore.php" class="btn btn-primary btn-sm">Explore All →</a>
-      </div>
-    </div>
-  `;
+    `).join('');
+    
+    // Continue with rest of your display function...
+    document.getElementById('quizHero').style.display = 'none';
+    document.getElementById('quizContainer').style.marginTop = '24px';
+    document.getElementById('quizCard').innerHTML = `
+        <div class="result-hero">
+            <div class="result-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Results Ready</div>
+            <div class="result-title"><span class="level-icon">${lvl.icon}</span> ${lvl.name}</div>
+        </div>
+        <div class="result-body">
+            <div class="result-level">
+                <div class="level-icon">${lvl.icon}</div>
+                <div>
+                    <div class="level-name">${lvl.name}</div>
+                    <div class="level-desc">${lvl.desc}</div>
+                </div>
+            </div>
+            <div style="font-size:12px;font-weight:600;color:var(--sage);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L12 4L20 20H4Z"/></svg> Recommended for You (${recommendations.length} matches)</div>
+            <div class="rec-grid">${recHtml}</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="save-btn" onclick="saveResults('${levelKey}', ${total}, ${max})">${iconMap.bookmarkIcon} Save to Profile & Update Level</button>
+                <button class="btn btn-outline btn-sm" onclick="location.reload()">Retake Quiz</button>
+                <a href="explore.php" class="btn btn-primary btn-sm">Explore All →</a>
+            </div>
+        </div>
+    `;
 }
 
 function showResults() {
