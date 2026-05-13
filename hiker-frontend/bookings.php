@@ -733,30 +733,30 @@ $stmt->execute([$newDate, $newTime, $notes, $currentTime, $numericId, $currentUs
     exit;
 }
     if ($action === 'check_guide_availability') {
-        $mountainId = intval($_POST['mountain_id'] ?? 0);
-        $hikeDate   = $_POST['hike_date'] ?? '';
-        $hikeType   = $_POST['hike_type'] ?? 'day';
+    $mountainId = intval($_POST['mountain_id'] ?? 0);
+    $hikeDate   = $_POST['hike_date'] ?? '';
+    $hikeType   = $_POST['hike_type'] ?? 'day';
 
-        if (!$mountainId || !$hikeDate) {
-            echo json_encode(['success' => false, 'booked_guide_ids' => []]);
-            exit;
-        }
-
-        // A guide can only lead one group per day — block them for the entire date
-        // regardless of hike type (a guide can't do a late hike AND an overnight on the same day).
-        $stmt = $pdo->prepare("
-            SELECT DISTINCT b.guide_id
-            FROM bookings b
-            WHERE b.hike_date = ?
-              AND b.status NOT IN ('cancelled', 'finished')
-        ");
-        $stmt->execute([$hikeDate]);
-        $bookedGuideIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-        if (ob_get_length()) ob_clean();
-        echo json_encode(['success' => true, 'booked_guide_ids' => array_map('intval', $bookedGuideIds)]);
+    if (!$mountainId || !$hikeDate) {
+        echo json_encode(['success' => false, 'booked_guide_ids' => []]);
         exit;
     }
+
+    // A guide can only lead one group per day — block them ONLY for LOCKED IN bookings
+    // 'active' and 'confirmed' are locked in. 'pending' is NOT locked in yet.
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT b.guide_id
+        FROM bookings b
+        WHERE b.hike_date = ?
+          AND b.status IN ('active', 'confirmed')
+    ");
+    $stmt->execute([$hikeDate]);
+    $bookedGuideIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (ob_get_length()) ob_clean();
+    echo json_encode(['success' => true, 'booked_guide_ids' => array_map('intval', $bookedGuideIds)]);
+    exit;
+}
 
     if ($action === 'lookup_hike') {
         $bookingNumber = $_POST['booking_number'] ?? '';
