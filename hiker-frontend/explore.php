@@ -1166,30 +1166,50 @@ svg{display:block;flex-shrink:0;}
   overflow:hidden;display:flex;flex-direction:column;
 }
 .weather-panel-header{
-  padding:16px 20px;border-bottom:1px solid var(--mist);
+  padding:18px 20px 14px;
+  background: linear-gradient(135deg, #1a2e1a 0%, #2c4a2c 100%);
+  position: relative;
+  overflow: hidden;
 }
-.weather-tabs-row{
-  display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--mist);
-  scrollbar-width:none;
+.weather-panel-header::before {
+  content: '';
+  position: absolute;
+  top: -30px; right: -30px;
+  width: 120px; height: 120px;
+  background: radial-gradient(circle, rgba(198,164,59,0.15) 0%, transparent 70%);
+  border-radius: 50%;
 }
-.weather-tabs-row::-webkit-scrollbar{display:none;}
-.wtab{
-  padding:9px 14px;font-size:11.5px;font-weight:600;
-  color:var(--stone);cursor:pointer;border-bottom:2px solid transparent;
-  transition:.15s;white-space:nowrap;flex-shrink:0;
+.weather-panel-eyebrow{
+  font-family:'DM Mono',monospace;
+  font-size:9px;font-weight:500;letter-spacing:3px;text-transform:uppercase;
+  color:rgba(198,164,59,0.8);margin-bottom:4px;
 }
-.wtab:hover{color:var(--ink);}
-.wtab.active{color:var(--ink);border-color:var(--ink);}
+.weather-panel-title{
+  font-family:'Playfair Display',serif;
+  font-size:17px;font-weight:700;color:#fff;
+  margin-bottom:3px;
+  transition: all 0.3s var(--ease);
+}
+.weather-panel-hint{
+  font-size:10.5px;color:rgba(255,255,255,0.45);
+  display:flex;align-items:center;gap:4px;
+}
+.weather-panel-hint::before{
+  content:'';width:6px;height:6px;border-radius:50%;
+  background:rgba(198,164,59,0.7);display:inline-block;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.4;transform:scale(0.8);}}
 
-.weather-content-wrap{padding:16px 18px;flex:1;}
+.weather-content-wrap{padding:18px;flex:1;}
 
 /* Current weather block */
 .weather-current-block{
   display:flex;align-items:center;justify-content:space-between;
   margin-bottom:14px;
 }
-.weather-temp-main{font-size:40px;font-weight:700;font-family:'DM Mono',monospace;line-height:1;}
-.weather-icon-main{font-size:44px;line-height:1;}
+.weather-temp-main{font-size:44px;font-weight:700;font-family:'DM Mono',monospace;line-height:1;}
+.weather-icon-main{font-size:48px;line-height:1;}
 .weather-desc-row{font-size:12.5px;color:var(--stone);margin-top:4px;}
 .weather-advice-banner{
   padding:10px 14px;border-radius:var(--r-sm);
@@ -1269,23 +1289,12 @@ svg{display:block;flex-shrink:0;}
     transform: scale(1.1);
     transition: transform 0.2s ease;
 }
-.weather-panel-header {
-    background: linear-gradient(135deg, var(--cream) 0%, var(--white) 100%);
-}
 .forecast-compact {
     transition: all 0.2s ease;
 }
 .forecast-compact:hover {
     transform: translateY(-2px);
     box-shadow: var(--sh);
-}
-
-.weather-tabs-row {
-    display: flex;
-    gap: 0;
-    overflow-x: auto;
-    border-bottom: 1px solid var(--mist);
-    scrollbar-width: thin;
 }
 
 /* ── REDESIGNED MOUNTAIN MODAL ── */
@@ -1430,8 +1439,64 @@ svg{display:block;flex-shrink:0;}
 @media (max-width: 800px) {
   .split-modal {
     flex-direction: column;
-    height: 85vh;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
+  .modal-left {
+    flex: none;
+    height: 220px;
+    min-height: 220px;
+  }
+  .modal-right {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-tab-content {
+    flex: 1;
+    overflow: hidden;
+    padding: 14px 16px;
+  }
+  .tab-pane {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: calc(100vh - 440px);
+  }
+  .modal-header-info {
+    padding: 16px 16px 10px;
+  }
+  .modal-tabs {
+    padding: 0 16px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+  .modal-tabs::-webkit-scrollbar { display: none; }
+  .modal-tab {
+    white-space: nowrap;
+    font-size: 12px;
+    padding: 10px 0;
+    margin-right: 18px;
+    flex-shrink: 0;
+  }
+  .modal-footer-actions {
+    padding: 12px 16px;
+    flex-shrink: 0;
+  }
+  .modal-mountain-name { font-size: 22px; }
+  .info-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .info-grid-item { padding: 10px; }
+  .trail-stats-row { gap: 8px; }
+  .trail-stat-card { padding: 10px; }
+  #trailMap { height: 220px !important; }
+  .overlay { padding: 0; align-items: stretch; justify-content: stretch; }
 }
 
 /* LEFT SIDE - IMAGE */
@@ -2279,16 +2344,10 @@ $currentPage = 'explore'; // Change per page: 'explore', 'bookings', 'quiz', 'me
 
       <!-- Weather Panel -->
       <div class="weather-panel">
-        <div class="weather-panel-header">
-          <div class="sec-eyebrow" style="margin-bottom:3px;">Real-time Conditions</div>
-          <div style="font-size:13px;font-weight:600;color:var(--ink);">Mountain Weather</div>
-        </div>
-        <div class="weather-tabs-row" id="weatherTabsRow">
-          <?php foreach ($mountains as $i => $mtn): ?>
-          <div class="wtab <?= $i===0?'active':'' ?>" onclick="selectWeatherTab(<?= $mtn['id'] ?>, this)" data-id="<?= $mtn['id'] ?>">
-            <?= htmlspecialchars(str_replace(['Mt.','Mountain','Mountain Trilogy'],['','Mtns.','Trilogy'], $mtn['name'])) ?>
-          </div>
-          <?php endforeach; ?>
+        <div class="weather-panel-header" id="weatherPanelHeader">
+          <div class="weather-panel-eyebrow">Real-time Conditions</div>
+          <div class="weather-panel-title" id="weatherPanelTitle">Mountain Weather</div>
+          <div class="weather-panel-hint">Click a map pin to update</div>
         </div>
         <div class="weather-content-wrap" id="weatherContentWrap">
           <div class="weather-loading-state">
@@ -2932,12 +2991,14 @@ async function loadTrailForModal(mountainId) {
       waypointMarkers.forEach(marker => { if (marker && marker.remove) marker.remove(); });
       waypointMarkers = [];
       
-      // Set fixed view to Nasugbu, Batangas area (zoomed in)
-      // This covers all mountains: Batulao (14.0583, 120.832), Lantik (14.1057, 120.7636), etc.
-      const nasugbuCenter = [14.07, 120.80];
-      const zoomLevel = 13; // Good zoom level to see all mountains in Nasugbu
+      // Set view to the specific mountain's location
+      const mountainCoord = mountainCoords.find(m => m.id === mountainId);
+      const mountainCenter = mountainCoord 
+        ? [mountainCoord.lat, mountainCoord.lng]
+        : [14.07, 120.80];
+      const zoomLevel = 14; // Tighter zoom on the specific mountain
       
-      trailMap = L.map('trailMap').setView(nasugbuCenter, zoomLevel);
+      trailMap = L.map('trailMap').setView(mountainCenter, zoomLevel);
       
       // Add tile layer - using the same as active-hike.php
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -2949,12 +3010,14 @@ async function loadTrailForModal(mountainId) {
       // Draw trail if available
       if (data.success && data.trail && data.trail.length > 0) {
         const trailCoords = data.trail.map(c => [c[1], c[0]]);
-        L.polyline(trailCoords, {
+        const trailLine = L.polyline(trailCoords, {
           color: '#c6a43b',
           weight: 5,
           opacity: 0.9,
           lineCap: 'round'
         }).addTo(trailMap);
+        // Fit map to trail bounds for accurate zoom
+        trailMap.fitBounds(trailLine.getBounds(), { padding: [30, 30] });
       }
       
       // Waypoint icons mapping
@@ -3139,7 +3202,6 @@ async function loadTrailForModal(mountainId) {
       setTimeout(() => {
         if (trailMap) {
           trailMap.invalidateSize();
-          console.log('Map invalidated and zoomed to Nasugbu');
         }
       }, 150);
     }
@@ -3155,10 +3217,12 @@ async function loadTrailForModal(mountainId) {
     if (trailDifficultyElem) trailDifficultyElem.innerHTML = 'Unavailable';
     if (waypointsContainer) waypointsContainer.innerHTML = '<p style="color:var(--stone);font-size:13px;">Trail information unavailable at this time.</p>';
     
-    // Still create a basic map at Nasugbu
+    // Still create a basic map at the mountain's location
     const trailMapContainer = document.getElementById('trailMap');
     if (trailMapContainer && !trailMap) {
-      trailMap = L.map('trailMap').setView([14.07, 120.80], 13);
+      const mountainCoord = mountainCoords.find(m => m.id === mountainId);
+      const fallbackCenter = mountainCoord ? [mountainCoord.lat, mountainCoord.lng] : [14.07, 120.80];
+      trailMap = L.map('trailMap').setView(fallbackCenter, 14);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
         subdomains: 'abcd',
@@ -3418,6 +3482,13 @@ function renderWeatherPanel(mtnId){
   const data = mountainWeatherCache[mtnId];
   const wrap = document.getElementById('weatherContentWrap');
   if(!wrap) return;
+  
+  // Update the panel title with the mountain name
+  const panelTitle = document.getElementById('weatherPanelTitle');
+  if(panelTitle && mtn) {
+    panelTitle.textContent = mtn.name;
+  }
+  
   if(!data){
     wrap.innerHTML=`<div class="weather-loading-state"><div class="spin">⛅</div><div>Loading weather…</div></div>`;
     return;
@@ -3466,7 +3537,7 @@ function renderWeatherPanel(mtnId){
         <div class="weather-chip-lbl">Elevation</div>
       </div>
       <div class="weather-detail-chip">
-        <div class="weather-chip-val" style="background:${diffBg}; color:${diffColor}; padding:4px 8px; border-radius:30px; font-weight:600;">${diffDisplay}</div>
+        <div class="weather-chip-val" style="background:${diffBg}; color:${diffColor}; padding:4px 8px; border-radius:30px; font-weight:600; font-size:11px;">${diffDisplay}</div>
         <div class="weather-chip-lbl">Difficulty</div>
       </div>
       <div class="weather-detail-chip">
@@ -3489,9 +3560,6 @@ function renderWeatherPanel(mtnId){
   `;
 }
 async function selectWeatherTab(mtnId, el){
-  // Update tabs
-  document.querySelectorAll('.wtab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
   activeWeatherMtnId = mtnId;
   // Highlight map marker
   Object.keys(mapMarkers).forEach(id=>{
