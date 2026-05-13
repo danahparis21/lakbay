@@ -12,99 +12,154 @@ $errors  = [];
 function extractNameFromID($imagePath) {
     $outputFile = tempnam(sys_get_temp_dir(), 'ocr_');
     
-    // Try multiple preprocessing methods
-    $commands = [
-        // Standard method
-        "tesseract " . escapeshellarg($imagePath) . " " . escapeshellarg($outputFile) . " -l eng --psm 6 2>&1",
-        // Try with different page segmentation mode (PSM 3 = fully automatic)
-        "tesseract " . escapeshellarg($imagePath) . " " . escapeshellarg($outputFile) . " -l eng --psm 3 2>&1",
-        // Try with PSM 8 (single word) - might catch the name as one block
-        "tesseract " . escapeshellarg($imagePath) . " " . escapeshellarg($outputFile) . " -l eng --psm 8 2>&1",
-        // Try with PSM 11 (sparse text)
-        "tesseract " . escapeshellarg($imagePath) . " " . escapeshellarg($outputFile) . " -l eng --psm 11 2>&1"
-    ];
+    // Use PSM 6 (uniform block of text) - best for structured IDs
+    exec("tesseract " . escapeshellarg($imagePath) . " " . escapeshellarg($outputFile) . " -l eng --psm 6 2>&1");
     
-    $allText = "";
-    
-    foreach ($commands as $command) {
-        exec($command, $output, $returnCode);
-        if ($returnCode === 0 && file_exists($outputFile . '.txt')) {
-            $text = file_get_contents($outputFile . '.txt');
-            $allText .= "\n" . $text;
-            unlink($outputFile . '.txt');
-        }
+    $text = '';
+    if (file_exists($outputFile . '.txt')) {
+        $text = file_get_contents($outputFile . '.txt');
+        unlink($outputFile . '.txt');
     }
     
-    // If no text found, try with image preprocessing via ImageMagick
-    if (strlen(trim($allText)) < 20) {
+    // If first attempt fails, try with image preprocessing
+    if (strlen(trim($text)) < 50) {
         $processedPath = tempnam(sys_get_temp_dir(), 'ocr_proc_') . '.png';
-        // Convert image to grayscale and enhance contrast
-        $convertCmd = "convert " . escapeshellarg($imagePath) . " -colorspace Gray -contrast-stretch 5% " . escapeshellarg($processedPath) . " 2>&1";
+        $convertCmd = "convert " . escapeshellarg($imagePath) . " -colorspace Gray -contrast-stretch 5% -sharpen 0x1 " . escapeshellarg($processedPath) . " 2>&1";
         exec($convertCmd);
         
         if (file_exists($processedPath)) {
             $outputFile2 = tempnam(sys_get_temp_dir(), 'ocr_enh_');
             exec("tesseract " . escapeshellarg($processedPath) . " " . escapeshellarg($outputFile2) . " -l eng --psm 6 2>&1");
             if (file_exists($outputFile2 . '.txt')) {
-                $enhancedText = file_get_contents($outputFile2 . '.txt');
-                $allText .= "\n" . $enhancedText;
+                $text = file_get_contents($outputFile2 . '.txt');
                 unlink($outputFile2 . '.txt');
             }
             unlink($processedPath);
         }
     }
     
-    // Extract name patterns from all collected text
+    // Clean up the text - remove excessive spaces and normalize line breaks
+    $text = preg_replace('/\s+/', ' ', $text);
+    $text = str_replace(["\n", "\r"], ' ', $text);
+    
+    // PHILIPPINE NATIONAL ID (PhilSys) specific patterns
+    // Based on the sample format:
+    // Apelyido/Last Name: DELA CRUZ
+    // Mga Pangalan/Given Names: JUAN
+    // Gitnang Pangalan/Middle Name: DALISAY
+    
     $patterns = [
-        // Direct name line (LIKE "JUAN DELA CRUZ" standing alone)
-        '/^([A-Z][A-Z\s\.]+[A-Z])$/m',
-        // Name after "NAME" label
-        '/NAME\s*[:;]?\s*([A-Z][A-Z\s\.]+[A-Z])/i',
-        // Name at beginning of line (all caps, 2-4 words)
-        '/^([A-Z][A-Z]+(?:\s+[A-Z][A-Z]+){1,3})/m',
-        // Any line with all caps and 2-4 words (likely a name)
-        '/(?:^|\n)([A-Z]{2,}(?:\s+[A-Z]{2,}){1,3})(?:\s|$)/m',
-        // Pattern specific to PWD cards - name on line after "NAME"
-        '/NAME\s*\n\s*([A-Z\s]+)/i',
-        // Any all-caps line that's not a label
-        '/\n([A-Z]{3,}(?:\s+[A-Z]{3,}){1,4})\n/'
+        // Pattern 1: "Apelyido/Last Name: DELA CRUZ" followed by "Mga Pangalan/Given Names: JUAN"
+        '/Apelyido\/Last\s*Name:\s*([A-Z\s]+?)\s*Mga\s*Pangalan\/Given\s*Names:\s*([A-Z\s]+?)\s*Gitnang\s*Pangalan\/Middle\s*Name:\s*([A-Z\s]+)/i',
+        
+        // Pattern 2: "Last Name: DELA CRUZ" "Given Names: JUAN"
+        '/Last\s*Name:\s*([A-Z\s]+?)\s*Given\s*Names:\s*([A-Z\s]+?)\s*Middle\s*Name:\s*([A-Z\s]+)/i',
+        
+        // Pattern 3: "APELYIDO: DELA CRUZ" "PANGALAN: JUAN"
+        '/APELYIDO:\s*([A-Z\s]+?)\s*PANGALAN:\s*([A-Z\s]+?)\s*GITNANG\s*PANGALAN:\s*([A-Z\s]+)/i',
+        
+        // Pattern 4: Name appears as "SURNAME FIRSTNAME MIDDLENAME" pattern on a line by itself
+        '/(?:^|\s)([A-Z]{2,}(?:\s+[A-Z]{2,}){2,})(?:\s|$)/',
+        
+        // Pattern 5: Look for lines that contain "NAME" keyword and extract following text
+        '/NAME:\s*([A-Z\s]+)/i',
     ];
     
     $extractedName = null;
     
     foreach ($patterns as $pattern) {
-        if (preg_match_all($pattern, $allText, $matches)) {
-            foreach ($matches[1] as $match) {
-                $candidate = trim($match);
-                // Filter out common labels and short strings
-                $excludePatterns = [
-                    '/^(REPUBLIC|PROVINCE|CITY|MUNICIPALITY|PHILIPPINES|NAME|SIGNATURE|DISABILITY|PSYCHOSOCIAL|VALID|NON-TRANFERABLE|VIOLATION|PUNISHABLE|BENEFITS|PRIVILEGES)/i',
-                    '/^\d+$/', // Just numbers
-                    '/^.{1,4}$/' // Too short
-                ];
+        if (preg_match($pattern, $text, $matches)) {
+            // For patterns 1-3, combine Last Name + Given Names + Middle Name
+            if (count($matches) >= 4) {
+                $lastName = trim($matches[1]);
+                $givenNames = trim($matches[2]);
+                $middleName = isset($matches[3]) ? trim($matches[3]) : '';
                 
-                $isValid = true;
-                foreach ($excludePatterns as $exclude) {
-                    if (preg_match($exclude, $candidate)) {
-                        $isValid = false;
+                // Format: JUAN DELA CRUZ (Given Names then Last Name)
+                // Or depending on preference: DELA CRUZ, JUAN D.
+                $extractedName = ucwords(strtolower($givenNames . ' ' . $lastName));
+                
+                // Add middle initial if available
+                if (!empty($middleName) && strlen($middleName) > 0) {
+                    $middleInitial = strtoupper(substr($middleName, 0, 1));
+                    $extractedName = ucwords(strtolower($givenNames . ' ' . $lastName . ' ' . $middleInitial . '.'));
+                }
+                break;
+            }
+            // For pattern 4 (single line with multiple words - likely the full name)
+            elseif (preg_match('/^([A-Z]{2,}(?:\s+[A-Z]{2,}){2,})$/i', trim($matches[1]))) {
+                $candidate = trim($matches[1]);
+                // Exclude common header text
+                $excludeHeaders = ['REPUBLIKA', 'PILIPINAS', 'PHILIPPINES', 'PAMBANSANG', 'PAGKAKAKILANLAN', 'PHILIPPINE', 'IDENTIFICATION', 'CARD', 'REPUBLIC', 'OF', 'THE'];
+                $isHeader = false;
+                foreach ($excludeHeaders as $header) {
+                    if (stripos($candidate, $header) !== false) {
+                        $isHeader = true;
                         break;
                     }
                 }
-                
-                if ($isValid && strlen($candidate) > 5) {
-                    $extractedName = $candidate;
-                    break 2;
+                if (!$isHeader && strlen($candidate) > 8) {
+                    $extractedName = ucwords(strtolower($candidate));
+                    break;
+                }
+            }
+            // For pattern 5
+            elseif (isset($matches[1]) && strlen(trim($matches[1])) > 5) {
+                $candidate = trim($matches[1]);
+                $excludeHeaders = ['REPUBLIKA', 'PILIPINAS', 'PHILIPPINES', 'PAMBANSANG'];
+                $isHeader = false;
+                foreach ($excludeHeaders as $header) {
+                    if (stripos($candidate, $header) !== false) {
+                        $isHeader = true;
+                        break;
+                    }
+                }
+                if (!$isHeader) {
+                    $extractedName = ucwords(strtolower($candidate));
+                    break;
                 }
             }
         }
     }
     
+    // Additional fallback: Look for "Pangalan" or "Name" in the text and extract the next line/value
+    if (!$extractedName) {
+        // Split text by spaces and look for patterns that resemble a name
+        $words = preg_split('/\s+/', $text);
+        $potentialNames = [];
+        
+        foreach ($words as $i => $word) {
+            // Look for Filipino name patterns (all caps, 2-4 syllables)
+            if (preg_match('/^[A-Z]{2,}(?:[A-Z])*$/', $word) && strlen($word) > 2 && !in_array($word, $excludeHeaders ?? [])) {
+                // Check if it's preceded by "Pangalan" or "Name"
+                if ($i > 0 && preg_match('/(PANGALAN|NAME|APELYIDO|LAST|GIVEN)/i', $words[$i-1])) {
+                    $potentialNames[] = $word;
+                }
+                // Or check if it's followed by a common surname ending
+                elseif ($i + 1 < count($words) && preg_match('/(CRUZ|SANTOS|REYES|GARCIA|MENDOZA|DELA|DE|LA|STA|SANDOVAL|BAUTISTA|GUEVARA|VERGEL|ROSARIO|HERNANDEZ|LIGON|PADILLA|SEBASTIAN|CABRERA|ZAMORA|MORENO|ALONZO|NATIVIDAD|YU|CAYETANO|DEGUZMAN)/i', $words[$i+1])) {
+                    $potentialNames[] = $word . ' ' . $words[$i+1];
+                }
+            }
+        }
+        
+        if (!empty($potentialNames)) {
+            $extractedName = ucwords(strtolower($potentialNames[0]));
+        }
+    }
+    
+    // Final cleanup
     if ($extractedName) {
-        // Clean up the name
+        // Remove any remaining non-letter characters except spaces and dots
+        $extractedName = preg_replace('/[^a-zA-Z\s\.]/', '', $extractedName);
+        // Remove multiple spaces
         $extractedName = preg_replace('/\s+/', ' ', $extractedName);
         $extractedName = trim($extractedName);
-        // Capitalize properly
-        $extractedName = ucwords(strtolower($extractedName));
+        
+        // Ensure it's not still capturing header text
+        $invalidNames = ['Republic Philippines', 'Republic Of The Philippines', 'Philippine Identification', 'Identification Card'];
+        if (in_array($extractedName, $invalidNames)) {
+            return null;
+        }
     }
     
     return $extractedName;
