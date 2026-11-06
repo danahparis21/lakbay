@@ -2,3 +2,7 @@
 db_data/
 api/debug.log
 *.log
+
+# macOS metadata files
+.DS_Store
+._*
