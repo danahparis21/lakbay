@@ -16,128 +16,55 @@ The platform addresses the lack of a centralized, official information system fo
 
 ### Login
 
-![Login](assets/demo/login.png)
+<p align="center">
+  <img src="assets/demo/login.png" alt="Login" width="60%">
+</p>
 
 ---
 
 ### Hiker Interface
 
-**Home — Mountain Map with Weather Details**
-> Built with Leaflet.js, the interactive map shows mountain locations with live weather overlays and heatmap layers for crowd density.
-
-![Hiker Home Map](assets/demo/hiker_home_mountainslocinMapwithWeatherDetails.png)
-
-**Home — Search & Explore**
-
-![Hiker Home Search](assets/demo/Hiker_Home_Search.png)
-
-**Home — Browse Accredited Tour Guides**
-
-![Hiker Tour Guide List](assets/demo/hiker_homeListOfTourGuides.png)
-
-**Trail Recommendation Quiz — Welcome**
-
-![Quiz Welcome](assets/demo/hiker_quiz_welcome.png)
-
-**Trail Recommendation Quiz — Beginner Assessment**
-
-![Quiz Beginner](assets/demo/hiker_quiz_beginner.png)
-
-**Mountain Details Page**
-
-![Mountain Details](assets/demo/mountain_details.png)
-
-**Book a Mountain**
-
-![Book Mountain](assets/demo/book_mountain.png)
-
-**Choose Hiker Count per Booking**
-
-![Choose Hikers](assets/demo/choose_hiker_per_mountainbooking.png)
-
-**Bookings Tab**
-
-![Hiker Bookings](assets/demo/hiker_bookingstab.png)
-
-**GCash Payment Proof Submitted**
-
-![Payment Proof Sent](assets/demo/payment_proofsent.png)
-
-**GCash Payment Window Expired**
-
-![Payment Expired](assets/demo/payment_expired_gcash.png)
-
-**Messages**
-
-![Hiker Messages](assets/demo/hiker_messages.png)
-
-**Trail Map — Completed Hike**
-
-![Trail Map](assets/demo/trail_map_pic.png)
-
-**Profile**
-
-![Hiker Profile](assets/demo/hiker_profile.png)
+| Home — Mountain Map with Weather Details | Home — Search & Explore |
+|:---:|:---:|
+| ![Hiker Home Map](assets/demo/hiker_home_mountainslocinMapwithWeatherDetails.png) | ![Hiker Home Search](assets/demo/Hiker_Home_Search.png) |
+| **Browse Accredited Tour Guides** | **Mountain Details Page** |
+| ![Hiker Tour Guide List](assets/demo/hiker_homeListOfTourGuides.png) | ![Mountain Details](assets/demo/mountain_details.png) |
+| **Trail Recommendation Quiz — Welcome** | **Trail Recommendation Quiz — Assessment** |
+| ![Quiz Welcome](assets/demo/hiker_quiz_welcome.png) | ![Quiz Beginner](assets/demo/hiker_quiz_beginner.png) |
+| **Book a Mountain** | **Choose Hiker Count per Booking** |
+| ![Book Mountain](assets/demo/book_mountain.png) | ![Choose Hikers](assets/demo/choose_hiker_per_mountainbooking.png) |
+| **Bookings Tab** | **Trail Map — Completed Hike** |
+| ![Hiker Bookings](assets/demo/hiker_bookingstab.png) | ![Trail Map](assets/demo/trail_map_pic.png) |
+| **GCash Payment Proof Submitted** | **GCash Payment Window Expired** |
+| ![Payment Proof Sent](assets/demo/payment_proofsent.png) | ![Payment Expired](assets/demo/payment_expired_gcash.png) |
+| **Messages** | **Profile** |
+| ![Hiker Messages](assets/demo/hiker_messages.png) | ![Hiker Profile](assets/demo/hiker_profile.png) |
 
 ---
 
 ### Tour Guide Interface
 
-**Dashboard**
-
-![Tour Guide Dashboard](assets/demo/touGuide_dashboard.png)
-
-**Scheduled Bookings List**
-
-![Guide Bookings List](assets/demo/tourgGuide_ScheduledBookingsLits.png)
-
-**Booking Details**
-
-![Guide Booking Details](assets/demo/tourguide_bookingDetails.png)
-
-**Bookings with Ratings**
-
-![Guide Bookings Ratings](assets/demo/tour_guide_bookings_ratings.png)
-
-**Heatmap — Crowd Density View**
-
-![Guide Heatmap](assets/demo/tourGuide_heatmap.png)
-
-**Track Hikers Safety (Live Map)**
-
-![Track Hikers Safety](assets/demo/tourGuide_TrackHikersSafety.png)
-
-**Messages**
-
-![Guide Messages](assets/demo/tourGudie_Messages.png)
-
-**Profile**
-
-![Guide Profile](assets/demo/tourGuide_profile.png)
+| Dashboard | Heatmap — Crowd Density View |
+|:---:|:---:|
+| ![Tour Guide Dashboard](assets/demo/touGuide_dashboard.png) | ![Guide Heatmap](assets/demo/tourGuide_heatmap.png) |
+| **Scheduled Bookings List** | **Booking Details** |
+| ![Guide Bookings List](assets/demo/tourgGuide_ScheduledBookingsLits.png) | ![Guide Booking Details](assets/demo/tourguide_bookingDetails.png) |
+| **Bookings with Ratings** | **Track Hikers Safety (Live Map)** |
+| ![Guide Bookings Ratings](assets/demo/tour_guide_bookings_ratings.png) | ![Track Hikers Safety](assets/demo/tourGuide_TrackHikersSafety.png) |
+| **Messages** | **Profile** |
+| ![Guide Messages](assets/demo/tourGudie_Messages.png) | ![Guide Profile](assets/demo/tourGuide_profile.png) |
 
 ---
 
 ### Mountain Manager Interface
 
-**Dashboard**
-
-![Mountain Manager Dashboard](assets/demo/MountainManager_dashboard.png)
-
-**KPI Overview**
-
-![Mountain Manager KPIs](assets/demo/mountainManager_kpi.png)
-
-**Analytics**
-
-![Mountain Manager Analytics](assets/demo/mountainManager_Analytics.png)
-
-**Payments**
-
-![Mountain Manager Payments](assets/demo/mountainManager_Payments.png)
-
-**Advisories**
-
-![Mountain Manager Advisories](assets/demo/mountain_manager_Advisories.png)
+| Dashboard | KPI Overview |
+|:---:|:---:|
+| ![Mountain Manager Dashboard](assets/demo/MountainManager_dashboard.png) | ![Mountain Manager KPIs](assets/demo/mountainManager_kpi.png) |
+| **Analytics** | **Payments** |
+| ![Mountain Manager Analytics](assets/demo/mountainManager_Analytics.png) | ![Mountain Manager Payments](assets/demo/mountainManager_Payments.png) |
+| **Advisories** | |
+| ![Mountain Manager Advisories](assets/demo/mountain_manager_Advisories.png) | |
 
 ---
 
